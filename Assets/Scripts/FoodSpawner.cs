@@ -33,6 +33,7 @@ namespace Snake3D
 
         public bool HasFood { get; private set; }
         public Vector2Int Cell { get; private set; }
+        public Vector3 Position => _food.position;
 
         /// <summary>Возвращает false, если свободных клеток нет (поле заполнено).</summary>
         public bool Spawn()

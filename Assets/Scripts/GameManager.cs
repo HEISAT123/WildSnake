@@ -16,7 +16,7 @@ namespace Snake3D
         [Tooltip("Счёт и рекорд")]
         [SerializeField] private ScoreService _score;
 
-        [Tooltip("Камера (от вида зависит зеркальность поворотов)")]
+        [Tooltip("Камера от третьего лица")]
         [SerializeField] private CameraRig _cameraRig;
 
         [Header("Эффекты")]
@@ -45,20 +45,17 @@ namespace Snake3D
         {
             _snake.FoodEaten += OnFoodEaten;
             _snake.Died += OnSnakeDied;
-            _cameraRig.ViewChanged += OnViewChanged;
         }
 
         private void OnDisable()
         {
             _snake.FoodEaten -= OnFoodEaten;
             _snake.Died -= OnSnakeDied;
-            _cameraRig.ViewChanged -= OnViewChanged;
             Time.timeScale = 1f;
         }
 
         private void Start()
         {
-            OnViewChanged(_cameraRig.Mode);
             PrepareRound();
             if (_skipMenu) SetState(GameState.Playing);
             else SetState(GameState.Menu);
@@ -112,7 +109,7 @@ namespace Snake3D
             LastGameWon = false;
             _snake.ResetSnake();
             _score.ResetScore();
-            _food.Spawn();
+            SpawnFood();
             _cameraRig.SnapToTarget();
         }
 
@@ -125,17 +122,18 @@ namespace Snake3D
             StateChanged?.Invoke(state);
         }
 
-        /// <summary>В виде спереди экранное «вправо» — это левый бок змейки, поэтому повороты зеркалим.</summary>
-        private void OnViewChanged(CameraRig.ViewMode mode)
+        /// <summary>Еда не должна появиться под змейкой или прямо перед её мордой.</summary>
+        private bool SpawnFood()
         {
-            _snake.MirrorTurns = mode == CameraRig.ViewMode.SecondPerson;
+            _snake.MarkOccupiedCells();
+            return _food.Spawn();
         }
 
         private void OnFoodEaten(Vector3 position)
         {
             _score.AddFood();
             Emit(_eatParticles, position, _eatParticleCount);
-            if (!_food.Spawn()) EndGame(true); // свободных клеток нет — поле заполнено
+            if (!SpawnFood()) EndGame(true); // свободных клеток нет — поле заполнено
         }
 
         private void OnSnakeDied(Vector3 position)

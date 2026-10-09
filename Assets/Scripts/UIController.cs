@@ -5,7 +5,7 @@ using UnityEngine.UI;
 namespace Snake3D
 {
     /// <summary>
-    /// Только отображение: HUD, название вида камеры, стрелка на еду, меню, пауза, Game Over.
+    /// Только отображение: HUD, стрелка на еду, меню, пауза, Game Over.
     /// Логики игры здесь нет.
     /// </summary>
     public class UIController : MonoBehaviour
@@ -17,8 +17,8 @@ namespace Snake3D
         [Tooltip("Сервис счёта")]
         [SerializeField] private ScoreService _score;
 
-        [Tooltip("Камера: её вид и ориентация для стрелки на еду")]
-        [SerializeField] private CameraRig _cameraRig;
+        [Tooltip("Камера: от её ориентации считается стрелка на еду")]
+        [SerializeField] private Transform _cameraTransform;
 
         [Tooltip("Спавнер еды (есть ли сейчас еда)")]
         [SerializeField] private FoodSpawner _foodSpawner;
@@ -35,9 +35,6 @@ namespace Snake3D
 
         [Tooltip("Текст рекорда")]
         [SerializeField] private Text _bestText;
-
-        [Tooltip("Название текущего вида камеры")]
-        [SerializeField] private Text _viewText;
 
         [Tooltip("Плашка со стрелкой на еду")]
         [SerializeField] private GameObject _foodPointer;
@@ -78,18 +75,10 @@ namespace Snake3D
         [Tooltip("Кнопка рестарта на экране Game Over")]
         [SerializeField] private Button _restartButton;
 
-        private Transform _cameraTransform;
-
-        private void Awake()
-        {
-            _cameraTransform = _cameraRig.transform;
-        }
-
         private void OnEnable()
         {
             _score.ScoreChanged += OnScoreChanged;
             _game.StateChanged += OnStateChanged;
-            _cameraRig.ViewChanged += OnViewChanged;
             _playButton.onClick.AddListener(OnPlayClicked);
             _resumeButton.onClick.AddListener(OnResumeClicked);
             _pauseRestartButton.onClick.AddListener(OnRestartClicked);
@@ -100,7 +89,6 @@ namespace Snake3D
         {
             _score.ScoreChanged -= OnScoreChanged;
             _game.StateChanged -= OnStateChanged;
-            _cameraRig.ViewChanged -= OnViewChanged;
             _playButton.onClick.RemoveListener(OnPlayClicked);
             _resumeButton.onClick.RemoveListener(OnResumeClicked);
             _pauseRestartButton.onClick.RemoveListener(OnRestartClicked);
@@ -111,7 +99,6 @@ namespace Snake3D
         {
             OnScoreChanged(_score.Score, _score.Best);
             OnStateChanged(_game.State);
-            OnViewChanged(_cameraRig.Mode);
         }
 
         private void LateUpdate()
@@ -131,22 +118,6 @@ namespace Snake3D
         {
             _scoreText.text = "Счёт: " + score;
             _bestText.text = "Рекорд: " + best;
-        }
-
-        private void OnViewChanged(CameraRig.ViewMode mode)
-        {
-            switch (mode)
-            {
-                case CameraRig.ViewMode.SecondPerson:
-                    _viewText.text = "Вид: от второго лица  [C]";
-                    break;
-                case CameraRig.ViewMode.FirstPerson:
-                    _viewText.text = "Вид: от первого лица  [C]";
-                    break;
-                default:
-                    _viewText.text = "Вид: от третьего лица  [C]";
-                    break;
-            }
         }
 
         private void OnStateChanged(GameState state)

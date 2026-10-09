@@ -3,7 +3,7 @@ using UnityEngine;
 namespace Snake3D
 {
     /// <summary>
-    /// Дискретная логика поля: размеры, границы, занятые клетки и перевод клетки в мировые координаты.
+    /// Логика поля: размеры, границы, клетки для появления еды и перевод клетка <-> мир.
     /// Визуал поля строит BoardView.
     /// </summary>
     public class GridManager : MonoBehaviour
@@ -89,6 +89,15 @@ namespace Snake3D
             float x = (cell.x - (_width - 1) * 0.5f) * _cellSize;
             float z = (cell.y - (_height - 1) * 0.5f) * _cellSize;
             return transform.position + new Vector3(x, 0f, z);
+        }
+
+        /// <summary>Ближайшая клетка к мировой точке (может оказаться вне поля — проверяй IsInside).</summary>
+        public Vector2Int WorldToCell(Vector3 world)
+        {
+            Vector3 local = world - transform.position;
+            int x = Mathf.RoundToInt(local.x / _cellSize + (_width - 1) * 0.5f);
+            int y = Mathf.RoundToInt(local.z / _cellSize + (_height - 1) * 0.5f);
+            return new Vector2Int(x, y);
         }
 
         private int ToIndex(Vector2Int cell)

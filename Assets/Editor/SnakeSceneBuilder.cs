@@ -108,8 +108,8 @@ public static class SnakeSceneBuilder
         var cam = camGo.AddComponent<Camera>();
         cam.clearFlags = CameraClearFlags.SolidColor;
         cam.backgroundColor = new Color(0.13f, 0.15f, 0.21f);
-        cam.fieldOfView = 65f;
-        cam.nearClipPlane = 0.05f; // вид от первого лица: камера у самой морды
+        cam.fieldOfView = 60f;
+        cam.nearClipPlane = 0.1f;
         cam.farClipPlane = 300f;
         camGo.AddComponent<AudioListener>();
         var rig = camGo.AddComponent<CameraRig>();
@@ -123,7 +123,7 @@ public static class SnakeSceneBuilder
             ("_eatParticles", eatFx), ("_deathParticles", deathFx));
 
         // --- UI ---
-        BuildUI(game, score, rig, foodSpawner, foodGo.transform, headTr);
+        BuildUI(game, score, camGo.transform, foodSpawner, foodGo.transform, headTr);
 
         // --- Сохранение ---
         AssetDatabase.SaveAssets();
@@ -144,9 +144,9 @@ public static class SnakeSceneBuilder
     private static readonly Color AccentRed = new Color(1f, 0.45f, 0.4f);
     private static readonly Color MutedText = new Color(0.8f, 0.84f, 0.9f);
 
-    private const string CONTROLS_HINT = "← → / A D — поворот     C — камера     Esc — пауза";
+    private const string CONTROLS_HINT = "← → / A D — руль     Space — прыжок     Esc — пауза";
 
-    private static void BuildUI(GameManager game, ScoreService score, CameraRig rig, FoodSpawner foodSpawner,
+    private static void BuildUI(GameManager game, ScoreService score, Transform cameraTransform, FoodSpawner foodSpawner,
         Transform food, Transform head)
     {
         var canvasGo = new GameObject("Canvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -176,11 +176,8 @@ public static class SnakeSceneBuilder
         RectTransform bestPlate = CreatePlate(hud, "BestPlate", new Vector2(1f, 1f), new Vector2(-32f, -28f), new Vector2(340f, 84f), PlateColor);
         Text bestText = CreateFillText(bestPlate, "BestText", "Рекорд: 0", 44, TextAnchor.MiddleRight, AccentGold, 24f);
 
-        RectTransform viewPlate = CreatePlate(hud, "ViewPlate", new Vector2(0.5f, 1f), new Vector2(0f, -28f), new Vector2(520f, 64f), PlateColor);
-        Text viewText = CreateFillText(viewPlate, "ViewText", "Вид: от третьего лица  [C]", 32, TextAnchor.MiddleCenter, MutedText, 12f);
-
         // Стрелка на еду: без вида сверху это главный ориентир.
-        RectTransform pointer = CreatePlate(hud, "FoodPointer", new Vector2(0.5f, 1f), new Vector2(0f, -108f), new Vector2(150f, 150f), PlateColor);
+        RectTransform pointer = CreatePlate(hud, "FoodPointer", new Vector2(0.5f, 1f), new Vector2(0f, -24f), new Vector2(150f, 150f), PlateColor);
         var pointerImg = pointer.GetComponent<Image>();
         pointerImg.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd");
         pointerImg.type = Image.Type.Simple;
@@ -205,9 +202,9 @@ public static class SnakeSceneBuilder
         RectTransform menu = CreateOverlay(root, "MenuPanel", out RectTransform menuCard, new Vector2(820f, 600f));
         CreateCardText(menuCard, "Title", "ЗМЕЙКА 3D", 100, new Vector2(0f, 200f), new Vector2(780f, 130f), AccentGreen);
         CreateCardText(menuCard, "Controls",
-            "← → или A D — повернуть змейку\nC — сменить камеру (3-е, 2-е, 1-е лицо)\nEsc — пауза     R — заново",
+            "← → или A D — руль (держите для поворота)\nSpace — прыжок, можно перепрыгнуть свой хвост\nEsc — пауза     R — заново",
             32, new Vector2(0f, 40f), new Vector2(760f, 160f), MutedText);
-        CreateCardText(menuCard, "StartHint", "Space / Enter — начать", 30, new Vector2(0f, -80f), new Vector2(760f, 50f), MutedText);
+        CreateCardText(menuCard, "StartHint", "Enter / Space — начать", 30, new Vector2(0f, -80f), new Vector2(760f, 50f), MutedText);
         Button playButton = CreateButton(menuCard, "PlayButton", "Играть", new Vector2(0f, -195f), AccentGreen);
 
         // --- Пауза ---
@@ -230,9 +227,9 @@ public static class SnakeSceneBuilder
 
         var ui = canvasGo.AddComponent<UIController>();
         Wire(ui,
-            ("_game", game), ("_score", score), ("_cameraRig", rig), ("_foodSpawner", foodSpawner),
+            ("_game", game), ("_score", score), ("_cameraTransform", cameraTransform), ("_foodSpawner", foodSpawner),
             ("_food", food), ("_head", head),
-            ("_scoreText", scoreText), ("_bestText", bestText), ("_viewText", viewText),
+            ("_scoreText", scoreText), ("_bestText", bestText),
             ("_foodPointer", pointer.gameObject), ("_foodArrow", arrowPivot),
             ("_menuPanel", menu.gameObject), ("_pausePanel", pause.gameObject), ("_gameOverPanel", over.gameObject),
             ("_gameOverTitle", overTitle), ("_finalScoreText", finalScore), ("_finalBestText", finalBest),
