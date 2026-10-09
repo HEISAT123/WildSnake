@@ -3,7 +3,7 @@
 Этот файл читается Claude Code в начале каждой сессии. Следуй ему всегда.
 
 ## Проект
-- Игра: 3D-змейка на сетке, одиночная, без сети.
+- Игра: 3D-змейка со свободным движением, одиночная (с ИИ-соперником), без сети.
 - Движок: Unity 6000.6.5f1
 - Рендер-пайплайн: Built-in (код и SnakeSceneBuilder поддерживают и URP)
 - Ввод: Input Manager (старый). Весь ввод через `Assets/Scripts/GameInput.cs`, там же ветка для Input System
@@ -13,24 +13,26 @@
 ## Структура папок
 ```
 Assets/
-  Scripts/        игровой код
-  Editor/         Editor-скрипты (SnakeSceneBuilder и т.п.)
-  Materials/      материалы (создаются Editor-скриптом)
+  Scripts/        игровой код, сборка Snake3D.asmdef
+  Editor/         Editor-скрипты (SnakeSceneBuilder), сборка Snake3D.Editor.asmdef
+  Materials/      материалы и текстуры (создаются SnakeSceneBuilder)
+  Settings/       GameConfig.asset (баланс), Minimap.renderTexture
   Scenes/         Snake3D.unity
-  Tests/          тесты Unity Test Framework (EditMode/PlayMode)
+  Tests/          тесты Unity Test Framework (EditMode/PlayMode), свои asmdef
 ```
 
 ## Архитектура
-Основные классы в Assets/Scripts:
-- `GameManager` — состояния Menu / Playing / Paused / GameOver.
-- `SnakeController` — непрерывное движение, плавное руление, прыжок, рост; тело следует по записанной траектории головы.
-- `GridManager` — размеры и границы поля, препятствия (раскладка по сиду), клетки для появления еды.
-- `BoardView` — визуал поля, стен и препятствий.
-- `FoodSpawner` — появление еды в случайной свободной клетке.
-- `CameraRig` — только вид от третьего лица.
-- Управление: ←/→ или A/D — руль (держать), Space — прыжок.
-- `UIController` — счёт, рекорд, Game Over, пауза.
-- `ScoreService` — счёт и рекорд (PlayerPrefs).
+Связующее звено — `GameManager`: режимы (Classic/TimeAttack/Survival), состояния Menu/Playing/Paused/GameOver,
+уровни, еда, бонусы, опасности, соперник, статистика. Остальные системы не знают друг о друге.
+- Баланс: `GameConfig` (ScriptableObject в Assets/Settings).
+- Поле: `GridManager` (размер 44x44, препятствия по сиду, границы арены, клетки для предметов), `BoardView` (визуал),
+  `HazardManager` + `SpinnerHazard` (балки уровней), `ShrinkingArena` (режим «Выживание»).
+- Змейка: `SnakeController` (логика: движение, руль, прыжок, рывок, щит, длина, столкновения; траектория в кольцевом буфере),
+  `SnakeBodyMesh` (процедурный меш-трубка), `SnakeHeadAnimator` (язык, моргание), `SnakeDeathEffect`, `DashTrail`, `SnakeAI` (соперник).
+- Предметы: `FoodSpawner` (обычное/золотое/гнилое яблоко, магнит), `PowerUpSpawner` + `PowerUpService` (бонусы).
+- Сервисы: `ScoreService`, `LeaderboardService` + `Leaderboard` (топ-10 по режимам), `SettingsService`, `AudioService` + `ProceduralAudio` (звук кодом).
+- Отображение: `CameraRig` (третье лицо, крен, тряска), `UIController`, `SettingsPanel`, `LeaderboardPanel`, `TutorialController`.
+- Управление: A/D или ←/→ — руль (держать), Space — прыжок, Shift — рывок, Esc — пауза, R — заново, F11 — полный экран.
 
 Правила:
 - Логика (позиции, траектория, столкновения) считается в данных, Transform только отображает результат.
@@ -66,12 +68,15 @@ Unity -batchmode -nographics -quit -projectPath . -logFile -
 ```
 - Путь к исполняемому файлу Unity: переменная окружения `UNITY_EXE` (см. `tools/check-compile.ps1`).
 - Редактор Unity на время команды должен быть закрыт, иначе проект заблокирован.
+  Если редактор открыт — копируй проект (с Library, без Temp) во временную папку и запускай batch там.
+- В Editor-коде `SettingsService` конфликтует с `UnityEditor.SettingsService` — используй псевдоним `using SettingsService = Snake3D.SettingsService;`.
+- Если включат Input System, добавь ссылку `Unity.InputSystem` в оба asmdef.
 - Если подключён Unity MCP, читай ошибки из консоли редактора вместо batch-запуска.
 - Ошибки компиляции исправляй сразу, не оставляй их «на потом».
 
 ## Сборка сцены
 - Сцена собирается Editor-скриптом `Assets/Editor/SnakeSceneBuilder.cs`, пункт меню `Tools/Build Snake Scene`.
-- Скрипт создаёт сцену, поле, свет, камеру, Canvas, материалы и сохраняет `Assets/Scenes/Snake3D.unity`.
+- Скрипт создаёт сцену, текстуры, материалы, GameConfig, поле, змей, предметы, эффекты, звук, камеры, мини-карту и UI и сохраняет `Assets/Scenes/Snake3D.unity`. Batch: `-executeMethod SnakeSceneBuilder.Build`.
 - Новые объекты сцены добавляй через этот скрипт, чтобы сцену можно было пересобрать с нуля одной командой.
 
 ## Порядок работы

@@ -1,128 +1,97 @@
 using System;
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace Snake3D
 {
     /// <summary>
-    /// Змейка с непрерывным движением: плавное руление, прыжок, рост.
-    /// Голова пишет свою траекторию в кольцевой буфер точек с равным шагом,
-    /// сегменты тела ставятся на этой траектории на фиксированном расстоянии друг от друга,
-    /// поэтому тело повторяет и повороты, и прыжки головы.
+    /// Логика змейки: непрерывное движение, руль, прыжок, рывок, рост и столкновения.
+    /// Голова пишет траекторию в кольцевой буфер точек с равным шагом; тело (меш и точки
+    /// позвоночника для столкновений) строится по этой траектории, поэтому повторяет
+    /// и повороты, и прыжки. Управляется игроком или ИИ (через AiSteer/AiJump).
     /// </summary>
     public class SnakeController : MonoBehaviour
     {
         [Header("Ссылки")]
-        [Tooltip("Сетка поля (границы и размер клетки)")]
+        [Tooltip("Параметры баланса")]
+        [SerializeField] private GameConfig _config;
+
+        [Tooltip("Сетка поля (границы, препятствия, размер клетки)")]
         [SerializeField] private GridManager _grid;
 
         [Tooltip("Спавнер еды (где сейчас еда)")]
         [SerializeField] private FoodSpawner _food;
 
-        [Tooltip("Куб головы")]
+        [Tooltip("Логическая голова: позиция и поворот. Визуал головы — её дочерние объекты")]
         [SerializeField] private Transform _head;
 
-        [Tooltip("Неактивный шаблон сегмента тела для пула")]
-        [SerializeField] private Transform _segmentTemplate;
+        [Header("Роль")]
+        [Tooltip("Управляется игроком; иначе — ИИ через AiSteer и AiJump")]
+        [SerializeField] private bool _isPlayer = true;
 
-        [Tooltip("Родитель для сегментов тела")]
-        [SerializeField] private Transform _segmentRoot;
-
-        [Tooltip("Материал полосок на теле (необязательно)")]
-        [SerializeField] private Material _stripeMaterial;
-
-        [Header("Скорость")]
-        [Tooltip("Начальная скорость, клеток в секунду")]
-        [SerializeField, Min(0.5f)] private float _startSpeed = 4.5f;
-
-        [Tooltip("Максимальная скорость, клеток в секунду")]
-        [SerializeField, Min(0.5f)] private float _maxSpeed = 9f;
-
-        [Tooltip("Прибавка скорости за каждую еду, клеток в секунду")]
-        [SerializeField, Min(0f)] private float _speedPerFood = 0.12f;
-
-        [Header("Поворот")]
-        [Tooltip("Скорость поворота при руле до упора, град/с")]
-        [SerializeField, Min(10f)] private float _turnSpeed = 190f;
-
-        [Tooltip("Как быстро руль доходит до упора и возвращается, 1/с (больше — резче)")]
-        [SerializeField, Min(0.5f)] private float _steerResponse = 6f;
-
-        [Header("Прыжок")]
-        [Tooltip("Высота прыжка, клеток")]
-        [SerializeField, Min(0.1f)] private float _jumpHeight = 1.4f;
-
-        [Tooltip("Гравитация, клеток в секунду²")]
-        [SerializeField, Min(1f)] private float _gravity = 30f;
-
-        [Tooltip("На сколько голова должна быть выше/ниже сегмента, чтобы не столкнуться с ним (доля клетки)")]
-        [SerializeField, Min(0.1f)] private float _jumpClearance = 0.6f;
+        [Tooltip("Множитель скорости этой змейки (соперник чуть медленнее игрока)")]
+        [SerializeField, Range(0.3f, 1.5f)] private float _speedScale = 1f;
 
         [Header("Тело")]
-        [Tooltip("Начальная длина в сегментах, включая голову")]
-        [SerializeField, Min(2)] private int _startLength = 8;
-
-        [Tooltip("Максимальная длина (размер пула сегментов)")]
-        [SerializeField, Min(2)] private int _maxLength = 400;
-
-        [Tooltip("Сколько сегментов добавляет одна еда")]
-        [SerializeField, Min(1)] private int _segmentsPerFood = 2;
-
-        [Tooltip("Расстояние между сегментами вдоль траектории (доля клетки). Меньше — тело глаже")]
-        [SerializeField, Min(0.1f)] private float _segmentSpacing = 0.45f;
-
         [Tooltip("Шаг записи траектории головы (доля клетки). Меньше — точнее, но больше памяти")]
         [SerializeField, Range(0.02f, 0.5f)] private float _pathSampleDistance = 0.1f;
 
-        [Header("Столкновения")]
-        [Tooltip("Радиус столкновения головы с телом (доля клетки)")]
-        [SerializeField, Min(0.1f)] private float _bodyCollisionRadius = 0.55f;
+        [Tooltip("Шаг точек позвоночника для столкновений (доля клетки)")]
+        [SerializeField, Range(0.1f, 1f)] private float _spineSpacing = 0.4f;
 
-        [Tooltip("Участок тела за головой, который не проверяется на столкновение (клеток вдоль тела)")]
+        [Tooltip("Радиус тела (доля клетки)")]
+        [SerializeField, Range(0.1f, 0.5f)] private float _bodyRadius = 0.36f;
+
+        [Tooltip("Скорость, с которой длина догоняет целевую при росте и укорачивании, клеток в секунду")]
+        [SerializeField, Min(0.1f)] private float _lengthChangeSpeed = 4f;
+
+        [Header("Столкновения")]
+        [Tooltip("Участок тела за головой, который не проверяется на столкновение с собой (клеток вдоль тела)")]
         [SerializeField, Min(0.5f)] private float _selfCollisionSkipDistance = 2.2f;
 
-        [Tooltip("Радиус головы для столкновения с препятствиями (доля клетки)")]
+        [Tooltip("Расстояние голова-позвоночник, при котором засчитывается удар о тело (доля клетки)")]
+        [SerializeField, Min(0.1f)] private float _selfCollisionRadius = 0.55f;
+
+        [Tooltip("Радиус головы для препятствий и опасностей (доля клетки)")]
         [SerializeField, Min(0.1f)] private float _headRadius = 0.38f;
 
-        [Tooltip("Запас при перепрыгивании препятствия (доля клетки): чем больше, тем проще перепрыгнуть")]
-        [SerializeField, Min(0f)] private float _obstacleForgiveness = 0.1f;
-
         [Tooltip("Радиус поедания еды (доля клетки)")]
-        [SerializeField, Min(0.1f)] private float _eatRadius = 0.75f;
+        [SerializeField, Min(0.1f)] private float _eatRadius = 0.8f;
 
         [Tooltip("Отступ головы от стены, при котором засчитывается удар (доля клетки)")]
         [SerializeField, Min(0f)] private float _wallMargin = 0.45f;
 
-        [Header("Визуал")]
-        [Tooltip("Высота центра головы и сегментов над полем (доля клетки)")]
-        [SerializeField] private float _bodyHeight = 0.42f;
+        [Tooltip("На сколько голова должна быть выше или ниже тела, чтобы пролететь над ним (доля клетки)")]
+        [SerializeField, Min(0.1f)] private float _jumpClearance = 0.6f;
 
-        [Tooltip("Сколько последних сегментов сужаются к хвосту")]
-        [SerializeField, Min(1)] private int _taperSegments = 10;
+        [Tooltip("Запас при перепрыгивании препятствия (доля клетки): чем больше, тем проще")]
+        [SerializeField, Min(0f)] private float _obstacleForgiveness = 0.1f;
 
-        [Tooltip("Размер кончика хвоста относительно обычного сегмента")]
-        [SerializeField, Range(0.1f, 1f)] private float _tailScale = 0.45f;
+        [Tooltip("Неуязвимость после срабатывания щита, сек")]
+        [SerializeField, Min(0f)] private float _invulnerabilityTime = 1.2f;
 
-        [Tooltip("Длина полоски в сегментах (полоски чередуются с основным цветом)")]
-        [SerializeField, Min(1)] private int _stripeLength = 3;
+        [Header("Визуал головы")]
+        [Tooltip("Высота оси тела над полем (доля клетки)")]
+        [SerializeField] private float _bodyHeight = 0.36f;
 
         [Tooltip("Крен головы в повороте, град")]
         [SerializeField, Range(0f, 45f)] private float _bankAngle = 18f;
 
-        [Tooltip("Наклон головы вверх/вниз в прыжке на единицу вертикальной скорости, град")]
+        [Tooltip("Наклон головы в прыжке на единицу вертикальной скорости, град")]
         [SerializeField, Min(0f)] private float _pitchPerSpeed = 2.5f;
 
         [Tooltip("Длительность сквош-стретча (еда, приземление), сек")]
         [SerializeField, Min(0.01f)] private float _squashDuration = 0.25f;
 
         [Tooltip("Сила сквош-стретча")]
-        [SerializeField, Range(0f, 0.6f)] private float _squashAmount = 0.3f;
+        [SerializeField, Range(0f, 0.6f)] private float _squashAmount = 0.25f;
 
-        /// <summary>Позиция головы в мире в момент поедания.</summary>
         public event Action<Vector3> FoodEaten;
-
-        /// <summary>Позиция головы в мире в момент смерти.</summary>
         public event Action<Vector3> Died;
+        public event Action Jumped;
+        public event Action<Vector3> Landed;
+        public event Action Dashed;
+        public event Action<Vector3> ShieldUsed;
+        public event Action Respawned;
 
         public bool IsRunning
         {
@@ -136,8 +105,40 @@ namespace Snake3D
         }
 
         public bool IsAlive { get; private set; }
-        public int Length => _length;
+        public bool IsPlayer => _isPlayer;
+        public bool IsDashing => _dashTimer > 0f;
+        public bool IsInvulnerable => _invulnerableTimer > 0f;
+        public bool HasShield { get; set; }
+
+        /// <summary>Готовность рывка: 1 — можно использовать.</summary>
+        public float DashCharge01 => _config.DashCooldown > 0f ? 1f - Mathf.Clamp01(_dashCooldownTimer / _config.DashCooldown) : 1f;
+
+        /// <summary>Положение руля от -1 (влево) до 1 (вправо).</summary>
+        public float Steer => _steer;
+
         public Transform Head => _head;
+        public Vector3 HeadPosition => _headPos;
+        public Vector3 Forward => Quaternion.Euler(0f, _yaw, 0f) * Vector3.forward;
+        public float HeightAboveGround => _height;
+        public float CellSize => _cellSize;
+        public float BodyLengthCells => _lengthCells;
+        public float BodyLengthWorld => _lengthCells * _cellSize;
+        public float MaxBodyLengthCells => _config.MaxLength;
+        public float BodyRadiusWorld => _bodyRadius * _cellSize;
+        public float HeadRadiusWorld => _headRadius * _cellSize;
+        public float JumpHeightWorld => _config.JumpHeight * _cellSize;
+
+        /// <summary>Множитель скорости от бонусов (ставит GameManager).</summary>
+        public float ExternalSpeedMultiplier { get; set; } = 1f;
+
+        /// <summary>Чувствительность руля из настроек.</summary>
+        public float SteerSensitivity { get; set; } = 1f;
+
+        /// <summary>Руль от ИИ (-1..1), используется если змейка не игрока.</summary>
+        public float AiSteer { get; set; }
+
+        /// <summary>Запрос прыжка от ИИ, сбрасывается после обработки.</summary>
+        public bool AiJump { get; set; }
 
         private bool _isRunning;
         private int _runStartFrame;
@@ -147,86 +148,177 @@ namespace Snake3D
         private int _pathHead;
         private int _pathCount;
 
-        // Позиция и направление каждого сегмента (индекс 0 — голова, не используется).
-        private Vector3[] _segPositions;
-        private Vector3[] _segForward;
+        // Позвоночник для столкновений: точки с шагом _spineSpacing, [0] — голова.
+        private Vector3[] _spine;
+        private int _spineCount;
 
-        private int _length;
         private Vector3 _headPos;
         private float _yaw;
         private float _steer;
         private float _speed;
+        private float _lengthCells;
+        private float _targetLengthCells;
 
         private float _height;
         private float _verticalSpeed;
         private bool _grounded;
 
+        private float _dashTimer;
+        private float _dashCooldownTimer;
+        private float _invulnerableTimer;
+
         private float _squashTimer;
         private Vector3 _headBaseScale;
-        private Vector3 _segmentBaseScale;
 
         // Кэш геометрии, пересчитывается в ResetSnake.
-        private float _cellSize;
+        private float _cellSize = 1f;
         private float _groundY;
         private float _sampleDist;
-
-        private readonly List<Transform> _segments = new List<Transform>();
 
         private void Awake()
         {
             _headBaseScale = _head.localScale;
-            _segmentBaseScale = _segmentTemplate.localScale;
-            _segmentTemplate.gameObject.SetActive(false);
 
-            // Всё выделяем заранее под максимальную длину: в игре аллокаций и Instantiate нет.
-            int capacity = Mathf.CeilToInt((_maxLength + 1) * _segmentSpacing / _pathSampleDistance) + 8;
-            _path = new Vector3[capacity];
-            _segPositions = new Vector3[_maxLength];
-            _segForward = new Vector3[_maxLength];
-            for (int i = 1; i < _maxLength; i++) CreateSegment();
+            // Всё выделяем заранее под максимальную длину: в игре аллокаций нет.
+            int pathCapacity = Mathf.CeilToInt((_config.MaxLength + 2f) / _pathSampleDistance) + 8;
+            _path = new Vector3[pathCapacity];
+            _spine = new Vector3[Mathf.CeilToInt(_config.MaxLength / _spineSpacing) + 2];
         }
 
-        /// <summary>Вернуть змейку в начальное состояние в центре поля.</summary>
-        public void ResetSnake()
+        /// <summary>Поставить змейку в точку с заданным курсом (град, 0 — вдоль +Z).</summary>
+        public void ResetSnake(Vector3 position, float yaw)
         {
             _cellSize = _grid.CellSize;
             _groundY = _grid.Center.y + _bodyHeight * _cellSize;
             _sampleDist = _pathSampleDistance * _cellSize;
 
-            _length = Mathf.Clamp(_startLength, 2, _maxLength);
-            _yaw = 90f; // смотрим вдоль +X
+            _lengthCells = _config.StartLength;
+            _targetLengthCells = _lengthCells;
+            _yaw = yaw;
             _steer = 0f;
-            _speed = _startSpeed;
+            _speed = _config.StartSpeed;
             _height = 0f;
             _verticalSpeed = 0f;
             _grounded = true;
+            _dashTimer = 0f;
+            _dashCooldownTimer = 0f;
+            _invulnerableTimer = 0f;
             _squashTimer = _squashDuration;
+            AiSteer = 0f;
+            AiJump = false;
+            HasShield = false;
             IsAlive = true;
             IsRunning = false;
 
-            _headPos = new Vector3(_grid.Center.x, _groundY, _grid.Center.z);
+            _headPos = new Vector3(position.x, _groundY, position.z);
 
             // Заполняем траекторию прямой линией позади головы.
-            Vector3 forward = Forward();
-            int needed = Mathf.Min(_path.Length, Mathf.CeilToInt(_length * _segmentSpacing / _pathSampleDistance) + 2);
+            Vector3 forward = Forward;
+            int needed = Mathf.Min(_path.Length, Mathf.CeilToInt((_lengthCells + 1f) / _pathSampleDistance) + 2);
             _pathHead = _path.Length - 1;
             _pathCount = 0;
             for (int j = needed - 1; j >= 0; j--) PushPathPoint(_headPos - forward * (j * _sampleDist));
 
             _head.localScale = _headBaseScale;
-            SetActiveSegments(_length - 1);
-            ComputeBody();
-            ApplyVisuals(0f);
+            ComputeSpine();
+            ApplyHeadVisual(0f);
+            Respawned?.Invoke();
         }
 
-        /// <summary>Отметить в сетке клетки под змейкой и прямо перед ней, чтобы еда там не появлялась.</summary>
+        public void Grow(float cells)
+        {
+            _targetLengthCells = Mathf.Min(_config.MaxLength, _targetLengthCells + cells);
+            _squashTimer = 0f;
+        }
+
+        public void Shrink(float cells)
+        {
+            _targetLengthCells = Mathf.Max(_config.StartLength, _targetLengthCells - cells);
+        }
+
+        public void AddSpeed(float cellsPerSecond)
+        {
+            _speed = Mathf.Min(_config.MaxSpeed, _speed + cellsPerSecond);
+        }
+
+        /// <summary>
+        /// Удар (стена, препятствие, опасность, другая змея). Щит поглощает удар и разворачивает змейку.
+        /// Возвращает true, если змейка погибла.
+        /// </summary>
+        public bool ApplyHit()
+        {
+            if (!IsAlive) return true;
+            if (_invulnerableTimer > 0f) return false;
+
+            if (HasShield)
+            {
+                HasShield = false;
+                _yaw += 180f;
+                _steer = 0f;
+                _invulnerableTimer = _invulnerabilityTime;
+                ShieldUsed?.Invoke(_headPos);
+                return false;
+            }
+
+            Die();
+            return true;
+        }
+
+        /// <summary>Отметить в сетке клетки под змейкой и прямо перед ней (для появления предметов).</summary>
         public void MarkOccupiedCells()
         {
-            _grid.ClearAll();
             MarkCell(_headPos);
-            Vector3 forward = Forward();
+            Vector3 forward = Forward;
             for (int j = 1; j <= 3; j++) MarkCell(_headPos + forward * (j * _cellSize));
-            for (int i = 1; i < _length; i++) MarkCell(_segPositions[i]);
+            for (int i = 1; i < _spineCount; i++) MarkCell(_spine[i]);
+        }
+
+        /// <summary>
+        /// Задевает ли точка (с радиусом) тело змейки начиная с точки позвоночника startIndex.
+        /// Учитывает высоту: можно перепрыгнуть.
+        /// </summary>
+        public bool BodyHits(Vector3 point, float radius, int startIndex)
+        {
+            float r = radius + BodyRadiusWorld;
+            float rSqr = r * r;
+            float clearance = _jumpClearance * _cellSize;
+            for (int i = Mathf.Max(0, startIndex); i < _spineCount; i++)
+            {
+                Vector3 d = _spine[i] - point;
+                if (Mathf.Abs(d.y) >= clearance) continue;
+                d.y = 0f;
+                if (d.sqrMagnitude < rSqr) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Точка траектории на расстоянии distance позади головы и направление «к голове» в ней.</summary>
+        public void SampleSpine(float distance, out Vector3 position, out Vector3 forward)
+        {
+            Vector3 newest = _path[_pathHead];
+            Vector3 toHead = _headPos - newest;
+            float r = toHead.magnitude;
+            if (distance <= r)
+            {
+                position = r > 1e-5f ? Vector3.Lerp(_headPos, newest, distance / r) : _headPos;
+                forward = r > 1e-5f ? toHead : Forward;
+                return;
+            }
+
+            float k = (distance - r) / _sampleDist;
+            int i = (int)k;
+            int last = _pathCount - 1;
+            if (i >= last)
+            {
+                position = PathPoint(last);
+                forward = last > 0 ? PathPoint(last - 1) - position : Forward;
+                return;
+            }
+
+            Vector3 a = PathPoint(i);
+            Vector3 b = PathPoint(i + 1);
+            position = Vector3.Lerp(a, b, k - i);
+            forward = a - b;
         }
 
         private void Update()
@@ -235,57 +327,104 @@ namespace Snake3D
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
 
-            Steer(dt);
+            UpdateDash(dt);
+            UpdateSteer(dt);
             UpdateJump(dt);
+            if (_invulnerableTimer > 0f) _invulnerableTimer -= dt;
 
-            _headPos += Forward() * (_speed * _cellSize * dt);
+            float speed = _speed * _speedScale * ExternalSpeedMultiplier * (IsDashing ? _config.DashMultiplier : 1f);
+            _headPos += Forward * (speed * _cellSize * dt);
             _headPos.y = _groundY + _height;
-            RecordPath();
-            ComputeBody();
+            _lengthCells = Mathf.MoveTowards(_lengthCells, _targetLengthCells, _lengthChangeSpeed * dt);
 
-            if (HitsWall() || HitsObstacle() || HitsSelf())
-            {
-                Die();
-                return;
-            }
+            bool hitWall = ClampToArena();
+            RecordPath();
+            ComputeSpine();
+
+            if ((hitWall || HitsObstacle() || HitsSelf()) && ApplyHit()) return;
 
             TryEat();
-            ApplyVisuals(dt);
+            ApplyHeadVisual(dt);
         }
 
-        private void Steer(float dt)
+        private void UpdateSteer(float dt)
         {
-            float target = 0f;
-            if (GameInput.LeftHeld) target -= 1f;
-            if (GameInput.RightHeld) target += 1f;
+            float target;
+            if (_isPlayer)
+            {
+                target = 0f;
+                if (GameInput.LeftHeld) target -= 1f;
+                if (GameInput.RightHeld) target += 1f;
+            }
+            else
+            {
+                target = Mathf.Clamp(AiSteer, -1f, 1f);
+            }
 
             // Руль не прыгает сразу в упор, а доворачивается — так поворот получается дугой.
-            _steer = Mathf.MoveTowards(_steer, target, _steerResponse * dt);
-            _yaw += _steer * _turnSpeed * dt;
+            _steer = Mathf.MoveTowards(_steer, target, _config.SteerResponse * dt);
+            _yaw += _steer * _config.TurnSpeed * SteerSensitivity * dt;
         }
 
         private void UpdateJump(float dt)
         {
-            if (_grounded && GameInput.Jump && Time.frameCount != _runStartFrame)
+            bool wantJump = _isPlayer ? GameInput.Jump && Time.frameCount != _runStartFrame : AiJump;
+            AiJump = false;
+
+            if (_grounded && wantJump)
             {
-                _verticalSpeed = Mathf.Sqrt(2f * _gravity * _jumpHeight) * _cellSize;
+                _verticalSpeed = Mathf.Sqrt(2f * _config.Gravity * _config.JumpHeight) * _cellSize;
                 _grounded = false;
+                Jumped?.Invoke();
             }
 
             if (_grounded) return;
 
-            _verticalSpeed -= _gravity * _cellSize * dt;
+            _verticalSpeed -= _config.Gravity * _cellSize * dt;
             _height += _verticalSpeed * dt;
             if (_height <= 0f)
             {
                 _height = 0f;
                 _verticalSpeed = 0f;
                 _grounded = true;
-                _squashTimer = 0f; // сквош при приземлении
+                _squashTimer = 0f;
+                Landed?.Invoke(new Vector3(_headPos.x, _grid.Center.y, _headPos.z));
             }
         }
 
-        /// <summary>Добавляем точки строго через _sampleDist, чтобы сегмент находился по индексу за O(1).</summary>
+        private void UpdateDash(float dt)
+        {
+            if (_dashTimer > 0f) _dashTimer -= dt;
+            if (_dashCooldownTimer > 0f) _dashCooldownTimer -= dt;
+
+            if (_isPlayer && GameInput.Dash && _dashCooldownTimer <= 0f)
+            {
+                _dashTimer = _config.DashDuration;
+                _dashCooldownTimer = _config.DashCooldown;
+                Dashed?.Invoke();
+            }
+        }
+
+        /// <summary>Не выпускаем голову за арену; возвращает true, если был удар о стену.</summary>
+        private bool ClampToArena()
+        {
+            Vector2 half = _grid.ArenaHalfExtents;
+            float margin = _wallMargin * _cellSize;
+            float hx = half.x - margin;
+            float hz = half.y - margin;
+            Vector3 c = _grid.Center;
+            float lx = _headPos.x - c.x;
+            float lz = _headPos.z - c.z;
+            bool hit = lx > hx || lx < -hx || lz > hz || lz < -hz;
+            if (hit)
+            {
+                _headPos.x = c.x + Mathf.Clamp(lx, -hx, hx);
+                _headPos.z = c.z + Mathf.Clamp(lz, -hz, hz);
+            }
+            return hit;
+        }
+
+        /// <summary>Добавляем точки строго через _sampleDist, чтобы точка тела находилась по индексу за O(1).</summary>
         private void RecordPath()
         {
             Vector3 newest = _path[_pathHead];
@@ -313,55 +452,20 @@ namespace Snake3D
             return _path[(_pathHead - k + _path.Length) % _path.Length];
         }
 
-        private void ComputeBody()
+        private void ComputeSpine()
         {
-            float spacing = _segmentSpacing * _cellSize;
-            for (int i = 1; i < _length; i++)
-                SamplePath(i * spacing, out _segPositions[i], out _segForward[i]);
-        }
-
-        /// <summary>Точка траектории на расстоянии distance позади головы и направление «к голове» в ней.</summary>
-        private void SamplePath(float distance, out Vector3 position, out Vector3 forward)
-        {
-            Vector3 newest = _path[_pathHead];
-            Vector3 toHead = _headPos - newest;
-            float r = toHead.magnitude;
-            if (distance <= r)
-            {
-                position = r > 1e-5f ? Vector3.Lerp(_headPos, newest, distance / r) : _headPos;
-                forward = toHead;
-                return;
-            }
-
-            float k = (distance - r) / _sampleDist;
-            int i = (int)k;
-            int last = _pathCount - 1;
-            if (i >= last)
-            {
-                position = PathPoint(last);
-                forward = last > 0 ? PathPoint(last - 1) - position : Forward();
-                return;
-            }
-
-            Vector3 a = PathPoint(i);
-            Vector3 b = PathPoint(i + 1);
-            position = Vector3.Lerp(a, b, k - i);
-            forward = a - b;
-        }
-
-        private bool HitsWall()
-        {
-            Vector3 local = _headPos - _grid.Center;
-            float halfX = _grid.Width * _cellSize * 0.5f - _wallMargin * _cellSize;
-            float halfZ = _grid.Height * _cellSize * 0.5f - _wallMargin * _cellSize;
-            return Mathf.Abs(local.x) > halfX || Mathf.Abs(local.z) > halfZ;
+            float spacing = _spineSpacing * _cellSize;
+            _spineCount = Mathf.Min(_spine.Length, Mathf.FloorToInt(BodyLengthWorld / spacing) + 1);
+            _spine[0] = _headPos;
+            for (int i = 1; i < _spineCount; i++)
+                SampleSpine(i * spacing, out _spine[i], out _);
         }
 
         /// <summary>Проверяем 3x3 клетки вокруг головы: круг головы против квадрата препятствия, с учётом высоты прыжка.</summary>
         private bool HitsObstacle()
         {
             Vector2Int center = _grid.WorldToCell(_headPos);
-            float radius = _headRadius * _cellSize;
+            float radius = HeadRadiusWorld;
             float radiusSqr = radius * radius;
             float forgiveness = _obstacleForgiveness * _cellSize;
 
@@ -386,16 +490,16 @@ namespace Snake3D
             return false;
         }
 
-        /// <summary>Сегмент мешает, только если он близко по горизонтали и примерно на той же высоте — так прыжок спасает.</summary>
+        /// <summary>Точка тела мешает, только если она близко по горизонтали и примерно на той же высоте — так прыжок спасает.</summary>
         private bool HitsSelf()
         {
-            float radius = _bodyCollisionRadius * _cellSize;
+            float radius = _selfCollisionRadius * _cellSize;
             float radiusSqr = radius * radius;
             float clearance = _jumpClearance * _cellSize;
-            int skip = Mathf.Max(1, Mathf.CeilToInt(_selfCollisionSkipDistance / _segmentSpacing));
-            for (int i = skip; i < _length; i++)
+            int skip = Mathf.Max(1, Mathf.CeilToInt(_selfCollisionSkipDistance / _spineSpacing));
+            for (int i = skip; i < _spineCount; i++)
             {
-                Vector3 d = _segPositions[i] - _headPos;
+                Vector3 d = _spine[i] - _headPos;
                 if (Mathf.Abs(d.y) >= clearance) continue;
                 d.y = 0f;
                 if (d.sqrMagnitude < radiusSqr) return true;
@@ -408,48 +512,23 @@ namespace Snake3D
             if (_food == null || !_food.HasFood) return;
             float r = _eatRadius * _cellSize;
             if ((_food.Position - _headPos).sqrMagnitude > r * r) return;
-
-            if (_length < _maxLength)
-            {
-                int oldLength = _length;
-                _length = Mathf.Min(_maxLength, _length + _segmentsPerFood);
-                // Новые сегменты сразу ставим на траекторию, чтобы они не мелькнули в старой позиции.
-                for (int i = oldLength; i < _length; i++)
-                    SamplePath(i * _segmentSpacing * _cellSize, out _segPositions[i], out _segForward[i]);
-                SetActiveSegments(_length - 1);
-            }
-
-            _speed = Mathf.Min(_maxSpeed, _speed + _speedPerFood);
-            _squashTimer = 0f;
+            // Рост, очки и новая еда — решает GameManager в зависимости от вида еды.
             FoodEaten?.Invoke(_headPos);
         }
 
         private void Die()
         {
             IsAlive = false;
-            ApplyVisuals(0f);
+            ApplyHeadVisual(0f);
             Died?.Invoke(_headPos);
         }
 
-        private void ApplyVisuals(float dt)
+        private void ApplyHeadVisual(float dt)
         {
             _head.position = _headPos;
             float pitch = Mathf.Clamp(-_verticalSpeed / _cellSize * _pitchPerSpeed, -35f, 35f);
             float roll = -_steer * _bankAngle;
             _head.rotation = Quaternion.Euler(pitch, _yaw, roll);
-
-            int taperStart = _length - 1 - _taperSegments;
-            for (int i = 1; i < _length; i++)
-            {
-                Transform seg = _segments[i - 1];
-                seg.position = _segPositions[i];
-                Vector3 f = _segForward[i];
-                if (f.sqrMagnitude > 1e-8f) seg.rotation = Quaternion.LookRotation(f);
-
-                // Хвост плавно сужается: последние _taperSegments сегментов уменьшаются до _tailScale.
-                float taper = Mathf.Clamp01((float)(i - taperStart) / _taperSegments);
-                seg.localScale = _segmentBaseScale * Mathf.Lerp(1f, _tailScale, taper);
-            }
 
             if (_squashTimer < _squashDuration)
             {
@@ -464,37 +543,10 @@ namespace Snake3D
             }
         }
 
-        private void SetActiveSegments(int count)
-        {
-            for (int i = 0; i < _segments.Count; i++)
-            {
-                bool active = i < count;
-                if (_segments[i].gameObject.activeSelf != active) _segments[i].gameObject.SetActive(active);
-            }
-        }
-
-        private void CreateSegment()
-        {
-            Transform seg = Instantiate(_segmentTemplate, _segmentRoot);
-            seg.gameObject.SetActive(false);
-
-            // Полоски закреплены за индексом в пуле, поэтому едут вместе с телом.
-            int index = _segments.Count + 1;
-            if (_stripeMaterial != null && (index / _stripeLength) % 2 == 1)
-                seg.GetComponent<Renderer>().sharedMaterial = _stripeMaterial;
-
-            _segments.Add(seg);
-        }
-
         private void MarkCell(Vector3 world)
         {
             Vector2Int cell = _grid.WorldToCell(world);
             if (_grid.IsInside(cell)) _grid.SetOccupied(cell, true);
-        }
-
-        private Vector3 Forward()
-        {
-            return Quaternion.Euler(0f, _yaw, 0f) * Vector3.forward;
         }
     }
 }

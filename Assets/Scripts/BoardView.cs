@@ -4,8 +4,9 @@ using UnityEngine.Rendering;
 namespace Snake3D
 {
     /// <summary>
-    /// Визуал поля: шахматные плитки, стены по периметру и препятствия из раскладки GridManager.
-    /// Строится один раз (в редакторе SnakeSceneBuilder'ом или в Start, если раскладку поменяли в инспекторе).
+    /// Визуал поля: пол одним объектом с шахматной текстурой, земля вокруг, стены по периметру
+    /// и препятствия из раскладки GridManager. Строится один раз (в редакторе SnakeSceneBuilder'ом
+    /// или в Start, если раскладку поменяли в инспекторе).
     /// </summary>
     public class BoardView : MonoBehaviour
     {
@@ -14,11 +15,11 @@ namespace Snake3D
         [SerializeField] private GridManager _grid;
 
         [Header("Материалы")]
-        [Tooltip("Светлые клетки")]
-        [SerializeField] private Material _lightTileMaterial;
+        [Tooltip("Пол с шахматной текстурой 2x2 (повторяется по размеру поля)")]
+        [SerializeField] private Material _floorMaterial;
 
-        [Tooltip("Тёмные клетки")]
-        [SerializeField] private Material _darkTileMaterial;
+        [Tooltip("Земля вокруг поля")]
+        [SerializeField] private Material _groundMaterial;
 
         [Tooltip("Стены по периметру")]
         [SerializeField] private Material _wallMaterial;
@@ -33,11 +34,8 @@ namespace Snake3D
         [SerializeField] private Material _blockMaterial;
 
         [Header("Размеры")]
-        [Tooltip("Толщина плитки клетки")]
-        [SerializeField, Min(0.01f)] private float _tileHeight = 0.2f;
-
-        [Tooltip("Зазор между плитками (доля клетки)")]
-        [SerializeField, Range(0f, 0.2f)] private float _tileGap = 0.02f;
+        [Tooltip("Толщина пола")]
+        [SerializeField, Min(0.01f)] private float _floorThickness = 0.2f;
 
         [Tooltip("Высота стен по периметру над поверхностью поля")]
         [SerializeField, Min(0.05f)] private float _wallHeight = 0.8f;
@@ -45,9 +43,15 @@ namespace Snake3D
         [Tooltip("Толщина стен (доля клетки)")]
         [SerializeField, Min(0.05f)] private float _wallThickness = 0.5f;
 
+        [Tooltip("Насколько земля выходит за поле, клеток")]
+        [SerializeField, Min(0f)] private float _groundPadding = 40f;
+
         // Запоминаем, для какой раскладки построено поле, чтобы не пересоздавать его без нужды.
         [SerializeField, HideInInspector] private int _builtLayoutVersion;
         [SerializeField, HideInInspector] private bool _isBuilt;
+
+        private static readonly int MainTexStId = Shader.PropertyToID("_MainTex_ST");
+        private static readonly int BaseMapStId = Shader.PropertyToID("_BaseMap_ST");
 
         private void Start()
         {
@@ -64,7 +68,7 @@ namespace Snake3D
                 DestroySafe(transform.GetChild(i).gameObject);
 
             float cs = _grid.CellSize;
-            BuildTiles(cs);
+            BuildFloor(cs);
             BuildWalls(cs);
             BuildObstacles(cs);
 
@@ -72,20 +76,25 @@ namespace Snake3D
             _isBuilt = true;
         }
 
-        private void BuildTiles(float cs)
+        /// <summary>Один куб вместо сотен плиток: шахматку даёт текстура 2x2, повторённая на половину размеров поля.</summary>
+        private void BuildFloor(float cs)
         {
-            float tileSize = cs * (1f - _tileGap);
-            var tileScale = new Vector3(tileSize, _tileHeight, tileSize);
-            for (int y = 0; y < _grid.Height; y++)
-            {
-                for (int x = 0; x < _grid.Width; x++)
-                {
-                    Vector3 pos = _grid.CellToWorld(new Vector2Int(x, y)) + Vector3.down * (_tileHeight * 0.5f);
-                    Material mat = ((x + y) & 1) == 0 ? _lightTileMaterial : _darkTileMaterial;
-                    Renderer r = CreateShape(PrimitiveType.Cube, "Tile", pos, tileScale, mat);
-                    r.shadowCastingMode = ShadowCastingMode.Off;
-                }
-            }
+            float w = _grid.Width * cs;
+            float h = _grid.Height * cs;
+            Renderer floor = CreateShape(PrimitiveType.Cube, "Floor",
+                _grid.Center + Vector3.down * (_floorThickness * 0.5f), new Vector3(w, _floorThickness, h), _floorMaterial);
+            floor.shadowCastingMode = ShadowCastingMode.Off;
+
+            var block = new MaterialPropertyBlock();
+            var tiling = new Vector4(_grid.Width * 0.5f, _grid.Height * 0.5f, 0f, 0f);
+            block.SetVector(MainTexStId, tiling);
+            block.SetVector(BaseMapStId, tiling);
+            floor.SetPropertyBlock(block);
+
+            float pad = _groundPadding * cs * 2f;
+            Renderer ground = CreateShape(PrimitiveType.Cube, "Ground",
+                _grid.Center + Vector3.down * (_floorThickness + 0.05f), new Vector3(w + pad, 0.1f, h + pad), _groundMaterial);
+            ground.shadowCastingMode = ShadowCastingMode.Off;
         }
 
         private void BuildWalls(float cs)
@@ -93,8 +102,8 @@ namespace Snake3D
             float halfW = _grid.Width * cs * 0.5f;
             float halfH = _grid.Height * cs * 0.5f;
             float t = _wallThickness * cs;
-            float wallY = (_wallHeight - _tileHeight) * 0.5f;
-            float wallH = _wallHeight + _tileHeight;
+            float wallY = (_wallHeight - _floorThickness) * 0.5f;
+            float wallH = _wallHeight + _floorThickness;
             Vector3 c = _grid.Center;
 
             CreateShape(PrimitiveType.Cube, "Wall_North", c + new Vector3(0f, wallY, halfH + t * 0.5f), new Vector3(halfW * 2f + t * 2f, wallH, t), _wallMaterial);
