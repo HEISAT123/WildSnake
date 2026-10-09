@@ -69,6 +69,10 @@ public static class SnakeSceneBuilder
     {
         if (!Application.isBatchMode && !EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
 
+        // Сцену создаём первой: NewScene выгружает неиспользуемые ассеты, и загруженные до неё
+        // GameConfig и материалы превратились бы в «фальшивый null» — ссылки в сцене остались бы пустыми.
+        Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
         EnsureFolder("Assets", "Scenes");
         EnsureFolder("Assets", "Materials");
         EnsureFolder("Assets", "Settings");
@@ -142,8 +146,7 @@ public static class SnakeSceneBuilder
         Material pieces = CreatePiecesMaterial("DeathPieces");
         Material trail = CreateParticleMaterial("DashTrail");
 
-        // ================= Сцена и окружение =================
-        Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+        // ================= Окружение =================
         var skyColor = new Color(0.56f, 0.7f, 0.84f);
         RenderSettings.skybox = null;
         RenderSettings.ambientMode = AmbientMode.Trilight;
