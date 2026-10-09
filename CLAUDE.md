@@ -4,9 +4,9 @@
 
 ## Проект
 - Игра: 3D-змейка на сетке, одиночная, без сети.
-- Движок: Unity [УКАЖИ ВЕРСИЮ, например 2022.3 LTS / Unity 6]
-- Рендер-пайплайн: [Built-in / URP]
-- Ввод: [Input Manager / Input System]
+- Движок: Unity 6 (6000.x LTS)
+- Рендер-пайплайн: Built-in (код и SnakeSceneBuilder поддерживают и URP)
+- Ввод: Input Manager (старый). Весь ввод через `Assets/Scripts/GameInput.cs`, там же ветка для Input System
 - Язык кода: C#. Комментарии и сообщения коммитов на русском.
 - Сторонние пакеты и платные ассеты не используем. Все объекты строим из примитивов (Cube, Sphere, Plane) и материалов, созданных кодом.
 
@@ -62,7 +62,7 @@ Assets/
 ```
 Unity -batchmode -nographics -quit -projectPath . -logFile -
 ```
-- Путь к исполняемому файлу Unity: [УКАЖИ ПУТЬ К Unity.exe / Unity.app].
+- Путь к исполняемому файлу Unity: переменная окружения `UNITY_EXE` (см. `tools/check-compile.ps1`).
 - Редактор Unity на время команды должен быть закрыт, иначе проект заблокирован.
 - Если подключён Unity MCP, читай ошибки из консоли редактора вместо batch-запуска.
 - Ошибки компиляции исправляй сразу, не оставляй их «на потом».
@@ -84,3 +84,7 @@ Unity -batchmode -nographics -quit -projectPath . -logFile -
 - Коммит перед каждой крупной правкой, сообщения короткие и по делу.
 - В репозиторий не добавляй `Library/`, `Temp/`, `Logs/`, `obj/`, `UserSettings/`.
 - В настройках проекта должны быть включены Visible Meta Files и Force Text.
+
+## Unity MCP
+- Пакет: CoderGamester/mcp-unity (Unity 6+, Node.js 18+). Установка: Window > Package Manager > Add package from git URL > `https://github.com/CoderGamester/mcp-unity.git`, затем Tools > MCP Unity > Server Window > Configure для Claude Code > Start Server.
+- Переменная окружения `UNITY_EXE` задаёт путь к Unity.exe для `tools/check-compile.ps1` (hook на правку `.cs`).
