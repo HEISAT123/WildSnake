@@ -13,5 +13,8 @@
         ]
       }
     ]
+  },
+  "env": {
+    "UNITY_EXE": "C:\\Program Files\\Unity\\Hub\\Editor\\6000.6.5f1\\Editor\\Unity.exe"
   }
 }
