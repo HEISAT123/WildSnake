@@ -4,7 +4,10 @@ using UnityEngine.UI;
 
 namespace Snake3D
 {
-    /// <summary>Только отображение: HUD, меню, пауза, Game Over. Логики игры здесь нет.</summary>
+    /// <summary>
+    /// Только отображение: HUD, название вида камеры, стрелка на еду, меню, пауза, Game Over.
+    /// Логики игры здесь нет.
+    /// </summary>
     public class UIController : MonoBehaviour
     {
         [Header("Источники данных")]
@@ -14,12 +17,33 @@ namespace Snake3D
         [Tooltip("Сервис счёта")]
         [SerializeField] private ScoreService _score;
 
+        [Tooltip("Камера: её вид и ориентация для стрелки на еду")]
+        [SerializeField] private CameraRig _cameraRig;
+
+        [Tooltip("Спавнер еды (есть ли сейчас еда)")]
+        [SerializeField] private FoodSpawner _foodSpawner;
+
+        [Tooltip("Объект еды")]
+        [SerializeField] private Transform _food;
+
+        [Tooltip("Голова змейки")]
+        [SerializeField] private Transform _head;
+
         [Header("HUD")]
         [Tooltip("Текст текущего счёта")]
         [SerializeField] private Text _scoreText;
 
         [Tooltip("Текст рекорда")]
         [SerializeField] private Text _bestText;
+
+        [Tooltip("Название текущего вида камеры")]
+        [SerializeField] private Text _viewText;
+
+        [Tooltip("Плашка со стрелкой на еду")]
+        [SerializeField] private GameObject _foodPointer;
+
+        [Tooltip("Поворачиваемая стрелка (смотрит вверх при нулевом повороте)")]
+        [SerializeField] private RectTransform _foodArrow;
 
         [Header("Панели")]
         [Tooltip("Стартовое меню")]
@@ -48,15 +72,27 @@ namespace Snake3D
         [Tooltip("Кнопка «Продолжить» на паузе")]
         [SerializeField] private Button _resumeButton;
 
+        [Tooltip("Кнопка «Заново» на паузе")]
+        [SerializeField] private Button _pauseRestartButton;
+
         [Tooltip("Кнопка рестарта на экране Game Over")]
         [SerializeField] private Button _restartButton;
+
+        private Transform _cameraTransform;
+
+        private void Awake()
+        {
+            _cameraTransform = _cameraRig.transform;
+        }
 
         private void OnEnable()
         {
             _score.ScoreChanged += OnScoreChanged;
             _game.StateChanged += OnStateChanged;
+            _cameraRig.ViewChanged += OnViewChanged;
             _playButton.onClick.AddListener(OnPlayClicked);
             _resumeButton.onClick.AddListener(OnResumeClicked);
+            _pauseRestartButton.onClick.AddListener(OnRestartClicked);
             _restartButton.onClick.AddListener(OnRestartClicked);
         }
 
@@ -64,8 +100,10 @@ namespace Snake3D
         {
             _score.ScoreChanged -= OnScoreChanged;
             _game.StateChanged -= OnStateChanged;
+            _cameraRig.ViewChanged -= OnViewChanged;
             _playButton.onClick.RemoveListener(OnPlayClicked);
             _resumeButton.onClick.RemoveListener(OnResumeClicked);
+            _pauseRestartButton.onClick.RemoveListener(OnRestartClicked);
             _restartButton.onClick.RemoveListener(OnRestartClicked);
         }
 
@@ -73,6 +111,19 @@ namespace Snake3D
         {
             OnScoreChanged(_score.Score, _score.Best);
             OnStateChanged(_game.State);
+            OnViewChanged(_cameraRig.Mode);
+        }
+
+        private void LateUpdate()
+        {
+            bool show = _foodSpawner.HasFood && (_game.State == GameState.Playing || _game.State == GameState.Paused);
+            if (_foodPointer.activeSelf != show) _foodPointer.SetActive(show);
+            if (!show) return;
+
+            // Направление на еду в осях камеры: 0° — прямо по взгляду, вправо — по часовой.
+            Vector3 local = _cameraTransform.InverseTransformDirection(_food.position - _head.position);
+            float angle = Mathf.Atan2(local.x, local.z) * Mathf.Rad2Deg;
+            _foodArrow.localRotation = Quaternion.Euler(0f, 0f, -angle);
         }
 
         // Тексты меняются только по событию, а не каждый кадр, поэтому строки не мусорят.
@@ -80,6 +131,22 @@ namespace Snake3D
         {
             _scoreText.text = "Счёт: " + score;
             _bestText.text = "Рекорд: " + best;
+        }
+
+        private void OnViewChanged(CameraRig.ViewMode mode)
+        {
+            switch (mode)
+            {
+                case CameraRig.ViewMode.SecondPerson:
+                    _viewText.text = "Вид: от второго лица  [C]";
+                    break;
+                case CameraRig.ViewMode.FirstPerson:
+                    _viewText.text = "Вид: от первого лица  [C]";
+                    break;
+                default:
+                    _viewText.text = "Вид: от третьего лица  [C]";
+                    break;
+            }
         }
 
         private void OnStateChanged(GameState state)

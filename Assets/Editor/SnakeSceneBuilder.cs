@@ -102,29 +102,28 @@ public static class SnakeSceneBuilder
         ParticleSystem deathFx = CreateParticles("DeathParticles", particles,
             new Color(0.25f, 0.8f, 0.35f), new Color(0.1f, 0.4f, 0.15f), 3f, 8f, 1.2f);
 
-        // --- Системы ---
-        var systems = new GameObject("Systems");
-        var score = systems.AddComponent<ScoreService>();
-        var game = systems.AddComponent<GameManager>();
-        Wire(game, ("_snake", snake), ("_food", foodSpawner), ("_score", score),
-            ("_eatParticles", eatFx), ("_deathParticles", deathFx));
-
         // --- Камера ---
         var camGo = new GameObject("Main Camera");
         camGo.tag = "MainCamera";
         var cam = camGo.AddComponent<Camera>();
         cam.clearFlags = CameraClearFlags.SolidColor;
         cam.backgroundColor = new Color(0.13f, 0.15f, 0.21f);
-        cam.fieldOfView = 55f;
-        cam.nearClipPlane = 0.1f;
+        cam.fieldOfView = 65f;
+        cam.nearClipPlane = 0.05f; // вид от первого лица: камера у самой морды
         cam.farClipPlane = 300f;
         camGo.AddComponent<AudioListener>();
-        camGo.transform.SetPositionAndRotation(new Vector3(0f, 19f, -11f), Quaternion.Euler(60f, 0f, 0f));
         var rig = camGo.AddComponent<CameraRig>();
-        Wire(rig, ("_grid", grid), ("_target", headTr));
+        Wire(rig, ("_target", headTr));
+
+        // --- Системы ---
+        var systems = new GameObject("Systems");
+        var score = systems.AddComponent<ScoreService>();
+        var game = systems.AddComponent<GameManager>();
+        Wire(game, ("_snake", snake), ("_food", foodSpawner), ("_score", score), ("_cameraRig", rig),
+            ("_eatParticles", eatFx), ("_deathParticles", deathFx));
 
         // --- UI ---
-        BuildUI(game, score);
+        BuildUI(game, score, rig, foodSpawner, foodGo.transform, headTr);
 
         // --- Сохранение ---
         AssetDatabase.SaveAssets();
@@ -137,7 +136,18 @@ public static class SnakeSceneBuilder
 
     // ===================== UI =====================
 
-    private static void BuildUI(GameManager game, ScoreService score)
+    private static readonly Color PlateColor = new Color(0.06f, 0.08f, 0.12f, 0.72f);
+    private static readonly Color CardColor = new Color(0.07f, 0.09f, 0.13f, 0.94f);
+    private static readonly Color DimColor = new Color(0f, 0f, 0f, 0.5f);
+    private static readonly Color AccentGreen = new Color(0.35f, 0.85f, 0.45f);
+    private static readonly Color AccentGold = new Color(1f, 0.82f, 0.35f);
+    private static readonly Color AccentRed = new Color(1f, 0.45f, 0.4f);
+    private static readonly Color MutedText = new Color(0.8f, 0.84f, 0.9f);
+
+    private const string CONTROLS_HINT = "← → / A D — поворот     C — камера     Esc — пауза";
+
+    private static void BuildUI(GameManager game, ScoreService score, CameraRig rig, FoodSpawner foodSpawner,
+        Transform food, Transform head)
     {
         var canvasGo = new GameObject("Canvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         canvasGo.layer = LayerMask.NameToLayer("UI");
@@ -156,46 +166,78 @@ public static class SnakeSceneBuilder
         eventSystem.AddComponent<StandaloneInputModule>();
 #endif
 
-        // HUD
+        // --- HUD: всё на тёмных плашках, чтобы читалось на любом фоне при любом виде камеры ---
         RectTransform hud = CreateRect("HUD", root);
         Stretch(hud);
-        Text scoreText = CreateText(hud, "ScoreText", "Счёт: 0", 46, TextAnchor.UpperLeft,
-            new Vector2(0f, 1f), new Vector2(40f, -30f), new Vector2(600f, 70f));
-        Text bestText = CreateText(hud, "BestText", "Рекорд: 0", 46, TextAnchor.UpperRight,
-            new Vector2(1f, 1f), new Vector2(-40f, -30f), new Vector2(600f, 70f));
-        Text hint = CreateText(hud, "HintText", "WASD / стрелки — движение    Esc — пауза    C — камера", 28,
-            TextAnchor.LowerCenter, new Vector2(0.5f, 0f), new Vector2(0f, 24f), new Vector2(1400f, 50f));
-        hint.color = new Color(1f, 1f, 1f, 0.7f);
 
-        // Меню
-        RectTransform menu = CreatePanel(root, "MenuPanel", new Color(0f, 0f, 0f, 0.55f));
-        CreateCenteredText(menu, "Title", "ЗМЕЙКА 3D", 120, new Vector2(0f, 170f), new Vector2(1200f, 160f));
-        CreateCenteredText(menu, "Subtitle", "Space / Enter — начать", 40, new Vector2(0f, 40f), new Vector2(1200f, 60f));
-        Button playButton = CreateButton(menu, "PlayButton", "Играть", new Vector2(0f, -110f));
+        RectTransform scorePlate = CreatePlate(hud, "ScorePlate", new Vector2(0f, 1f), new Vector2(32f, -28f), new Vector2(340f, 84f), PlateColor);
+        Text scoreText = CreateFillText(scorePlate, "ScoreText", "Счёт: 0", 44, TextAnchor.MiddleLeft, Color.white, 24f);
 
-        // Пауза
-        RectTransform pause = CreatePanel(root, "PausePanel", new Color(0f, 0f, 0f, 0.55f));
-        CreateCenteredText(pause, "Title", "Пауза", 110, new Vector2(0f, 150f), new Vector2(1200f, 150f));
-        CreateCenteredText(pause, "Subtitle", "Esc — продолжить    R — заново", 40, new Vector2(0f, 30f), new Vector2(1200f, 60f));
-        Button resumeButton = CreateButton(pause, "ResumeButton", "Продолжить", new Vector2(0f, -110f));
+        RectTransform bestPlate = CreatePlate(hud, "BestPlate", new Vector2(1f, 1f), new Vector2(-32f, -28f), new Vector2(340f, 84f), PlateColor);
+        Text bestText = CreateFillText(bestPlate, "BestText", "Рекорд: 0", 44, TextAnchor.MiddleRight, AccentGold, 24f);
 
-        // Game Over
-        RectTransform over = CreatePanel(root, "GameOverPanel", new Color(0.15f, 0f, 0f, 0.6f));
-        Text overTitle = CreateCenteredText(over, "Title", "Игра окончена", 110, new Vector2(0f, 190f), new Vector2(1400f, 150f));
-        Text finalScore = CreateCenteredText(over, "FinalScoreText", "Счёт: 0", 56, new Vector2(0f, 60f), new Vector2(1000f, 80f));
-        Text finalBest = CreateCenteredText(over, "FinalBestText", "Рекорд: 0", 44, new Vector2(0f, -10f), new Vector2(1000f, 70f));
-        Button restartButton = CreateButton(over, "RestartButton", "Заново (R)", new Vector2(0f, -140f));
+        RectTransform viewPlate = CreatePlate(hud, "ViewPlate", new Vector2(0.5f, 1f), new Vector2(0f, -28f), new Vector2(520f, 64f), PlateColor);
+        Text viewText = CreateFillText(viewPlate, "ViewText", "Вид: от третьего лица  [C]", 32, TextAnchor.MiddleCenter, MutedText, 12f);
+
+        // Стрелка на еду: без вида сверху это главный ориентир.
+        RectTransform pointer = CreatePlate(hud, "FoodPointer", new Vector2(0.5f, 1f), new Vector2(0f, -108f), new Vector2(150f, 150f), PlateColor);
+        var pointerImg = pointer.GetComponent<Image>();
+        pointerImg.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd");
+        pointerImg.type = Image.Type.Simple;
+        RectTransform arrowPivot = CreateRect("ArrowPivot", pointer);
+        arrowPivot.anchorMin = new Vector2(0.5f, 0.56f);
+        arrowPivot.anchorMax = new Vector2(0.5f, 0.56f);
+        arrowPivot.sizeDelta = new Vector2(80f, 80f);
+        RectTransform arrow = CreateRect("Arrow", arrowPivot);
+        Stretch(arrow);
+        arrow.localRotation = Quaternion.Euler(0f, 0f, 180f); // спрайт смотрит вниз, разворачиваем вверх
+        var arrowImg = arrow.gameObject.AddComponent<Image>();
+        arrowImg.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/DropdownArrow.psd");
+        arrowImg.color = AccentRed;
+        arrowImg.raycastTarget = false;
+        Text pointerLabel = CreateText(pointer, "Label", "еда", 24, TextAnchor.MiddleCenter, new Vector2(0.5f, 0f), new Vector2(0f, 14f), new Vector2(140f, 30f));
+        pointerLabel.color = MutedText;
+
+        RectTransform hintPlate = CreatePlate(hud, "HintPlate", new Vector2(0.5f, 0f), new Vector2(0f, 24f), new Vector2(980f, 60f), PlateColor);
+        CreateFillText(hintPlate, "HintText", CONTROLS_HINT, 28, TextAnchor.MiddleCenter, MutedText, 12f);
+
+        // --- Меню ---
+        RectTransform menu = CreateOverlay(root, "MenuPanel", out RectTransform menuCard, new Vector2(820f, 600f));
+        CreateCardText(menuCard, "Title", "ЗМЕЙКА 3D", 100, new Vector2(0f, 200f), new Vector2(780f, 130f), AccentGreen);
+        CreateCardText(menuCard, "Controls",
+            "← → или A D — повернуть змейку\nC — сменить камеру (3-е, 2-е, 1-е лицо)\nEsc — пауза     R — заново",
+            32, new Vector2(0f, 40f), new Vector2(760f, 160f), MutedText);
+        CreateCardText(menuCard, "StartHint", "Space / Enter — начать", 30, new Vector2(0f, -80f), new Vector2(760f, 50f), MutedText);
+        Button playButton = CreateButton(menuCard, "PlayButton", "Играть", new Vector2(0f, -195f), AccentGreen);
+
+        // --- Пауза ---
+        RectTransform pause = CreateOverlay(root, "PausePanel", out RectTransform pauseCard, new Vector2(720f, 500f));
+        CreateCardText(pauseCard, "Title", "Пауза", 96, new Vector2(0f, 160f), new Vector2(680f, 120f), Color.white);
+        CreateCardText(pauseCard, "Subtitle", "Esc — продолжить     R — заново", 32, new Vector2(0f, 60f), new Vector2(680f, 50f), MutedText);
+        Button resumeButton = CreateButton(pauseCard, "ResumeButton", "Продолжить", new Vector2(0f, -50f), AccentGreen);
+        Button pauseRestartButton = CreateButton(pauseCard, "RestartButton", "Заново", new Vector2(0f, -165f), new Color(0.35f, 0.4f, 0.5f));
+
+        // --- Game Over ---
+        RectTransform over = CreateOverlay(root, "GameOverPanel", out RectTransform overCard, new Vector2(760f, 560f));
+        Text overTitle = CreateCardText(overCard, "Title", "Игра окончена", 84, new Vector2(0f, 180f), new Vector2(720f, 110f), AccentRed);
+        Text finalScore = CreateCardText(overCard, "FinalScoreText", "Счёт: 0", 56, new Vector2(0f, 60f), new Vector2(720f, 70f), Color.white);
+        Text finalBest = CreateCardText(overCard, "FinalBestText", "Рекорд: 0", 40, new Vector2(0f, -10f), new Vector2(720f, 56f), AccentGold);
+        CreateCardText(overCard, "Hint", "R / Enter — заново", 28, new Vector2(0f, -75f), new Vector2(720f, 40f), MutedText);
+        Button restartButton = CreateButton(overCard, "RestartButton", "Заново", new Vector2(0f, -180f), AccentGreen);
 
         pause.gameObject.SetActive(false);
         over.gameObject.SetActive(false);
 
         var ui = canvasGo.AddComponent<UIController>();
         Wire(ui,
-            ("_game", game), ("_score", score),
-            ("_scoreText", scoreText), ("_bestText", bestText),
+            ("_game", game), ("_score", score), ("_cameraRig", rig), ("_foodSpawner", foodSpawner),
+            ("_food", food), ("_head", head),
+            ("_scoreText", scoreText), ("_bestText", bestText), ("_viewText", viewText),
+            ("_foodPointer", pointer.gameObject), ("_foodArrow", arrowPivot),
             ("_menuPanel", menu.gameObject), ("_pausePanel", pause.gameObject), ("_gameOverPanel", over.gameObject),
             ("_gameOverTitle", overTitle), ("_finalScoreText", finalScore), ("_finalBestText", finalBest),
-            ("_playButton", playButton), ("_resumeButton", resumeButton), ("_restartButton", restartButton));
+            ("_playButton", playButton), ("_resumeButton", resumeButton),
+            ("_pauseRestartButton", pauseRestartButton), ("_restartButton", restartButton));
     }
 
     private static RectTransform CreateRect(string name, Transform parent)
@@ -215,13 +257,31 @@ public static class SnakeSceneBuilder
         rt.offsetMax = Vector2.zero;
     }
 
-    private static RectTransform CreatePanel(Transform parent, string name, Color color)
+    /// <summary>Скруглённая полупрозрачная плашка; anchor одновременно служит pivot.</summary>
+    private static RectTransform CreatePlate(Transform parent, string name, Vector2 anchor, Vector2 position, Vector2 size, Color color)
     {
         RectTransform rt = CreateRect(name, parent);
-        Stretch(rt);
+        rt.anchorMin = anchor;
+        rt.anchorMax = anchor;
+        rt.pivot = anchor;
+        rt.anchoredPosition = position;
+        rt.sizeDelta = size;
         var img = rt.gameObject.AddComponent<Image>();
+        img.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+        img.type = Image.Type.Sliced;
         img.color = color;
+        img.raycastTarget = false;
         return rt;
+    }
+
+    /// <summary>Затемнение всего экрана и карточка по центру. Возвращает корень панели.</summary>
+    private static RectTransform CreateOverlay(Transform parent, string name, out RectTransform card, Vector2 cardSize)
+    {
+        RectTransform panel = CreateRect(name, parent);
+        Stretch(panel);
+        panel.gameObject.AddComponent<Image>().color = DimColor;
+        card = CreatePlate(panel, "Card", new Vector2(0.5f, 0.5f), Vector2.zero, cardSize, CardColor);
+        return panel;
     }
 
     private static Text CreateText(Transform parent, string name, string value, int size, TextAnchor alignment,
@@ -233,48 +293,58 @@ public static class SnakeSceneBuilder
         rt.pivot = anchor;
         rt.anchoredPosition = position;
         rt.sizeDelta = sizeDelta;
+        return SetupText(rt, value, size, alignment, Color.white);
+    }
 
+    /// <summary>Текст на всю плашку с горизонтальным отступом.</summary>
+    private static Text CreateFillText(Transform parent, string name, string value, int size, TextAnchor alignment, Color color, float padding)
+    {
+        RectTransform rt = CreateRect(name, parent);
+        Stretch(rt);
+        rt.offsetMin = new Vector2(padding, 0f);
+        rt.offsetMax = new Vector2(-padding, 0f);
+        return SetupText(rt, value, size, alignment, color);
+    }
+
+    private static Text CreateCardText(Transform parent, string name, string value, int size, Vector2 position, Vector2 sizeDelta, Color color)
+    {
+        Text text = CreateText(parent, name, value, size, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), position, sizeDelta);
+        text.color = color;
+        return text;
+    }
+
+    private static Text SetupText(RectTransform rt, string value, int size, TextAnchor alignment, Color color)
+    {
         var text = rt.gameObject.AddComponent<Text>();
         text.font = _font;
         text.text = value;
         text.fontSize = size;
         text.alignment = alignment;
-        text.color = Color.white;
+        text.color = color;
+        text.lineSpacing = 1.15f;
         text.horizontalOverflow = HorizontalWrapMode.Overflow;
         text.verticalOverflow = VerticalWrapMode.Overflow;
         text.raycastTarget = false;
 
-        var shadow = rt.gameObject.AddComponent<Shadow>();
-        shadow.effectColor = new Color(0f, 0f, 0f, 0.6f);
-        shadow.effectDistance = new Vector2(2f, -2f);
+        // Обводка вместо тени: текст читается и на светлом поле, и на тёмном фоне.
+        var outline = rt.gameObject.AddComponent<Outline>();
+        outline.effectColor = new Color(0f, 0f, 0f, 0.75f);
+        outline.effectDistance = new Vector2(2f, -2f);
         return text;
     }
 
-    private static Text CreateCenteredText(Transform parent, string name, string value, int size, Vector2 position, Vector2 sizeDelta)
+    private static Button CreateButton(Transform parent, string name, string label, Vector2 position, Color color)
     {
-        return CreateText(parent, name, value, size, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), position, sizeDelta);
-    }
-
-    private static Button CreateButton(Transform parent, string name, string label, Vector2 position)
-    {
-        RectTransform rt = CreateRect(name, parent);
-        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = position;
-        rt.sizeDelta = new Vector2(420f, 96f);
-
-        var img = rt.gameObject.AddComponent<Image>();
-        img.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
-        img.type = Image.Type.Sliced;
-        img.color = new Color(0.22f, 0.72f, 0.32f);
+        RectTransform rt = CreatePlate(parent, name, new Vector2(0.5f, 0.5f), position, new Vector2(420f, 90f), color);
+        rt.GetComponent<Image>().raycastTarget = true;
 
         var button = rt.gameObject.AddComponent<Button>();
         ColorBlock colors = button.colors;
-        colors.highlightedColor = new Color(0.85f, 1f, 0.85f);
-        colors.pressedColor = new Color(0.7f, 0.85f, 0.7f);
+        colors.highlightedColor = new Color(0.85f, 0.85f, 0.85f);
+        colors.pressedColor = new Color(0.65f, 0.65f, 0.65f);
         button.colors = colors;
 
-        Text text = CreateText(rt, "Label", label, 42, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), Vector2.zero, rt.sizeDelta);
-        text.color = Color.white;
+        CreateFillText(rt, "Label", label, 40, TextAnchor.MiddleCenter, Color.white, 8f);
         return button;
     }
 

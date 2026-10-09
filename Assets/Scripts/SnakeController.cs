@@ -61,6 +61,9 @@ namespace Snake3D
         public event Action<Vector3> Died;
 
         public bool IsRunning { get; set; }
+
+        /// <summary>Поменять местами «влево» и «вправо»: нужно для вида спереди, где экран зеркален курсу змейки.</summary>
+        public bool MirrorTurns { get; set; }
         public bool IsAlive { get; private set; }
         public int Length => _length;
         public Transform Head => _head;
@@ -147,19 +150,30 @@ namespace Snake3D
 
         private void ReadInput()
         {
-            if (GameInput.Up) Enqueue(Vector2Int.up);
-            if (GameInput.Down) Enqueue(Vector2Int.down);
-            if (GameInput.Left) Enqueue(Vector2Int.left);
-            if (GameInput.Right) Enqueue(Vector2Int.right);
+            bool left = GameInput.Left;
+            bool right = GameInput.Right;
+            if (MirrorTurns)
+            {
+                bool tmp = left;
+                left = right;
+                right = tmp;
+            }
+
+            if (left) EnqueueTurn(false);
+            if (right) EnqueueTurn(true);
         }
 
-        /// <summary>Сравниваем с последней командой в очереди, а не с текущим курсом, иначе два быстрых поворота дадут разворот на 180°.</summary>
-        private void Enqueue(Vector2Int dir)
+        /// <summary>
+        /// Поворот на 90° относительно последней команды в очереди (а не текущего курса),
+        /// чтобы два быстрых нажатия «вправо, вправо» давали разворот за два шага.
+        /// Относительный поворот всегда перпендикулярен, поэтому разворот на 180° невозможен.
+        /// </summary>
+        private void EnqueueTurn(bool clockwise)
         {
             if (_bufferCount >= INPUT_BUFFER_SIZE) return;
             Vector2Int last = _bufferCount > 0 ? _inputBuffer[_bufferCount - 1] : _dir;
-            if (dir == last || dir + last == Vector2Int.zero) return;
-            _inputBuffer[_bufferCount++] = dir;
+            // Сетка: x — вправо, y — вперёд (+Z мира). По часовой стрелке (x, y) -> (y, -x).
+            _inputBuffer[_bufferCount++] = clockwise ? new Vector2Int(last.y, -last.x) : new Vector2Int(-last.y, last.x);
         }
 
         private void Step()

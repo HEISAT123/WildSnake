@@ -16,6 +16,9 @@ namespace Snake3D
         [Tooltip("Счёт и рекорд")]
         [SerializeField] private ScoreService _score;
 
+        [Tooltip("Камера (от вида зависит зеркальность поворотов)")]
+        [SerializeField] private CameraRig _cameraRig;
+
         [Header("Эффекты")]
         [Tooltip("Частицы при поедании")]
         [SerializeField] private ParticleSystem _eatParticles;
@@ -42,17 +45,20 @@ namespace Snake3D
         {
             _snake.FoodEaten += OnFoodEaten;
             _snake.Died += OnSnakeDied;
+            _cameraRig.ViewChanged += OnViewChanged;
         }
 
         private void OnDisable()
         {
             _snake.FoodEaten -= OnFoodEaten;
             _snake.Died -= OnSnakeDied;
+            _cameraRig.ViewChanged -= OnViewChanged;
             Time.timeScale = 1f;
         }
 
         private void Start()
         {
+            OnViewChanged(_cameraRig.Mode);
             PrepareRound();
             if (_skipMenu) SetState(GameState.Playing);
             else SetState(GameState.Menu);
@@ -107,6 +113,7 @@ namespace Snake3D
             _snake.ResetSnake();
             _score.ResetScore();
             _food.Spawn();
+            _cameraRig.SnapToTarget();
         }
 
         private void SetState(GameState state)
@@ -116,6 +123,12 @@ namespace Snake3D
             // Пауза через timeScale замораживает и шаги змейки, и частицы, и пульсацию еды.
             Time.timeScale = state == GameState.Paused ? 0f : 1f;
             StateChanged?.Invoke(state);
+        }
+
+        /// <summary>В виде спереди экранное «вправо» — это левый бок змейки, поэтому повороты зеркалим.</summary>
+        private void OnViewChanged(CameraRig.ViewMode mode)
+        {
+            _snake.MirrorTurns = mode == CameraRig.ViewMode.SecondPerson;
         }
 
         private void OnFoodEaten(Vector3 position)
