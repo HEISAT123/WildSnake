@@ -28,6 +28,9 @@ namespace Snake3D
         [Tooltip("Родитель для сегментов тела")]
         [SerializeField] private Transform _segmentRoot;
 
+        [Tooltip("Материал полосок на теле (необязательно)")]
+        [SerializeField] private Material _stripeMaterial;
+
         [Header("Скорость")]
         [Tooltip("Начальная скорость, клеток в секунду")]
         [SerializeField, Min(0.5f)] private float _startSpeed = 4.5f;
@@ -56,14 +59,17 @@ namespace Snake3D
         [SerializeField, Min(0.1f)] private float _jumpClearance = 0.6f;
 
         [Header("Тело")]
-        [Tooltip("Начальная длина, включая голову")]
-        [SerializeField, Min(2)] private int _startLength = 4;
+        [Tooltip("Начальная длина в сегментах, включая голову")]
+        [SerializeField, Min(2)] private int _startLength = 8;
 
         [Tooltip("Максимальная длина (размер пула сегментов)")]
-        [SerializeField, Min(2)] private int _maxLength = 250;
+        [SerializeField, Min(2)] private int _maxLength = 400;
 
-        [Tooltip("Расстояние между сегментами вдоль траектории (доля клетки)")]
-        [SerializeField, Min(0.1f)] private float _segmentSpacing = 0.8f;
+        [Tooltip("Сколько сегментов добавляет одна еда")]
+        [SerializeField, Min(1)] private int _segmentsPerFood = 2;
+
+        [Tooltip("Расстояние между сегментами вдоль траектории (доля клетки). Меньше — тело глаже")]
+        [SerializeField, Min(0.1f)] private float _segmentSpacing = 0.45f;
 
         [Tooltip("Шаг записи траектории головы (доля клетки). Меньше — точнее, но больше памяти")]
         [SerializeField, Range(0.02f, 0.5f)] private float _pathSampleDistance = 0.1f;
@@ -72,8 +78,14 @@ namespace Snake3D
         [Tooltip("Радиус столкновения головы с телом (доля клетки)")]
         [SerializeField, Min(0.1f)] private float _bodyCollisionRadius = 0.55f;
 
-        [Tooltip("Сколько ближайших к голове сегментов не проверять на столкновение")]
-        [SerializeField, Min(1)] private int _selfCollisionSkip = 3;
+        [Tooltip("Участок тела за головой, который не проверяется на столкновение (клеток вдоль тела)")]
+        [SerializeField, Min(0.5f)] private float _selfCollisionSkipDistance = 2.2f;
+
+        [Tooltip("Радиус головы для столкновения с препятствиями (доля клетки)")]
+        [SerializeField, Min(0.1f)] private float _headRadius = 0.38f;
+
+        [Tooltip("Запас при перепрыгивании препятствия (доля клетки): чем больше, тем проще перепрыгнуть")]
+        [SerializeField, Min(0f)] private float _obstacleForgiveness = 0.1f;
 
         [Tooltip("Радиус поедания еды (доля клетки)")]
         [SerializeField, Min(0.1f)] private float _eatRadius = 0.75f;
@@ -82,8 +94,17 @@ namespace Snake3D
         [SerializeField, Min(0f)] private float _wallMargin = 0.45f;
 
         [Header("Визуал")]
-        [Tooltip("Высота центра кубов над полем (доля клетки)")]
-        [SerializeField] private float _bodyHeight = 0.5f;
+        [Tooltip("Высота центра головы и сегментов над полем (доля клетки)")]
+        [SerializeField] private float _bodyHeight = 0.42f;
+
+        [Tooltip("Сколько последних сегментов сужаются к хвосту")]
+        [SerializeField, Min(1)] private int _taperSegments = 10;
+
+        [Tooltip("Размер кончика хвоста относительно обычного сегмента")]
+        [SerializeField, Range(0.1f, 1f)] private float _tailScale = 0.45f;
+
+        [Tooltip("Длина полоски в сегментах (полоски чередуются с основным цветом)")]
+        [SerializeField, Min(1)] private int _stripeLength = 3;
 
         [Tooltip("Крен головы в повороте, град")]
         [SerializeField, Range(0f, 45f)] private float _bankAngle = 18f;
@@ -142,6 +163,7 @@ namespace Snake3D
 
         private float _squashTimer;
         private Vector3 _headBaseScale;
+        private Vector3 _segmentBaseScale;
 
         // Кэш геометрии, пересчитывается в ResetSnake.
         private float _cellSize;
@@ -153,6 +175,7 @@ namespace Snake3D
         private void Awake()
         {
             _headBaseScale = _head.localScale;
+            _segmentBaseScale = _segmentTemplate.localScale;
             _segmentTemplate.gameObject.SetActive(false);
 
             // Всё выделяем заранее под максимальную длину: в игре аллокаций и Instantiate нет.
@@ -220,7 +243,7 @@ namespace Snake3D
             RecordPath();
             ComputeBody();
 
-            if (HitsWall() || HitsSelf())
+            if (HitsWall() || HitsObstacle() || HitsSelf())
             {
                 Die();
                 return;
@@ -334,13 +357,43 @@ namespace Snake3D
             return Mathf.Abs(local.x) > halfX || Mathf.Abs(local.z) > halfZ;
         }
 
+        /// <summary>Проверяем 3x3 клетки вокруг головы: круг головы против квадрата препятствия, с учётом высоты прыжка.</summary>
+        private bool HitsObstacle()
+        {
+            Vector2Int center = _grid.WorldToCell(_headPos);
+            float radius = _headRadius * _cellSize;
+            float radiusSqr = radius * radius;
+            float forgiveness = _obstacleForgiveness * _cellSize;
+
+            for (int dy = -1; dy <= 1; dy++)
+            {
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    var cell = new Vector2Int(center.x + dx, center.y + dy);
+                    if (!_grid.IsInside(cell)) continue;
+                    float obstacleHeight = _grid.GetObstacleHeight(cell);
+                    if (obstacleHeight <= 0f) continue;
+                    // _height — высота низа головы над полем: выше препятствия — пролетаем.
+                    if (_height + forgiveness >= obstacleHeight) continue;
+
+                    Vector3 c = _grid.CellToWorld(cell);
+                    float half = _grid.GetObstacleHalfSize(cell);
+                    float nx = _headPos.x - Mathf.Clamp(_headPos.x, c.x - half, c.x + half);
+                    float nz = _headPos.z - Mathf.Clamp(_headPos.z, c.z - half, c.z + half);
+                    if (nx * nx + nz * nz < radiusSqr) return true;
+                }
+            }
+            return false;
+        }
+
         /// <summary>Сегмент мешает, только если он близко по горизонтали и примерно на той же высоте — так прыжок спасает.</summary>
         private bool HitsSelf()
         {
             float radius = _bodyCollisionRadius * _cellSize;
             float radiusSqr = radius * radius;
             float clearance = _jumpClearance * _cellSize;
-            for (int i = _selfCollisionSkip; i < _length; i++)
+            int skip = Mathf.Max(1, Mathf.CeilToInt(_selfCollisionSkipDistance / _segmentSpacing));
+            for (int i = skip; i < _length; i++)
             {
                 Vector3 d = _segPositions[i] - _headPos;
                 if (Mathf.Abs(d.y) >= clearance) continue;
@@ -358,9 +411,11 @@ namespace Snake3D
 
             if (_length < _maxLength)
             {
-                _length++;
-                int i = _length - 1;
-                SamplePath(i * _segmentSpacing * _cellSize, out _segPositions[i], out _segForward[i]);
+                int oldLength = _length;
+                _length = Mathf.Min(_maxLength, _length + _segmentsPerFood);
+                // Новые сегменты сразу ставим на траекторию, чтобы они не мелькнули в старой позиции.
+                for (int i = oldLength; i < _length; i++)
+                    SamplePath(i * _segmentSpacing * _cellSize, out _segPositions[i], out _segForward[i]);
                 SetActiveSegments(_length - 1);
             }
 
@@ -383,12 +438,17 @@ namespace Snake3D
             float roll = -_steer * _bankAngle;
             _head.rotation = Quaternion.Euler(pitch, _yaw, roll);
 
+            int taperStart = _length - 1 - _taperSegments;
             for (int i = 1; i < _length; i++)
             {
                 Transform seg = _segments[i - 1];
                 seg.position = _segPositions[i];
                 Vector3 f = _segForward[i];
                 if (f.sqrMagnitude > 1e-8f) seg.rotation = Quaternion.LookRotation(f);
+
+                // Хвост плавно сужается: последние _taperSegments сегментов уменьшаются до _tailScale.
+                float taper = Mathf.Clamp01((float)(i - taperStart) / _taperSegments);
+                seg.localScale = _segmentBaseScale * Mathf.Lerp(1f, _tailScale, taper);
             }
 
             if (_squashTimer < _squashDuration)
@@ -417,6 +477,12 @@ namespace Snake3D
         {
             Transform seg = Instantiate(_segmentTemplate, _segmentRoot);
             seg.gameObject.SetActive(false);
+
+            // Полоски закреплены за индексом в пуле, поэтому едут вместе с телом.
+            int index = _segments.Count + 1;
+            if (_stripeMaterial != null && (index / _stripeLength) % 2 == 1)
+                seg.GetComponent<Renderer>().sharedMaterial = _stripeMaterial;
+
             _segments.Add(seg);
         }
 

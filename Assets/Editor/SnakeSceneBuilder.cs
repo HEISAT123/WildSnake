@@ -38,8 +38,13 @@ public static class SnakeSceneBuilder
         Material tileDark = CreateLitMaterial("TileDark", new Color(0.62f, 0.72f, 0.56f), 0.1f, urp);
         Material wall = CreateLitMaterial("Wall", new Color(0.36f, 0.30f, 0.42f), 0.2f, urp);
         Material head = CreateLitMaterial("SnakeHead", new Color(0.10f, 0.50f, 0.22f), 0.5f, urp);
-        Material body = CreateLitMaterial("SnakeBody", new Color(0.22f, 0.72f, 0.32f), 0.4f, urp);
-        Material eye = CreateLitMaterial("SnakeEye", new Color(0.05f, 0.05f, 0.05f), 0.8f, urp);
+        Material body = CreateLitMaterial("SnakeBody", new Color(0.22f, 0.72f, 0.32f), 0.45f, urp);
+        Material stripe = CreateLitMaterial("SnakeStripe", new Color(0.13f, 0.5f, 0.22f), 0.45f, urp);
+        Material eye = CreateLitMaterial("SnakeEye", new Color(0.05f, 0.05f, 0.05f), 0.9f, urp);
+        Material eyeWhite = CreateLitMaterial("SnakeEyeWhite", new Color(0.96f, 0.96f, 0.92f), 0.7f, urp);
+        Material lowWall = CreateLitMaterial("ObstacleLowWall", new Color(0.66f, 0.5f, 0.36f), 0.15f, urp);
+        Material pillar = CreateLitMaterial("ObstaclePillar", new Color(0.5f, 0.56f, 0.66f), 0.3f, urp);
+        Material block = CreateLitMaterial("ObstacleBlock", new Color(0.42f, 0.36f, 0.5f), 0.2f, urp);
         Material food = CreateLitMaterial("Food", new Color(0.95f, 0.22f, 0.22f), 0.7f, urp);
         SetEmission(food, new Color(0.6f, 0.08f, 0.05f));
         Material particles = CreateParticleMaterial("Particles");
@@ -68,23 +73,25 @@ public static class SnakeSceneBuilder
 
         var boardGo = new GameObject("Board");
         var board = boardGo.AddComponent<BoardView>();
-        Wire(board, ("_grid", grid), ("_lightTileMaterial", tileLight), ("_darkTileMaterial", tileDark), ("_wallMaterial", wall));
+        Wire(board, ("_grid", grid), ("_lightTileMaterial", tileLight), ("_darkTileMaterial", tileDark), ("_wallMaterial", wall),
+            ("_lowWallMaterial", lowWall), ("_pillarMaterial", pillar), ("_blockMaterial", block));
         board.Build();
 
         // --- Змейка ---
         var snakeGo = new GameObject("Snake");
         var snake = snakeGo.AddComponent<SnakeController>();
 
-        Transform headTr = CreatePrimitive(PrimitiveType.Cube, "Head", snakeGo.transform, head).transform;
-        headTr.localScale = Vector3.one * 0.95f;
-        CreateEye(headTr, new Vector3(-0.25f, 0.22f, 0.45f), eye);
-        CreateEye(headTr, new Vector3(0.25f, 0.22f, 0.45f), eye);
+        // Голова — вытянутый эллипсоид, глаза — белки со зрачками.
+        Transform headTr = CreatePrimitive(PrimitiveType.Sphere, "Head", snakeGo.transform, head).transform;
+        headTr.localScale = new Vector3(0.9f, 0.75f, 1.15f);
+        CreateEye(headTr, new Vector3(-0.24f, 0.24f, 0.3f), eyeWhite, eye);
+        CreateEye(headTr, new Vector3(0.24f, 0.24f, 0.3f), eyeWhite, eye);
 
         var bodyRoot = new GameObject("Body").transform;
         bodyRoot.SetParent(snakeGo.transform, false);
 
-        GameObject segment = CreatePrimitive(PrimitiveType.Cube, "SegmentTemplate", snakeGo.transform, body);
-        segment.transform.localScale = Vector3.one * 0.82f;
+        GameObject segment = CreatePrimitive(PrimitiveType.Sphere, "SegmentTemplate", snakeGo.transform, body);
+        segment.transform.localScale = Vector3.one * 0.8f;
         segment.SetActive(false);
 
         // --- Еда ---
@@ -94,7 +101,7 @@ public static class SnakeSceneBuilder
         Wire(foodSpawner, ("_grid", grid), ("_food", foodGo.transform));
 
         Wire(snake, ("_grid", grid), ("_food", foodSpawner), ("_head", headTr),
-            ("_segmentTemplate", segment.transform), ("_segmentRoot", bodyRoot));
+            ("_segmentTemplate", segment.transform), ("_segmentRoot", bodyRoot), ("_stripeMaterial", stripe));
 
         // --- Эффекты ---
         ParticleSystem eatFx = CreateParticles("EatParticles", particles,
@@ -358,12 +365,20 @@ public static class SnakeSceneBuilder
         return go;
     }
 
-    private static void CreateEye(Transform head, Vector3 localPos, Material mat)
+    private static void CreateEye(Transform head, Vector3 localPos, Material white, Material pupil)
     {
-        GameObject eye = CreatePrimitive(PrimitiveType.Cube, "Eye", head, mat);
+        // Голова масштабирована неравномерно — компенсируем, чтобы глаз остался круглым.
+        const float eyeSize = 0.26f;
+        Vector3 hs = head.localScale;
+        GameObject eye = CreatePrimitive(PrimitiveType.Sphere, "Eye", head, white);
         eye.transform.localPosition = localPos;
-        eye.transform.localScale = new Vector3(0.18f, 0.18f, 0.14f);
+        eye.transform.localScale = new Vector3(eyeSize / hs.x, eyeSize / hs.y, eyeSize / hs.z);
         eye.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
+
+        GameObject p = CreatePrimitive(PrimitiveType.Sphere, "Pupil", eye.transform, pupil);
+        p.transform.localPosition = new Vector3(0f, 0.05f, 0.32f);
+        p.transform.localScale = Vector3.one * 0.55f;
+        p.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
     }
 
     private static ParticleSystem CreateParticles(string name, Material mat, Color colorA, Color colorB,
