@@ -18,7 +18,7 @@ namespace Snake3D
         [Tooltip("Пол с шахматной текстурой 2x2 (повторяется по размеру поля)")]
         [SerializeField] private Material _floorMaterial;
 
-        [Tooltip("Земля вокруг поля")]
+        [Tooltip("Земля вокруг поля (необязательно — если есть рельеф окружения, оставьте пустым)")]
         [SerializeField] private Material _groundMaterial;
 
         [Tooltip("Стены по периметру")]
@@ -49,6 +49,7 @@ namespace Snake3D
         // Запоминаем, для какой раскладки построено поле, чтобы не пересоздавать его без нужды.
         [SerializeField, HideInInspector] private int _builtLayoutVersion;
         [SerializeField, HideInInspector] private bool _isBuilt;
+        [SerializeField, HideInInspector] private Renderer _floorRenderer;
 
         private static readonly int MainTexStId = Shader.PropertyToID("_MainTex_ST");
         private static readonly int BaseMapStId = Shader.PropertyToID("_BaseMap_ST");
@@ -56,6 +57,8 @@ namespace Snake3D
         private void Start()
         {
             if (!_isBuilt || _builtLayoutVersion != _grid.LayoutVersion || transform.childCount == 0) Build();
+            // MaterialPropertyBlock не сохраняется в сцене, поэтому повторение текстуры пола ставим при каждом запуске.
+            else ApplyFloorTiling();
         }
 
         [ContextMenu("Rebuild Board")]
@@ -84,17 +87,26 @@ namespace Snake3D
             Renderer floor = CreateShape(PrimitiveType.Cube, "Floor",
                 _grid.Center + Vector3.down * (_floorThickness * 0.5f), new Vector3(w, _floorThickness, h), _floorMaterial);
             floor.shadowCastingMode = ShadowCastingMode.Off;
+            _floorRenderer = floor;
+            ApplyFloorTiling();
 
-            var block = new MaterialPropertyBlock();
-            var tiling = new Vector4(_grid.Width * 0.5f, _grid.Height * 0.5f, 0f, 0f);
-            block.SetVector(MainTexStId, tiling);
-            block.SetVector(BaseMapStId, tiling);
-            floor.SetPropertyBlock(block);
-
+            // Земля вокруг — только если нет отдельного рельефа (материал не задан).
+            if (_groundMaterial == null) return;
             float pad = _groundPadding * cs * 2f;
             Renderer ground = CreateShape(PrimitiveType.Cube, "Ground",
                 _grid.Center + Vector3.down * (_floorThickness + 0.05f), new Vector3(w + pad, 0.1f, h + pad), _groundMaterial);
             ground.shadowCastingMode = ShadowCastingMode.Off;
+        }
+
+        /// <summary>Текстура пола покрывает 2x2 клетки — повторяем её на половину размеров поля.</summary>
+        private void ApplyFloorTiling()
+        {
+            if (_floorRenderer == null) return;
+            var block = new MaterialPropertyBlock();
+            var tiling = new Vector4(_grid.Width * 0.5f, _grid.Height * 0.5f, 0f, 0f);
+            block.SetVector(MainTexStId, tiling);
+            block.SetVector(BaseMapStId, tiling);
+            _floorRenderer.SetPropertyBlock(block);
         }
 
         private void BuildWalls(float cs)
@@ -110,6 +122,14 @@ namespace Snake3D
             CreateShape(PrimitiveType.Cube, "Wall_South", c + new Vector3(0f, wallY, -halfH - t * 0.5f), new Vector3(halfW * 2f + t * 2f, wallH, t), _wallMaterial);
             CreateShape(PrimitiveType.Cube, "Wall_East", c + new Vector3(halfW + t * 0.5f, wallY, 0f), new Vector3(t, wallH, halfH * 2f), _wallMaterial);
             CreateShape(PrimitiveType.Cube, "Wall_West", c + new Vector3(-halfW - t * 0.5f, wallY, 0f), new Vector3(t, wallH, halfH * 2f), _wallMaterial);
+
+            // Парапет — чуть более широкий каменный край поверх стен.
+            float capY = _wallHeight + 0.05f;
+            float capT = t * 1.3f;
+            CreateShape(PrimitiveType.Cube, "Coping_North", c + new Vector3(0f, capY, halfH + t * 0.5f), new Vector3(halfW * 2f + t * 2.6f, 0.1f, capT), _lowWallMaterial);
+            CreateShape(PrimitiveType.Cube, "Coping_South", c + new Vector3(0f, capY, -halfH - t * 0.5f), new Vector3(halfW * 2f + t * 2.6f, 0.1f, capT), _lowWallMaterial);
+            CreateShape(PrimitiveType.Cube, "Coping_East", c + new Vector3(halfW + t * 0.5f, capY, 0f), new Vector3(capT, 0.1f, halfH * 2f), _lowWallMaterial);
+            CreateShape(PrimitiveType.Cube, "Coping_West", c + new Vector3(-halfW - t * 0.5f, capY, 0f), new Vector3(capT, 0.1f, halfH * 2f), _lowWallMaterial);
         }
 
         private void BuildObstacles(float cs)
@@ -128,9 +148,13 @@ namespace Snake3D
                     {
                         case ObstacleType.Pillar:
                         {
-                            // Цилиндр Unity высотой 2 при scale.y = 1.
+                            // Античная колонна: база, ствол (цилиндр Unity высотой 2 при scale.y = 1) и капитель.
                             float d = _grid.GetObstacleHalfSize(cell) * 2f;
-                            CreateShape(PrimitiveType.Cylinder, "Pillar", basePos + Vector3.up * (h * 0.5f), new Vector3(d, h * 0.5f, d), _pillarMaterial);
+                            float plinth = 0.14f * cs;
+                            CreateShape(PrimitiveType.Cube, "PillarBase", basePos + Vector3.up * (plinth * 0.5f), new Vector3(d * 1.25f, plinth, d * 1.25f), _pillarMaterial);
+                            CreateShape(PrimitiveType.Cylinder, "Pillar", basePos + Vector3.up * (h * 0.5f), new Vector3(d * 0.85f, h * 0.5f, d * 0.85f), _pillarMaterial);
+                            CreateShape(PrimitiveType.Cylinder, "PillarNeck", basePos + Vector3.up * (h - plinth * 1.4f), new Vector3(d, plinth * 0.4f, d), _pillarMaterial);
+                            CreateShape(PrimitiveType.Cube, "PillarCapital", basePos + Vector3.up * (h - plinth * 0.5f), new Vector3(d * 1.25f, plinth, d * 1.25f), _pillarMaterial);
                             break;
                         }
                         case ObstacleType.Block:

@@ -26,7 +26,7 @@ public static class SnakeSceneBuilder
     private const string MINIMAP_LAYER = "Minimap";
 
     // Материалы прошлых версий сборщика, которые больше не нужны.
-    private static readonly string[] ObsoleteMaterials = { "TileLight", "TileDark", "SnakeStripe", "SnakeEyeWhite" };
+    private static readonly string[] ObsoleteMaterials = { "TileLight", "TileDark", "SnakeStripe", "SnakeEyeWhite", "Ground" };
 
     private static readonly Color PlateColor = new Color(0.06f, 0.08f, 0.12f, 0.72f);
     private static readonly Color CardColor = new Color(0.07f, 0.09f, 0.13f, 0.95f);
@@ -84,16 +84,8 @@ public static class SnakeSceneBuilder
         GameConfig config = LoadOrCreateAsset<GameConfig>(SETTINGS_FOLDER + "/GameConfig.asset");
 
         // ================= Материалы =================
-        Texture2D checker = SaveTexture(CreateCheckerTexture(new Color(0.78f, 0.84f, 0.68f), new Color(0.66f, 0.75f, 0.57f)), MATERIALS_FOLDER + "/FloorChecker.asset");
         Texture2D skin = SaveTexture(CreateSkinTexture(), MATERIALS_FOLDER + "/SnakeSkin.asset");
-
-        Material floor = CreateLitMaterial("Floor", Color.white, 0.1f);
-        floor.mainTexture = checker;
-        Material ground = CreateLitMaterial("Ground", new Color(0.24f, 0.33f, 0.2f), 0.05f);
-        Material wall = CreateLitMaterial("Wall", new Color(0.36f, 0.3f, 0.42f), 0.2f);
-        Material lowWall = CreateLitMaterial("ObstacleLowWall", new Color(0.66f, 0.5f, 0.36f), 0.15f);
-        Material pillar = CreateLitMaterial("ObstaclePillar", new Color(0.5f, 0.56f, 0.66f), 0.3f);
-        Material block = CreateLitMaterial("ObstacleBlock", new Color(0.42f, 0.36f, 0.5f), 0.2f);
+        EnvironmentBuilder.ArenaMaterials arenaMats = EnvironmentBuilder.CreateArenaMaterials();
 
         var playerLook = new SnakeLook
         {
@@ -146,19 +138,7 @@ public static class SnakeSceneBuilder
         Material pieces = CreatePiecesMaterial("DeathPieces");
         Material trail = CreateParticleMaterial("DashTrail");
 
-        // ================= Окружение =================
-        var skyColor = new Color(0.56f, 0.7f, 0.84f);
-        RenderSettings.skybox = null;
-        RenderSettings.ambientMode = AmbientMode.Trilight;
-        RenderSettings.ambientSkyColor = new Color(0.66f, 0.72f, 0.82f);
-        RenderSettings.ambientEquatorColor = new Color(0.48f, 0.5f, 0.5f);
-        RenderSettings.ambientGroundColor = new Color(0.25f, 0.24f, 0.22f);
-        RenderSettings.fog = true;
-        RenderSettings.fogMode = FogMode.Linear;
-        RenderSettings.fogColor = skyColor;
-        RenderSettings.fogStartDistance = 35f;
-        RenderSettings.fogEndDistance = 90f;
-
+        // ================= Свет =================
         var lightGo = new GameObject("Directional Light");
         var light = lightGo.AddComponent<Light>();
         light.type = LightType.Directional;
@@ -171,9 +151,10 @@ public static class SnakeSceneBuilder
         // ================= Поле =================
         var grid = new GameObject("Grid").AddComponent<GridManager>();
         var board = new GameObject("Board").AddComponent<BoardView>();
-        Wire(board, ("_grid", grid), ("_floorMaterial", floor), ("_groundMaterial", ground), ("_wallMaterial", wall),
-            ("_lowWallMaterial", lowWall), ("_pillarMaterial", pillar), ("_blockMaterial", block));
+        Wire(board, ("_grid", grid), ("_floorMaterial", arenaMats.Floor), ("_wallMaterial", arenaMats.Wall),
+            ("_lowWallMaterial", arenaMats.LowWall), ("_pillarMaterial", arenaMats.Pillar), ("_blockMaterial", arenaMats.Block));
         board.Build();
+        EnvironmentBuilder.Build(grid, particles);
 
         var particleFloor = new GameObject("ParticleFloor").transform;
         particleFloor.position = grid.Center;
@@ -225,6 +206,7 @@ public static class SnakeSceneBuilder
         for (int i = 0; i < spinners.Length; i++) spinners[i] = CreateSpinner(hazards.transform, beam, post);
         Wire(hazards, ("_config", config), ("_grid", grid));
         WireArray(hazards, "_spinners", spinners);
+        Wire(ai, ("_hazards", hazards));
 
         var arena = new GameObject("ShrinkingArena").AddComponent<ShrinkingArena>();
         var dangerWalls = new Object[4];
@@ -255,14 +237,12 @@ public static class SnakeSceneBuilder
         var camGo = new GameObject("Main Camera");
         camGo.tag = "MainCamera";
         var cam = camGo.AddComponent<Camera>();
-        cam.clearFlags = CameraClearFlags.SolidColor;
-        cam.backgroundColor = skyColor;
         cam.fieldOfView = 60f;
         cam.nearClipPlane = 0.1f;
-        cam.farClipPlane = 300f;
         // Слой 0 — Default: если отдельный слой создать не удалось, не прячем им всю сцену.
         cam.cullingMask = minimapLayer > 0 ? ~(1 << minimapLayer) : ~0;
         camGo.AddComponent<AudioListener>();
+        EnvironmentBuilder.SetupSky(light, cam);
         var rig = camGo.AddComponent<CameraRig>();
         Wire(rig, ("_snake", player));
 
@@ -863,7 +843,7 @@ public static class SnakeSceneBuilder
 
     // ===================== Объекты =====================
 
-    private static GameObject CreatePrimitive(PrimitiveType type, string name, Transform parent, Material mat)
+    internal static GameObject CreatePrimitive(PrimitiveType type, string name, Transform parent, Material mat)
     {
         GameObject go = GameObject.CreatePrimitive(type);
         go.name = name;
@@ -970,14 +950,6 @@ public static class SnakeSceneBuilder
 
     // ===================== Текстуры =====================
 
-    private static Texture2D CreateCheckerTexture(Color a, Color b)
-    {
-        var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false) { name = "FloorChecker", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Repeat };
-        tex.SetPixels(new[] { a, b, b, a });
-        tex.Apply();
-        return tex;
-    }
-
     /// <summary>
     /// Шкура змеи: U — по окружности (0.25 — спина, 0.75 — брюхо), V — вдоль тела.
     /// На спине ромбы с тёмной каймой, по бокам пятна, брюхо светлое с поперечными щитками,
@@ -1042,7 +1014,7 @@ public static class SnakeSceneBuilder
     }
 
     /// <summary>Пересохраняем текстуру в ассет (материалы потом получают ссылку заново).</summary>
-    private static Texture2D SaveTexture(Texture2D tex, string path)
+    internal static Texture2D SaveTexture(Texture2D tex, string path)
     {
         if (AssetDatabase.LoadAssetAtPath<Texture2D>(path) != null) AssetDatabase.DeleteAsset(path);
         AssetDatabase.CreateAsset(tex, path);
@@ -1060,7 +1032,7 @@ public static class SnakeSceneBuilder
 
     // ===================== Материалы =====================
 
-    private static Material CreateLitMaterial(string name, Color color, float smoothness)
+    internal static Material CreateLitMaterial(string name, Color color, float smoothness)
     {
         Shader shader = Shader.Find(_urp ? "Universal Render Pipeline/Lit" : "Standard");
         Material mat = LoadOrCreateMaterial(name, shader);
@@ -1083,7 +1055,7 @@ public static class SnakeSceneBuilder
         return mat;
     }
 
-    private static void SetEmission(Material mat, Color emission)
+    internal static void SetEmission(Material mat, Color emission)
     {
         mat.EnableKeyword("_EMISSION");
         if (mat.HasProperty("_EmissionColor")) mat.SetColor("_EmissionColor", emission);
@@ -1092,7 +1064,7 @@ public static class SnakeSceneBuilder
     }
 
     /// <summary>Полупрозрачный режим для Standard (Fade) или URP Lit (Transparent).</summary>
-    private static void MakeTransparent(Material mat)
+    internal static void MakeTransparent(Material mat)
     {
         if (_urp)
         {
@@ -1138,7 +1110,7 @@ public static class SnakeSceneBuilder
     }
 
     /// <summary>Переиспользуем существующий ассет, чтобы не ломать ссылки при пересборке.</summary>
-    private static Material LoadOrCreateMaterial(string name, Shader shader)
+    internal static Material LoadOrCreateMaterial(string name, Shader shader)
     {
         string path = MATERIALS_FOLDER + "/" + name + ".mat";
         var mat = AssetDatabase.LoadAssetAtPath<Material>(path);
@@ -1170,6 +1142,10 @@ public static class SnakeSceneBuilder
             string path = MATERIALS_FOLDER + "/" + name + ".mat";
             if (AssetDatabase.LoadAssetAtPath<Material>(path) != null) AssetDatabase.DeleteAsset(path);
         }
+
+        // Шахматная текстура пола заменена травой из EnvironmentBuilder.
+        const string checkerPath = MATERIALS_FOLDER + "/FloorChecker.asset";
+        if (AssetDatabase.LoadAssetAtPath<Texture2D>(checkerPath) != null) AssetDatabase.DeleteAsset(checkerPath);
     }
 
     // ===================== Утилиты =====================

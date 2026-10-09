@@ -140,6 +140,14 @@ namespace Snake3D
         /// <summary>Запрос прыжка от ИИ, сбрасывается после обработки.</summary>
         public bool AiJump { get; set; }
 
+        /// <summary>Запрос рывка от ИИ, сбрасывается после обработки.</summary>
+        public bool AiDash { get; set; }
+
+        /// <summary>Сколько точек позвоночника сейчас активно ([0] — голова).</summary>
+        public int SpineCount => _spineCount;
+
+        public bool IsGrounded => _grounded;
+
         private bool _isRunning;
         private int _runStartFrame;
 
@@ -206,6 +214,7 @@ namespace Snake3D
             _squashTimer = _squashDuration;
             AiSteer = 0f;
             AiJump = false;
+            AiDash = false;
             HasShield = false;
             IsAlive = true;
             IsRunning = false;
@@ -290,6 +299,12 @@ namespace Snake3D
                 if (d.sqrMagnitude < rSqr) return true;
             }
             return false;
+        }
+
+        /// <summary>Точка позвоночника (0 — голова); индекс должен быть меньше SpineCount.</summary>
+        public Vector3 GetSpinePoint(int index)
+        {
+            return _spine[index];
         }
 
         /// <summary>Точка траектории на расстоянии distance позади головы и направление «к голове» в ней.</summary>
@@ -397,7 +412,9 @@ namespace Snake3D
             if (_dashTimer > 0f) _dashTimer -= dt;
             if (_dashCooldownTimer > 0f) _dashCooldownTimer -= dt;
 
-            if (_isPlayer && GameInput.Dash && _dashCooldownTimer <= 0f)
+            bool wantDash = _isPlayer ? GameInput.Dash : AiDash;
+            AiDash = false;
+            if (wantDash && _dashCooldownTimer <= 0f)
             {
                 _dashTimer = _config.DashDuration;
                 _dashCooldownTimer = _config.DashCooldown;

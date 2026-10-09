@@ -27,7 +27,7 @@ namespace Snake3D.Tests
             yield return null;
 
             Assert.AreEqual(SCENE_NAME, SceneManager.GetActiveScene().name, "Сцена не загрузилась");
-            _game = Object.FindFirstObjectByType<GameManager>();
+            _game = Object.FindAnyObjectByType<GameManager>();
             Assert.IsNotNull(_game, "В сцене нет GameManager");
         }
 

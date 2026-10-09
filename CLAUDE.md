@@ -15,7 +15,8 @@
 Assets/
   Scripts/        игровой код, сборка Snake3D.asmdef
   Editor/         Editor-скрипты (SnakeSceneBuilder), сборка Snake3D.Editor.asmdef
-  Materials/      материалы и текстуры (создаются SnakeSceneBuilder)
+  Materials/      материалы и текстуры (создаются SnakeSceneBuilder), Environment/ — текстуры окружения
+  Meshes/         сгенерированные меши окружения (рельеф, камни, кроны, трава)
   Settings/       GameConfig.asset (баланс), Minimap.renderTexture
   Scenes/         Snake3D.unity
   Tests/          тесты Unity Test Framework (EditMode/PlayMode), свои asmdef
@@ -28,9 +29,12 @@ Assets/
 - Поле: `GridManager` (размер 44x44, препятствия по сиду, границы арены, клетки для предметов), `BoardView` (визуал),
   `HazardManager` + `SpinnerHazard` (балки уровней), `ShrinkingArena` (режим «Выживание»).
 - Змейка: `SnakeController` (логика: движение, руль, прыжок, рывок, щит, длина, столкновения; траектория в кольцевом буфере),
-  `SnakeBodyMesh` (процедурный меш-трубка), `SnakeHeadAnimator` (язык, моргание), `SnakeDeathEffect`, `DashTrail`, `SnakeAI` (соперник).
+  `SnakeBodyMesh` (процедурный меш-трубка), `SnakeHeadAnimator` (язык, моргание), `SnakeDeathEffect`, `DashTrail`,
+  `SnakeAI` (соперник: A* по сетке с весами + рефлексы-щупальца + охота/перехват и рывок).
 - Предметы: `FoodSpawner` (обычное/золотое/гнилое яблоко, магнит), `PowerUpSpawner` + `PowerUpService` (бонусы).
-- Сервисы: `ScoreService`, `LeaderboardService` + `Leaderboard` (топ-10 по режимам), `SettingsService`, `AudioService` + `ProceduralAudio` (звук кодом).
+- Сервисы: `ScoreService`, `LeaderboardService` + `Leaderboard` (топ-10 по режимам), `SettingsService`,
+  `AudioService` + `ProceduralAudio` (эффекты) + `MusicSynth` (synthwave-петля, синтез в фоновом потоке — только System.Math, без Unity API).
+- Окружение (Editor): `EnvironmentBuilder` (небо, рельеф, лес, камни, трава, озеро, облака), `ProceduralTextures`, `ProceduralMeshes`; рантайм — `CloudDrift`.
 - Отображение: `CameraRig` (третье лицо, крен, тряска), `UIController`, `SettingsPanel`, `LeaderboardPanel`, `TutorialController`.
 - Управление: A/D или ←/→ — руль (держать), Space — прыжок, Shift — рывок, Esc — пауза, R — заново, F11 — полный экран.
 
@@ -78,6 +82,8 @@ Unity -batchmode -nographics -quit -projectPath . -logFile -
 - Сцена собирается Editor-скриптом `Assets/Editor/SnakeSceneBuilder.cs`, пункт меню `Tools/Build Snake Scene`.
 - Скрипт создаёт сцену, текстуры, материалы, GameConfig, поле, змей, предметы, эффекты, звук, камеры, мини-карту и UI и сохраняет `Assets/Scenes/Snake3D.unity`. Batch: `-executeMethod SnakeSceneBuilder.Build`.
 - Новые объекты сцены добавляй через этот скрипт, чтобы сцену можно было пересобрать с нуля одной командой.
+- `MaterialPropertyBlock` не сохраняется в сцене — то, что задаётся через него, применяй и в рантайме (см. `BoardView.ApplyFloorTiling`).
+- Визуальная проверка: PlayMode-тест в копии проекта рендерит `Camera.Render()` в RenderTexture и сохраняет PNG (без `-nographics`).
 
 ## Порядок работы
 1. Прочитай связанные файлы, прежде чем менять код.

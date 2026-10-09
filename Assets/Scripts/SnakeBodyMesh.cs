@@ -31,7 +31,7 @@ namespace Snake3D
         [SerializeField, Range(0.5f, 1f)] private float _verticalScale = 0.82f;
 
         [Tooltip("Длина одного повтора узора шкуры, клеток")]
-        [SerializeField, Min(0.1f)] private float _patternLength = 1.6f;
+        [SerializeField, Min(0.1f)] private float _patternLength = 0.9f;
 
         [Tooltip("Частота мигания при неуязвимости, Гц")]
         [SerializeField, Min(1f)] private float _blinkFrequency = 12f;

@@ -62,6 +62,27 @@ namespace Snake3D
             return false;
         }
 
+        /// <summary>Задевает ли точка (голова радиуса radius на высоте heightAboveGround) любую балку.</summary>
+        public bool HitsAny(Vector3 point, float radius, float heightAboveGround)
+        {
+            for (int i = 0; i < _activeCount; i++)
+                if (_spinners[i].Hits(point, radius, heightAboveGround)) return true;
+            return false;
+        }
+
+        /// <summary>Находится ли точка в зоне, которую ометает балка (с запасом margin).</summary>
+        public bool IsInHazardZone(Vector3 point, float margin)
+        {
+            for (int i = 0; i < _activeCount; i++)
+            {
+                Vector3 d = _spinners[i].CenterPosition - point;
+                d.y = 0f;
+                float r = _spinners[i].Radius + margin;
+                if (d.sqrMagnitude < r * r) return true;
+            }
+            return false;
+        }
+
         /// <summary>Отметить клетки под балками, чтобы еда и бонусы там не появлялись.</summary>
         public void MarkOccupiedCells()
         {

@@ -3,151 +3,178 @@ using UnityEngine;
 namespace Snake3D
 {
     /// <summary>
-    /// Синтез звуков и музыки кодом (без аудиофайлов). Вызывается один раз при старте:
-    /// здесь аллокации допустимы, в игровом цикле — нет.
+    /// Синтез звуковых эффектов кодом (без аудиофайлов): FM-колокольчики, фильтрованный шум,
+    /// мягкие удары. Вызывается один раз при старте — здесь аллокации допустимы.
+    /// Музыку синтезирует MusicSynth.
     /// </summary>
     public static class ProceduralAudio
     {
         public const int SAMPLE_RATE = 44100;
 
-        private enum Wave
-        {
-            Sine,
-            Square,
-            Triangle,
-            Noise
-        }
-
         public static AudioClip CreateSound(SoundId id)
         {
+            float[] data;
             switch (id)
             {
-                case SoundId.Eat: return Sweep("Eat", Wave.Square, 520f, 880f, 0.09f, 0.35f);
-                case SoundId.Golden: return Arpeggio("Golden", Wave.Square, new[] { 660f, 880f, 1100f, 1320f }, 0.06f, 0.3f);
-                case SoundId.Rotten: return Sweep("Rotten", Wave.Square, 220f, 90f, 0.25f, 0.35f);
-                case SoundId.Jump: return Sweep("Jump", Wave.Triangle, 300f, 700f, 0.14f, 0.5f);
-                case SoundId.Land: return Sweep("Land", Wave.Sine, 140f, 60f, 0.1f, 0.6f, 0.4f);
-                case SoundId.Death: return Sweep("Death", Wave.Square, 400f, 50f, 0.7f, 0.4f, 0.5f);
-                case SoundId.PowerUp: return Arpeggio("PowerUp", Wave.Triangle, new[] { 523f, 659f, 784f, 1046f }, 0.07f, 0.45f);
-                case SoundId.Shield: return Sweep("Shield", Wave.Triangle, 900f, 300f, 0.3f, 0.5f, 0.2f);
-                case SoundId.Dash: return Sweep("Dash", Wave.Noise, 0f, 0f, 0.22f, 0.35f);
-                case SoundId.LevelUp: return Arpeggio("LevelUp", Wave.Square, new[] { 523f, 659f, 784f, 659f, 784f, 1046f }, 0.08f, 0.3f);
-                case SoundId.Click: return Sweep("Click", Wave.Sine, 1200f, 900f, 0.03f, 0.4f);
-                case SoundId.Shrink: return Sweep("Shrink", Wave.Square, 160f, 120f, 0.45f, 0.3f, 0.3f);
-                default: return Sweep("Unknown", Wave.Sine, 440f, 440f, 0.05f, 0.2f);
+                case SoundId.Eat:
+                    data = Buffer(0.35f);
+                    Bell(data, 0f, 784f, 0.3f, 0.45f, 3f);
+                    Bell(data, 0.06f, 1175f, 0.25f, 0.35f, 3f);
+                    break;
+                case SoundId.Golden:
+                    data = Buffer(0.9f);
+                    float[] golden = { 880f, 1109f, 1319f, 1760f };
+                    for (int i = 0; i < golden.Length; i++) Bell(data, i * 0.07f, golden[i], 0.6f, 0.3f, 3.5f);
+                    break;
+                case SoundId.Rotten:
+                    data = Buffer(0.45f);
+                    Growl(data, 0f, 140f, 70f, 0.4f, 0.45f);
+                    break;
+                case SoundId.Jump:
+                    data = Buffer(0.25f);
+                    Sweep(data, 0f, 260f, 620f, 0.2f, 0.35f);
+                    Whoosh(data, 0f, 0.2f, 0.15f, 2500f);
+                    break;
+                case SoundId.Land:
+                    data = Buffer(0.2f);
+                    Thump(data, 0f, 0.5f);
+                    Whoosh(data, 0f, 0.12f, 0.12f, 900f);
+                    break;
+                case SoundId.Death:
+                    data = Buffer(1.2f);
+                    Sweep(data, 0f, 330f, 55f, 1.0f, 0.4f);
+                    Whoosh(data, 0f, 1.1f, 0.35f, 1200f);
+                    Thump(data, 0f, 0.7f);
+                    break;
+                case SoundId.PowerUp:
+                    data = Buffer(0.8f);
+                    float[] chord = { 659f, 831f, 988f, 1319f };
+                    for (int i = 0; i < chord.Length; i++) Bell(data, i * 0.045f, chord[i], 0.6f, 0.26f, 2.5f);
+                    break;
+                case SoundId.Shield:
+                    data = Buffer(0.7f);
+                    Bell(data, 0f, 523f, 0.65f, 0.45f, 6f, 3.5f);
+                    break;
+                case SoundId.Dash:
+                    data = Buffer(0.35f);
+                    Whoosh(data, 0f, 0.3f, 0.45f, 3500f);
+                    break;
+                case SoundId.LevelUp:
+                    data = Buffer(1.2f);
+                    float[] notes = { 523f, 659f, 784f, 1047f, 1319f };
+                    for (int i = 0; i < notes.Length; i++) Bell(data, i * 0.09f, notes[i], 0.7f, 0.3f, 3f);
+                    break;
+                case SoundId.Click:
+                    data = Buffer(0.06f);
+                    Bell(data, 0f, 1600f, 0.05f, 0.25f, 1f);
+                    break;
+                case SoundId.Shrink:
+                    data = Buffer(0.9f);
+                    Growl(data, 0f, 90f, 60f, 0.85f, 0.4f);
+                    Whoosh(data, 0f, 0.8f, 0.2f, 600f);
+                    break;
+                default:
+                    data = Buffer(0.05f);
+                    break;
             }
-        }
 
-        /// <summary>
-        /// Фоновая петля: 8 тактов, 120 BPM, Am–F–C–G. Бас, арпеджио и хай-хэт.
-        /// Темп поднимается через pitch источника, поэтому петля одна.
-        /// </summary>
-        public static AudioClip CreateMusicLoop()
-        {
-            const float bpm = 120f;
-            const int bars = 8;
-            float beat = 60f / bpm;
-            int length = Mathf.RoundToInt(bars * 4 * beat * SAMPLE_RATE);
-            var data = new float[length];
-
-            // Корни аккордов (Гц) и трезвучия для арпеджио.
-            float[] roots = { 110f, 87.31f, 130.81f, 98f };
-            float[][] chords =
-            {
-                new[] { 220f, 261.63f, 329.63f },
-                new[] { 174.61f, 220f, 261.63f },
-                new[] { 261.63f, 329.63f, 392f },
-                new[] { 196f, 246.94f, 293.66f }
-            };
-
-            var rng = new System.Random(7);
-            int sixteenth = Mathf.RoundToInt(beat * 0.25f * SAMPLE_RATE);
-            for (int step = 0; step < bars * 16; step++)
-            {
-                int bar = step / 16;
-                int chord = (bar / 2) % 4;
-                int start = step * sixteenth;
-
-                // Бас на каждую четверть.
-                if (step % 4 == 0) AddNote(data, start, sixteenth * 3, roots[chord], Wave.Triangle, 0.32f, rng);
-                // Арпеджио восьмыми.
-                if (step % 2 == 0)
-                {
-                    float[] c = chords[chord];
-                    float f = c[(step / 2) % 3] * ((step / 6) % 2 == 0 ? 2f : 1f);
-                    AddNote(data, start, sixteenth * 2, f, Wave.Square, 0.07f, rng);
-                }
-                // Хай-хэт на слабые доли.
-                if (step % 4 == 2) AddNote(data, start, sixteenth / 2, 0f, Wave.Noise, 0.05f, rng);
-            }
-
-            AudioClip clip = AudioClip.Create("MusicLoop", length, 1, SAMPLE_RATE, false);
+            AudioClip clip = AudioClip.Create(id.ToString(), data.Length, 1, SAMPLE_RATE, false);
             clip.SetData(data, 0);
             return clip;
         }
 
-        private static AudioClip Sweep(string name, Wave wave, float fromHz, float toHz, float duration, float volume, float noiseMix = 0f)
+        private static float[] Buffer(float seconds)
         {
-            int length = Mathf.Max(1, Mathf.RoundToInt(duration * SAMPLE_RATE));
-            var data = new float[length];
-            var rng = new System.Random(name.GetHashCode());
+            return new float[Mathf.Max(1, Mathf.RoundToInt(seconds * SAMPLE_RATE))];
+        }
+
+        /// <summary>FM-колокольчик: модулятор с затухающим индексом даёт «металлическую» атаку и чистый хвост.</summary>
+        private static void Bell(float[] data, float start, float freq, float duration, float volume, float index, float ratio = 2f)
+        {
+            int s0 = Mathf.RoundToInt(start * SAMPLE_RATE);
+            int n = Mathf.RoundToInt(duration * SAMPLE_RATE);
+            double c = 0, m = 0;
+            for (int i = 0; i < n && s0 + i < data.Length; i++)
+            {
+                float t = (float)i / SAMPLE_RATE;
+                m += freq * ratio / SAMPLE_RATE;
+                c += freq / (double)SAMPLE_RATE;
+                float mod = index * Mathf.Exp(-t / (duration * 0.25f));
+                float s = Mathf.Sin((float)(c * 2.0 * System.Math.PI) + mod * Mathf.Sin((float)(m * 2.0 * System.Math.PI)));
+                float env = Mathf.Min(1f, t / 0.002f) * Mathf.Exp(-t / (duration * 0.3f));
+                data[s0 + i] += s * env * volume;
+            }
+        }
+
+        /// <summary>Синусоида со сползающей высотой и мягкой огибающей.</summary>
+        private static void Sweep(float[] data, float start, float fromHz, float toHz, float duration, float volume)
+        {
+            int s0 = Mathf.RoundToInt(start * SAMPLE_RATE);
+            int n = Mathf.RoundToInt(duration * SAMPLE_RATE);
             double phase = 0;
-            for (int i = 0; i < length; i++)
+            for (int i = 0; i < n && s0 + i < data.Length; i++)
             {
-                float t = (float)i / length;
-                float freq = Mathf.Lerp(fromHz, toHz, t);
-                phase += freq / SAMPLE_RATE;
-                float s = Sample(wave, phase, rng);
-                if (noiseMix > 0f) s = Mathf.Lerp(s, (float)(rng.NextDouble() * 2.0 - 1.0), noiseMix);
-                data[i] = s * volume * Envelope(t);
+                float k = (float)i / n;
+                float freq = Mathf.Lerp(fromHz, toHz, k * (2f - k));
+                phase += freq / (double)SAMPLE_RATE;
+                float s = Mathf.Sin((float)(phase * 2.0 * System.Math.PI));
+                s += 0.3f * Mathf.Sin((float)(phase * 4.0 * System.Math.PI));
+                float env = Mathf.Min(1f, k / 0.05f) * (1f - k) * (1f - k);
+                data[s0 + i] += s * env * volume;
             }
-
-            AudioClip clip = AudioClip.Create(name, length, 1, SAMPLE_RATE, false);
-            clip.SetData(data, 0);
-            return clip;
         }
 
-        private static AudioClip Arpeggio(string name, Wave wave, float[] notes, float noteDuration, float volume)
+        /// <summary>Шум через фильтр нижних частот — «вжух» ветра.</summary>
+        private static void Whoosh(float[] data, float start, float duration, float volume, float cutoff)
         {
-            int noteLength = Mathf.RoundToInt(noteDuration * SAMPLE_RATE);
-            var data = new float[noteLength * notes.Length];
-            var rng = new System.Random(name.GetHashCode());
-            for (int n = 0; n < notes.Length; n++)
-                AddNote(data, n * noteLength, noteLength, notes[n], wave, volume, rng);
-
-            AudioClip clip = AudioClip.Create(name, data.Length, 1, SAMPLE_RATE, false);
-            clip.SetData(data, 0);
-            return clip;
+            int s0 = Mathf.RoundToInt(start * SAMPLE_RATE);
+            int n = Mathf.RoundToInt(duration * SAMPLE_RATE);
+            var rng = new System.Random(n);
+            float lp = 0f;
+            float a = 1f - Mathf.Exp(-2f * Mathf.PI * cutoff / SAMPLE_RATE);
+            for (int i = 0; i < n && s0 + i < data.Length; i++)
+            {
+                float k = (float)i / n;
+                float noise = (float)(rng.NextDouble() * 2.0 - 1.0);
+                lp += a * (noise - lp);
+                float env = Mathf.Sin(k * Mathf.PI);
+                data[s0 + i] += lp * env * volume * 2f;
+            }
         }
 
-        private static void AddNote(float[] data, int start, int length, float freq, Wave wave, float volume, System.Random rng)
+        /// <summary>Мягкий удар: синус с быстро падающей частотой, как у бочки.</summary>
+        private static void Thump(float[] data, float start, float volume)
         {
+            int s0 = Mathf.RoundToInt(start * SAMPLE_RATE);
+            int n = Mathf.RoundToInt(0.18f * SAMPLE_RATE);
             double phase = 0;
-            for (int i = 0; i < length && start + i < data.Length; i++)
+            for (int i = 0; i < n && s0 + i < data.Length; i++)
             {
-                float t = (float)i / length;
+                float t = (float)i / SAMPLE_RATE;
+                float freq = 50f + 110f * Mathf.Exp(-t / 0.03f);
                 phase += freq / SAMPLE_RATE;
-                data[start + i] += Sample(wave, phase, rng) * volume * Envelope(t);
+                data[s0 + i] += Mathf.Sin((float)(phase * 2.0 * System.Math.PI)) * Mathf.Exp(-t / 0.06f) * volume;
             }
         }
 
-        /// <summary>Быстрая атака и плавное затухание — без щелчков на краях.</summary>
-        private static float Envelope(float t)
+        /// <summary>Низкое «рычание»: две расстроенные пилы через фильтр.</summary>
+        private static void Growl(float[] data, float start, float fromHz, float toHz, float duration, float volume)
         {
-            float attack = Mathf.Clamp01(t / 0.05f);
-            float release = 1f - t;
-            return attack * release * release;
-        }
-
-        private static float Sample(Wave wave, double phase, System.Random rng)
-        {
-            double p = phase - System.Math.Floor(phase);
-            switch (wave)
+            int s0 = Mathf.RoundToInt(start * SAMPLE_RATE);
+            int n = Mathf.RoundToInt(duration * SAMPLE_RATE);
+            double p1 = 0, p2 = 0;
+            float lp = 0f;
+            float a = 1f - Mathf.Exp(-2f * Mathf.PI * 700f / SAMPLE_RATE);
+            for (int i = 0; i < n && s0 + i < data.Length; i++)
             {
-                case Wave.Square: return p < 0.5 ? 1f : -1f;
-                case Wave.Triangle: return (float)(p < 0.5 ? p * 4.0 - 1.0 : 3.0 - p * 4.0);
-                case Wave.Noise: return (float)(rng.NextDouble() * 2.0 - 1.0);
-                default: return Mathf.Sin((float)(p * 2.0 * System.Math.PI));
+                float k = (float)i / n;
+                float freq = Mathf.Lerp(fromHz, toHz, k);
+                p1 += freq / SAMPLE_RATE;
+                p2 += freq * 1.02 / SAMPLE_RATE;
+                float saw = (float)((p1 - System.Math.Floor(p1)) + (p2 - System.Math.Floor(p2)) - 1.0);
+                lp += a * (saw - lp);
+                float env = Mathf.Min(1f, k / 0.04f) * (1f - k);
+                data[s0 + i] += lp * env * volume;
             }
         }
     }
