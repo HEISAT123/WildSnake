@@ -4,8 +4,8 @@ using UnityEngine;
 namespace Snake3D
 {
     /// <summary>
-    /// Звуки и музыка. Эффекты синтезируются при старте (ProceduralAudio), музыка — в фоновом
-    /// потоке (MusicSynth), чтобы не подвешивать загрузку; когда готова, плавно включается.
+    /// Звуки и музыка. Всё синтезируется кодом в фоновом потоке (SfxSynth, MusicSynth), чтобы не
+    /// подвешивать загрузку; клипы создаются в главном потоке, когда данные готовы.
     /// </summary>
     public class AudioService : MonoBehaviour
     {
@@ -29,9 +29,8 @@ namespace Snake3D
         [Tooltip("Длительность плавного появления музыки, сек")]
         [SerializeField, Min(0.1f)] private float _fadeInTime = 2f;
 
-        private const int SOUND_COUNT = 12;
-
-        private readonly AudioClip[] _clips = new AudioClip[SOUND_COUNT];
+        private readonly AudioClip[] _clips = new AudioClip[SfxSynth.SOUND_COUNT];
+        private Task<float[][]> _sfxTask;
         private Task<float[]> _musicTask;
         private int _musicFrames;
         private bool _paused;
@@ -40,13 +39,12 @@ namespace Snake3D
 
         private void Awake()
         {
-            for (int i = 0; i < SOUND_COUNT; i++) _clips[i] = ProceduralAudio.CreateSound((SoundId)i);
-
             _musicSource.loop = true;
             _musicSource.playOnAwake = false;
             _sfxSource.playOnAwake = false;
 
-            // Синтез ~40 секунд стерео занимает заметное время — уводим его с главного потока.
+            // Синтез занимает заметное время — уводим его с главного потока. Звуки готовы быстрее музыки.
+            _sfxTask = Task.Run(() => SfxSynth.RenderAll());
             _musicTask = Task.Run(() => MusicSynth.RenderLoop(out _musicFrames));
         }
 
@@ -67,6 +65,7 @@ namespace Snake3D
 
         private void Update()
         {
+            if (_sfxTask != null && _sfxTask.IsCompleted) CreateSoundClips();
             if (_musicTask != null && _musicTask.IsCompleted) StartMusic();
 
             float dt = Time.unscaledDeltaTime;
@@ -80,6 +79,7 @@ namespace Snake3D
 
         public void Play(SoundId id)
         {
+            // Пока звуки синтезируются (доли секунды после запуска), просто молчим.
             AudioClip clip = _clips[(int)id];
             if (clip != null) _sfxSource.PlayOneShot(clip);
         }
@@ -97,6 +97,25 @@ namespace Snake3D
         }
 
         /// <summary>AudioClip можно создать только в главном потоке, поэтому здесь, а не в задаче.</summary>
+        private void CreateSoundClips()
+        {
+            Task<float[][]> task = _sfxTask;
+            _sfxTask = null;
+            if (task.IsFaulted || task.Result == null)
+            {
+                Debug.LogWarning("AudioService: не удалось синтезировать звуки: " + task.Exception);
+                return;
+            }
+
+            float[][] data = task.Result;
+            for (int i = 0; i < data.Length && i < _clips.Length; i++)
+            {
+                AudioClip clip = AudioClip.Create(((SoundId)i).ToString(), data[i].Length / 2, 2, SynthDsp.SAMPLE_RATE, false);
+                clip.SetData(data[i], 0);
+                _clips[i] = clip;
+            }
+        }
+
         private void StartMusic()
         {
             Task<float[]> task = _musicTask;

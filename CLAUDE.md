@@ -33,7 +33,8 @@ Assets/
   `SnakeAI` (соперник: A* по сетке с весами + рефлексы-щупальца + охота/перехват и рывок).
 - Предметы: `FoodSpawner` (обычное/золотое/гнилое яблоко, магнит), `PowerUpSpawner` + `PowerUpService` (бонусы).
 - Сервисы: `ScoreService`, `LeaderboardService` + `Leaderboard` (топ-10 по режимам), `SettingsService`,
-  `AudioService` + `ProceduralAudio` (эффекты) + `MusicSynth` (synthwave-петля, синтез в фоновом потоке — только System.Math, без Unity API).
+  `AudioService` + `SfxSynth` (эффекты) + `MusicSynth` (synthwave-петля) на общих блоках `SynthDsp`/`SynthRng`.
+  Синтез идёт в фоновом потоке — в этих классах только System.Math, никакого Unity API.
 - Окружение (Editor): `EnvironmentBuilder` (небо, рельеф, лес, камни, трава, озеро, облака), `ProceduralTextures`, `ProceduralMeshes`; рантайм — `CloudDrift`.
 - Отображение: `CameraRig` (третье лицо, крен, тряска), `UIController`, `SettingsPanel`, `LeaderboardPanel`, `TutorialController`.
 - Управление: A/D или ←/→ — руль (держать), Space — прыжок, Shift — рывок, Esc — пауза, R — заново, F11 — полный экран.
@@ -92,6 +93,11 @@ Unity -batchmode -nographics -quit -projectPath . -logFile -
 4. Не делай рефакторинг, о котором не просили.
 5. В конце сообщи: что изменено, как проверить в редакторе, какие допущения сделаны.
 6. Если что-то неоднозначно, выбери разумное значение по умолчанию и перечисли допущения, а не останавливайся с вопросами.
+
+## Сборка игры
+- `Assets/Editor/GameBuilder.cs`, меню `Tools/Build Game (Windows)`; batch: `-executeMethod GameBuilder.BuildWindows`.
+- Результат: `Builds/Snake3D_Windows/` (exe + Snake3D_Data + MonoBleedingEdge + dll) и `Builds/Snake3D_Windows.zip`. Папка `Builds/` в git не попадает.
+- Бэкенд Mono (модуль IL2CPP не нужен). Иконка рисуется кодом в `Assets/Settings/GameIcon.png`.
 
 ## Git
 - Коммит перед каждой крупной правкой, сообщения короткие и по делу.

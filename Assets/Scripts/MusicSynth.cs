@@ -64,7 +64,7 @@ namespace Snake3D
             var arpL = new float[total];
             var arpR = new float[total];
             var send = new float[total];
-            var rng = new Rng(20261010);
+            var rng = new SynthRng(20261010);
 
             for (int b = 0; b < BARS; b++)
             {
@@ -91,7 +91,7 @@ namespace Snake3D
                     AddMelody(left, right, send, b >= 12 ? MelodyB : MelodyA, barStart, beat);
             }
 
-            ApplyPingPongDelay(arpL, arpR, (int)(beat * 0.75 * SAMPLE_RATE), 0.38f);
+            SynthDsp.ApplyPingPongDelay(arpL, arpR, (int)(beat * 0.75 * SAMPLE_RATE), 0.38f);
             for (int i = 0; i < total; i++)
             {
                 // Сайдчейн: всё, кроме барабанов, «приседает» на каждую бочку — фирменная «качка» жанра.
@@ -101,7 +101,7 @@ namespace Snake3D
                 send[i] += (arpL[i] + arpR[i]) * 0.25f;
             }
 
-            ApplyReverb(send, left, right, 0.22f);
+            SynthDsp.ApplyReverb(send, left, right, 0.22f);
 
             // Заворачиваем хвосты в начало — петля звучит без шва.
             for (int i = 0; i < tail; i++)
@@ -113,8 +113,8 @@ namespace Snake3D
             float peak = 0f;
             for (int i = 0; i < loopFrames; i++)
             {
-                left[i] = SoftClip(left[i]);
-                right[i] = SoftClip(right[i]);
+                left[i] = SynthDsp.SoftClip(left[i]);
+                right[i] = SynthDsp.SoftClip(right[i]);
                 peak = Math.Max(peak, Math.Max(Math.Abs(left[i]), Math.Abs(right[i])));
             }
 
@@ -143,7 +143,7 @@ namespace Snake3D
 
             for (int k = 0; k < chord.Length; k++)
             {
-                double baseFreq = MidiToHz(chord[k]);
+                double baseFreq = SynthDsp.MidiToHz(chord[k]);
                 for (int v = 0; v < 3; v++)
                 {
                     double freq = baseFreq * Math.Pow(2.0, detune[v] / 12.0);
@@ -161,7 +161,7 @@ namespace Snake3D
                         double dt = freq / SAMPLE_RATE;
                         phase += dt;
                         if (phase >= 1.0) phase -= 1.0;
-                        double saw = 2.0 * phase - 1.0 - PolyBlep(phase, dt);
+                        double saw = 2.0 * phase - 1.0 - SynthDsp.PolyBlep(phase, dt);
 
                         // Фильтр медленно «дышит»: в интро закрыт сильнее. Коэффициент пересчитываем
                         // раз в 32 сэмпла — на слух не отличить, а экспонента дорогая.
@@ -195,7 +195,7 @@ namespace Snake3D
                 double start = barStart + s * step;
                 float pan = s % 2 == 0 ? -0.45f : 0.45f;
                 float vel = s % 4 == 0 ? 1f : 0.75f;
-                AddFmPluck(arpL, arpR, start, MidiToHz(note), 0.45, gain * vel, pan, 2.0, 2.5, 0.12);
+                AddFmPluck(arpL, arpR, start, SynthDsp.MidiToHz(note), 0.45, gain * vel, pan, 2.0, 2.5, 0.12);
             }
         }
 
@@ -227,7 +227,7 @@ namespace Snake3D
         {
             double eighth = beat / 2.0;
             int[] octave = { 0, 0, 12, 0, 0, 12, 0, 7 };
-            double rootFreq = MidiToHz(root);
+            double rootFreq = SynthDsp.MidiToHz(root);
             for (int e = 0; e < 8; e++)
             {
                 double freq = rootFreq * Math.Pow(2.0, octave[e] / 12.0);
@@ -243,7 +243,7 @@ namespace Snake3D
                     phase += dt;
                     if (phase >= 1.0) phase -= 1.0;
                     sub += dt * 0.5;
-                    double saw = 2.0 * phase - 1.0 - PolyBlep(phase, dt);
+                    double saw = 2.0 * phase - 1.0 - SynthDsp.PolyBlep(phase, dt);
 
                     double cutoff = 180.0 + 1400.0 * Math.Exp(-t / 0.07);
                     double a = 1.0 - Math.Exp(-TWO_PI * cutoff / SAMPLE_RATE);
@@ -259,7 +259,7 @@ namespace Snake3D
             }
         }
 
-        private static void AddDrumsBar(float[] left, float[] right, float[] send, double barStart, double beat, Rng rng, bool fill)
+        private static void AddDrumsBar(float[] left, float[] right, float[] send, double barStart, double beat, SynthRng rng, bool fill)
         {
             for (int q = 0; q < 4; q++)
             {
@@ -295,7 +295,7 @@ namespace Snake3D
         }
 
         /// <summary>Клэп: три коротких шумовых всплеска и хвост, полосовой «характер» через разность фильтров.</summary>
-        private static void AddClap(float[] left, float[] right, float[] send, double start, Rng rng, float gain = 1f)
+        private static void AddClap(float[] left, float[] right, float[] send, double start, SynthRng rng, float gain = 1f)
         {
             int s0 = (int)(start * SAMPLE_RATE);
             int n = (int)(0.3 * SAMPLE_RATE);
@@ -319,7 +319,7 @@ namespace Snake3D
             }
         }
 
-        private static void AddHatsBar(float[] left, float[] right, double barStart, double beat, Rng rng, float gain)
+        private static void AddHatsBar(float[] left, float[] right, double barStart, double beat, SynthRng rng, float gain)
         {
             double step = beat / 4.0;
             for (int s = 0; s < 16; s++)
@@ -353,7 +353,7 @@ namespace Snake3D
             {
                 double start = phraseStart + notes[k][0] * beat;
                 double length = notes[k][1] * beat;
-                double freq = MidiToHz((int)notes[k][2]);
+                double freq = SynthDsp.MidiToHz((int)notes[k][2]);
                 int s0 = (int)(start * SAMPLE_RATE);
                 int n = (int)((length + 0.25) * SAMPLE_RATE);
                 double p1 = 0, p2 = 0.5, lp1 = 0, lp2 = 0;
@@ -367,7 +367,7 @@ namespace Snake3D
                     double dt1 = f / SAMPLE_RATE, dt2 = f * 1.006 / SAMPLE_RATE;
                     p1 += dt1; if (p1 >= 1.0) p1 -= 1.0;
                     p2 += dt2; if (p2 >= 1.0) p2 -= 1.0;
-                    double saw = (2.0 * p1 - 1.0 - PolyBlep(p1, dt1)) + (2.0 * p2 - 1.0 - PolyBlep(p2, dt2));
+                    double saw = (2.0 * p1 - 1.0 - SynthDsp.PolyBlep(p1, dt1)) + (2.0 * p2 - 1.0 - SynthDsp.PolyBlep(p2, dt2));
 
                     double cutoff = 1400.0 + 1800.0 * Math.Exp(-t / 0.25);
                     double a = 1.0 - Math.Exp(-TWO_PI * cutoff / SAMPLE_RATE);
@@ -383,72 +383,6 @@ namespace Snake3D
             }
         }
 
-        // ---------------- Эффекты ----------------
-
-        /// <summary>Пинг-понг дилей: повторы перескакивают между каналами.</summary>
-        private static void ApplyPingPongDelay(float[] left, float[] right, int delay, float feedback)
-        {
-            for (int i = delay; i < left.Length; i++)
-            {
-                float fromL = left[i - delay];
-                float fromR = right[i - delay];
-                left[i] += fromR * feedback;
-                right[i] += fromL * feedback;
-            }
-        }
-
-        /// <summary>Упрощённый Freeverb: 4 гребенчатых фильтра с демпфированием и 2 всепропускающих на канал.</summary>
-        private static void ApplyReverb(float[] send, float[] left, float[] right, float wet)
-        {
-            int[] combsL = { 1116, 1188, 1277, 1356 };
-            int[] allpass = { 556, 441 };
-            const int spread = 23;
-            ReverbChannel(send, left, combsL, allpass, 0, wet);
-            ReverbChannel(send, right, combsL, allpass, spread, wet);
-        }
-
-        private static void ReverbChannel(float[] input, float[] output, int[] combLengths, int[] allpassLengths, int spread, float wet)
-        {
-            int count = input.Length;
-            var combBuf = new float[combLengths.Length][];
-            var combIdx = new int[combLengths.Length];
-            var combStore = new float[combLengths.Length];
-            for (int c = 0; c < combLengths.Length; c++) combBuf[c] = new float[combLengths[c] + spread];
-
-            var apBuf = new float[allpassLengths.Length][];
-            var apIdx = new int[allpassLengths.Length];
-            for (int a = 0; a < allpassLengths.Length; a++) apBuf[a] = new float[allpassLengths[a] + spread];
-
-            const float feedback = 0.84f;
-            const float damp = 0.25f;
-            for (int i = 0; i < count; i++)
-            {
-                float x = input[i] * 0.3f;
-                float sum = 0f;
-                for (int c = 0; c < combBuf.Length; c++)
-                {
-                    float[] buf = combBuf[c];
-                    float y = buf[combIdx[c]];
-                    combStore[c] = y * (1f - damp) + combStore[c] * damp;
-                    buf[combIdx[c]] = x + combStore[c] * feedback;
-                    if (++combIdx[c] >= buf.Length) combIdx[c] = 0;
-                    sum += y;
-                }
-
-                for (int a = 0; a < apBuf.Length; a++)
-                {
-                    float[] buf = apBuf[a];
-                    float bufOut = buf[apIdx[a]];
-                    float y = -sum + bufOut;
-                    buf[apIdx[a]] = sum + bufOut * 0.5f;
-                    if (++apIdx[a] >= buf.Length) apIdx[a] = 0;
-                    sum = y;
-                }
-
-                output[i] += sum * wet;
-            }
-        }
-
         // ---------------- Утилиты ----------------
 
         /// <summary>Огибающая сайдчейна: провал после каждой доли, активен с момента activeFrom (сек).</summary>
@@ -458,51 +392,6 @@ namespace Snake3D
             if (t < activeFrom) return 1f;
             double sinceBeat = t % beat;
             return (float)(1.0 - 0.55 * Math.Exp(-sinceBeat / 0.12));
-        }
-
-        /// <summary>PolyBLEP убирает алиасинг на скачке пилы — звук чище, чем у «наивной» пилы.</summary>
-        private static double PolyBlep(double t, double dt)
-        {
-            if (t < dt)
-            {
-                t /= dt;
-                return t + t - t * t - 1.0;
-            }
-            if (t > 1.0 - dt)
-            {
-                t = (t - 1.0) / dt;
-                return t * t + t + t + 1.0;
-            }
-            return 0.0;
-        }
-
-        private static float SoftClip(float x)
-        {
-            return (float)Math.Tanh(x * 1.2);
-        }
-
-        private static double MidiToHz(int midi)
-        {
-            return 440.0 * Math.Pow(2.0, (midi - 69) / 12.0);
-        }
-
-        /// <summary>Быстрый детерминированный генератор шума (xorshift).</summary>
-        private sealed class Rng
-        {
-            private uint _state;
-
-            public Rng(uint seed)
-            {
-                _state = seed == 0 ? 1u : seed;
-            }
-
-            public double NextSigned()
-            {
-                _state ^= _state << 13;
-                _state ^= _state >> 17;
-                _state ^= _state << 5;
-                return _state / (double)uint.MaxValue * 2.0 - 1.0;
-            }
         }
     }
 }
