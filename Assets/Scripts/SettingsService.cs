@@ -13,7 +13,7 @@ namespace Snake3D
         private const string KEY_INVERT_Y = "Snake3D.Settings.InvertY";
         private const string KEY_QUALITY = "Snake3D.Settings.Quality";
         private const string KEY_FULLSCREEN = "Snake3D.Settings.Fullscreen";
-        private const string KEY_MINIMAP = "Snake3D.Settings.Minimap";
+        private const string KEY_HUD = "Snake3D.Settings.Hud";
         private const string KEY_RIVAL = "Snake3D.Settings.Rival";
 
         public event Action Changed;
@@ -25,7 +25,8 @@ namespace Snake3D
         public bool InvertY { get; private set; }
         public int QualityLevel { get; private set; }
         public bool Fullscreen { get; private set; }
-        public bool ShowMinimap { get; private set; }
+        /// <summary>Интерфейс в игре (H): без него остаются только виньетки и звук.</summary>
+        public bool ShowHud { get; private set; }
         public bool RivalEnabled { get; private set; }
 
         public string QualityName
@@ -46,7 +47,7 @@ namespace Snake3D
             InvertY = PlayerPrefs.GetInt(KEY_INVERT_Y, 0) == 1;
             QualityLevel = PlayerPrefs.GetInt(KEY_QUALITY, QualitySettings.GetQualityLevel());
             Fullscreen = PlayerPrefs.GetInt(KEY_FULLSCREEN, Screen.fullScreen ? 1 : 0) == 1;
-            ShowMinimap = PlayerPrefs.GetInt(KEY_MINIMAP, 1) == 1;
+            ShowHud = PlayerPrefs.GetInt(KEY_HUD, 1) == 1;
             RivalEnabled = PlayerPrefs.GetInt(KEY_RIVAL, 1) == 1;
             Apply();
         }
@@ -62,7 +63,7 @@ namespace Snake3D
         public void SetMouseSensitivity(float value) { MouseSensitivity = Mathf.Clamp(value, 0.2f, 3f); PlayerPrefs.SetFloat(KEY_MOUSE, MouseSensitivity); Commit(); }
         public void SetInvertY(bool value) { InvertY = value; PlayerPrefs.SetInt(KEY_INVERT_Y, value ? 1 : 0); Commit(); }
         public void SetFullscreen(bool value) { Fullscreen = value; PlayerPrefs.SetInt(KEY_FULLSCREEN, value ? 1 : 0); Commit(); }
-        public void SetShowMinimap(bool value) { ShowMinimap = value; PlayerPrefs.SetInt(KEY_MINIMAP, value ? 1 : 0); Commit(); }
+        public void SetShowHud(bool value) { ShowHud = value; PlayerPrefs.SetInt(KEY_HUD, value ? 1 : 0); Commit(); }
         public void SetRivalEnabled(bool value) { RivalEnabled = value; PlayerPrefs.SetInt(KEY_RIVAL, value ? 1 : 0); Commit(); }
 
         public void CycleQuality()

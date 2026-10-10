@@ -118,6 +118,9 @@ namespace Snake3D
         /// <summary>Игрок получил урон (сколько, откуда).</summary>
         public event Action<float, DamageSource> PlayerDamaged;
 
+        /// <summary>Игрок получил удар: сколько, от чего и из какой точки мира он пришёл (для виньетки).</summary>
+        public event Action<float, DamageSource, Vector3> PlayerDamagedFrom;
+
         /// <summary>Линька завершена, взято улучшение.</summary>
         public event Action<UpgradeType> MoltCompleted;
 
@@ -148,6 +151,9 @@ namespace Snake3D
 
         /// <summary>Цели текущих суток.</summary>
         public DailyGoals Goals => _goals;
+
+        /// <summary>Длина змеи игрока, клеток.</summary>
+        public float SnakeLength => _snake.BodyLengthCells;
         public UpgradeSet Upgrades => _upgrades;
 
         /// <summary>Место последней жизни в таблице (0 — первое, -1 — не попала).</summary>
@@ -600,6 +606,11 @@ namespace Snake3D
             Emit(_deathParticles, position, _deathParticleCount / 4);
             _audio.Play(SoundId.Hurt);
             _cameraRig.Shake(0.25f, 0.35f);
+            // Откуда пришёл удар: орёл — сверху, известный толчок — против него, иначе — спереди (камень, бревно).
+            Vector3 away = _snake.LastHitAway;
+            Vector3 from = source == DamageSource.Eagle ? position + Vector3.up
+                : away.sqrMagnitude > 0f ? position - away : position + _snake.Forward;
+            PlayerDamagedFrom?.Invoke(damage, source, from);
             DamagePlayer(damage, source);
         }
 

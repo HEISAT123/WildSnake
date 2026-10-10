@@ -9,7 +9,8 @@ namespace Snake3D
         [Header("Ссылки")]
         [SerializeField] private SettingsService _settings;
         [SerializeField] private AudioService _audio;
-        [SerializeField] private TutorialController _tutorial;
+        [Tooltip("Контекстные подсказки: «Показать обучение» сбрасывает их счётчики")]
+        [SerializeField] private ContextHints _hints;
 
         [Header("Элементы")]
         [SerializeField] private Slider _masterSlider;
@@ -18,7 +19,7 @@ namespace Snake3D
         [SerializeField] private Slider _mouseSlider;
         [SerializeField] private Toggle _invertYToggle;
         [SerializeField] private Toggle _fullscreenToggle;
-        [SerializeField] private Toggle _minimapToggle;
+        [SerializeField] private Toggle _hudToggle;
         [SerializeField] private Toggle _rivalToggle;
         [SerializeField] private Button _qualityButton;
         [SerializeField] private Text _qualityLabel;
@@ -34,7 +35,7 @@ namespace Snake3D
             _mouseSlider.onValueChanged.AddListener(OnMouseChanged);
             _invertYToggle.onValueChanged.AddListener(OnInvertYChanged);
             _fullscreenToggle.onValueChanged.AddListener(OnFullscreenChanged);
-            _minimapToggle.onValueChanged.AddListener(OnMinimapChanged);
+            _hudToggle.onValueChanged.AddListener(OnHudChanged);
             _rivalToggle.onValueChanged.AddListener(OnRivalChanged);
             _qualityButton.onClick.AddListener(OnQualityClicked);
             _tutorialButton.onClick.AddListener(OnTutorialClicked);
@@ -49,7 +50,7 @@ namespace Snake3D
             _mouseSlider.onValueChanged.RemoveListener(OnMouseChanged);
             _invertYToggle.onValueChanged.RemoveListener(OnInvertYChanged);
             _fullscreenToggle.onValueChanged.RemoveListener(OnFullscreenChanged);
-            _minimapToggle.onValueChanged.RemoveListener(OnMinimapChanged);
+            _hudToggle.onValueChanged.RemoveListener(OnHudChanged);
             _rivalToggle.onValueChanged.RemoveListener(OnRivalChanged);
             _qualityButton.onClick.RemoveListener(OnQualityClicked);
             _tutorialButton.onClick.RemoveListener(OnTutorialClicked);
@@ -65,7 +66,7 @@ namespace Snake3D
             _mouseSlider.SetValueWithoutNotify(_settings.MouseSensitivity);
             _invertYToggle.SetIsOnWithoutNotify(_settings.InvertY);
             _fullscreenToggle.SetIsOnWithoutNotify(_settings.Fullscreen);
-            _minimapToggle.SetIsOnWithoutNotify(_settings.ShowMinimap);
+            _hudToggle.SetIsOnWithoutNotify(_settings.ShowHud);
             _rivalToggle.SetIsOnWithoutNotify(_settings.RivalEnabled);
             _qualityLabel.text = QualityText();
         }
@@ -78,7 +79,7 @@ namespace Snake3D
         private void OnMouseChanged(float v) => _settings.SetMouseSensitivity(v);
         private void OnInvertYChanged(bool v) => _settings.SetInvertY(v);
         private void OnFullscreenChanged(bool v) => _settings.SetFullscreen(v);
-        private void OnMinimapChanged(bool v) => _settings.SetShowMinimap(v);
+        private void OnHudChanged(bool v) => _settings.SetShowHud(v);
         private void OnRivalChanged(bool v) => _settings.SetRivalEnabled(v);
 
         private void OnQualityClicked()
@@ -91,7 +92,7 @@ namespace Snake3D
         private void OnTutorialClicked()
         {
             _audio.Play(SoundId.Click);
-            _tutorial.ResetTutorial();
+            _hints.ResetCounters();
         }
 
         private void OnBackClicked()

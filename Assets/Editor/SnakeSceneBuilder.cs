@@ -139,6 +139,7 @@ public static class SnakeSceneBuilder
             ("_dirtMaterial", arena.Dirt), ("_holeMaterial", arena.Hole),
             ("_rockMesh", arena.RockMesh), ("_grassTuftMesh", arena.TuftMesh));
         board.Build();
+        BuildBurrowMarkers(grid, minimapLayer);
         EnvironmentBuilder.Build(grid, particles, out ParticleSystem pollen, out Renderer stars, out Transform clouds);
 
         var particleFloor = new GameObject("ParticleFloor").transform;
@@ -233,7 +234,8 @@ public static class SnakeSceneBuilder
         var dayNight = new GameObject("DayNight").AddComponent<DayNightCycle>();
         Wire(dayNight, ("_config", config), ("_sun", light), ("_moon", moon), ("_stars", stars), ("_fireflies", pollen), ("_clouds", clouds));
 
-        RenderTexture minimapTexture = LoadOrCreateRenderTexture(SETTINGS_FOLDER + "/Minimap.renderTexture", 384);
+        // Карта показывается на весь экран по Tab — текстура покрупнее.
+        RenderTexture minimapTexture = LoadOrCreateRenderTexture(SETTINGS_FOLDER + "/Minimap.renderTexture", 1024);
         var miniGo = new GameObject("Minimap Camera");
         var miniCam = miniGo.AddComponent<Camera>();
         miniCam.orthographic = true;
@@ -244,6 +246,8 @@ public static class SnakeSceneBuilder
         miniCam.farClipPlane = 40f;
         miniCam.depth = -10f;
         miniCam.targetTexture = minimapTexture;
+        // Камеру карты включает журнал (Tab), пока он открыт.
+        miniCam.enabled = false;
         miniGo.transform.SetPositionAndRotation(grid.Center + Vector3.up * 20f, Quaternion.Euler(90f, 0f, 0f));
 
         // ================= GameManager =================
@@ -682,6 +686,20 @@ public static class SnakeSceneBuilder
         return root;
     }
 
+    /// <summary>Лаймовые метки нор — видны только на карте (Tab).</summary>
+    private static void BuildBurrowMarkers(GridManager grid, int markerLayer)
+    {
+        Material mat = CreateUnlitMaterial("MarkerBurrow", new Color(0.78f, 0.96f, 0.2f));
+        var root = new GameObject("BurrowMarkers").transform;
+        for (int i = 0; i < grid.BurrowCount; i++)
+        {
+            var point = new GameObject("Burrow" + i).transform;
+            point.SetParent(root, false);
+            point.position = grid.GetBurrow(i);
+            CreateMarker(point, mat, markerLayer, 2f);
+        }
+    }
+
     /// <summary>Яркий диск над объектом, видимый только камере мини-карты.</summary>
     private static void CreateMarker(Transform parent, Material mat, int layer, float size)
     {
@@ -877,7 +895,15 @@ public static class SnakeSceneBuilder
     private static RenderTexture LoadOrCreateRenderTexture(string path, int size)
     {
         var rt = AssetDatabase.LoadAssetAtPath<RenderTexture>(path);
-        if (rt != null) return rt;
+        if (rt != null && rt.width == size) return rt;
+        if (rt != null)
+        {
+            rt.Release();
+            rt.width = size;
+            rt.height = size;
+            EditorUtility.SetDirty(rt);
+            return rt;
+        }
         rt = new RenderTexture(size, size, 16) { name = "Minimap" };
         AssetDatabase.CreateAsset(rt, path);
         return rt;
@@ -998,7 +1024,7 @@ public static class SnakeSceneBuilder
 
         // Текстуры неонового меню и старый мрамор колонн больше не используются.
         foreach (string name in new[] { "MenuSky.asset", "MenuSun.asset", "MenuMountains.asset", "MenuGrid.asset",
-                     "Rounded.png", "Pill.png", "Circle.png", "SoftShadow.png" })
+                     "Rounded.png", "Pill.png", "Circle.png", "SoftShadow.png", "TopFade.asset", "Ring.png" })
         {
             string path = "Assets/Materials/UI/" + name;
             if (AssetDatabase.LoadAssetAtPath<Object>(path) != null) AssetDatabase.DeleteAsset(path);

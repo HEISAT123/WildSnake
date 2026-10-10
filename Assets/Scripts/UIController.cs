@@ -5,13 +5,16 @@ using UnityEngine.UI;
 namespace Snake3D
 {
     /// <summary>
-    /// Отображение: HUD выживания (сутки и часы, здоровье, сытость, линька, бросок, нюх, тревога об орле,
-    /// укрытие, мини-карта, баннеры, вспышка урона) и экраны (меню, пауза, линька, итоги).
-    /// Логики игры здесь нет — только реакция на события и вызов публичных методов GameManager по кнопкам.
-    /// Тексты меняются, только когда меняется показываемое значение, — без мусора каждый кадр.
+    /// Отображение: экраны (меню, пауза, линька, итоги) и «тихий» HUD. На экране во время игры только то, что
+    /// важно сейчас: дуги показателей, дуга солнца, подсказки и метки угроз — это отдельные компоненты
+    /// (HudVitals, SunDial, ContextHints, ThreatIndicator, CenterReticle, MapJournal, ScreenVignettes).
+    /// Здесь — очередь баннеров (не больше одного одновременно), режим «без интерфейса» (H), курсор и кнопки.
+    /// Логики игры здесь нет — только реакция на события и вызов публичных методов GameManager.
     /// </summary>
     public class UIController : MonoBehaviour
     {
+        private const int BANNER_QUEUE = 4;
+
         private static readonly string[] UpgradeNames =
         {
             "ТОЛСТАЯ ЧЕШУЯ", "МЕДЛЕННЫЙ ОБМЕН", "ДЛИННЫЙ БРОСОК", "ОСТРЫЙ НЮХ",
@@ -20,9 +23,9 @@ namespace Snake3D
 
         private static readonly string[] UpgradeDescriptions =
         {
-            "Урон от ударов и когтей меньше на 20%",
+            "Урон от ударов, когтей и зубов меньше на 20%",
             "Голод растёт на 15% медленнее",
-            "Бросок длится на 25% дольше, перезарядка быстрее",
+            "Бросок летит на 20% дальше и стоит меньше сил",
             "Нюх чует на 30% дальше и восстанавливается быстрее",
             "Добыча замечает змею на 15% позже",
             "Максимум здоровья больше на 20",
@@ -30,65 +33,21 @@ namespace Snake3D
             "Добыча насыщает на 20% сильнее"
         };
 
-        private static readonly string[] PreyNames = { "ЖУК", "МЫШЬ", "ЛЯГУШКА", "ПТИЦА", "КРОЛИК" };
-
-        // Подписи HUD разрежены тонким пробелом, как в разметке UIBuilder.
-        private const string SatietyCaption = "С Ы Т О С Т Ь";
-        private const string HungerCaption = "Г О Л О Д";
-
         [Header("Источники данных")]
         [SerializeField] private GameManager _game;
-        [SerializeField] private SnakeController _snake;
         [SerializeField] private SettingsService _settings;
         [SerializeField] private AudioService _audio;
         [SerializeField] private LeaderboardService _leaderboard;
-        [SerializeField] private WildlifeManager _wildlife;
         [SerializeField] private EagleHunter _eagle;
         [SerializeField] private DayNightCycle _dayNight;
         [SerializeField] private ScentTracker _scent;
 
-        [Tooltip("Камера: от её ориентации считается стрелка нюха")]
-        [SerializeField] private Transform _cameraTransform;
-
-        [Tooltip("Камера мини-карты")]
-        [SerializeField] private Camera _minimapCamera;
-
         [Header("HUD")]
-        [Tooltip("Корень HUD: показывается только во время партии")]
+        [Tooltip("Корень HUD: виден только во время партии и если интерфейс не выключен (H)")]
         [SerializeField] private GameObject _hudRoot;
 
-        [SerializeField] private Text _dayText;
-        [SerializeField] private Text _clockText;
-        [SerializeField] private Image _periodFill;
-        [SerializeField] private Image _healthFill;
-        [SerializeField] private Text _healthValue;
-        [SerializeField] private Image _satietyFill;
-        [SerializeField] private Text _satietyValue;
-        [SerializeField] private Text _satietyLabel;
-        [SerializeField] private Image _moltFill;
-
-        [Tooltip("Кольцо-компас нюха")]
-        [SerializeField] private GameObject _scentPointer;
-
-        [Tooltip("Поворачиваемая стрелка (смотрит вверх при нулевом повороте)")]
-        [SerializeField] private RectTransform _scentArrow;
-
-        [SerializeField] private Image _dashFill;
-        [SerializeField] private Image _smellFill;
-
-        [Tooltip("Метка «в траве»")]
-        [SerializeField] private GameObject _hiddenBadge;
-
-        [Header("Тревога")]
-        [SerializeField] private CanvasGroup _threatGroup;
-        [SerializeField] private Text _threatTitle;
-        [SerializeField] private Text _threatHint;
-
-        [Tooltip("Красная виньетка при уроне и низком здоровье")]
-        [SerializeField] private CanvasGroup _damageFlash;
-
-        [Tooltip("Рамка мини-карты")]
-        [SerializeField] private GameObject _minimapRoot;
+        [Tooltip("Виньетки состояния: видны во время партии всегда, даже без интерфейса")]
+        [SerializeField] private GameObject _vignetteRoot;
 
         [Header("Баннер")]
         [SerializeField] private CanvasGroup _bannerGroup;
@@ -96,13 +55,6 @@ namespace Snake3D
 
         [Tooltip("Сколько баннер висит на экране, сек")]
         [SerializeField, Min(0.2f)] private float _bannerDuration = 2f;
-
-        [Header("Цвета")]
-        [SerializeField] private Color _boneColor = new Color(0.95f, 0.93f, 0.88f);
-        [SerializeField] private Color _venomColor = new Color(0.78f, 0.96f, 0.2f);
-        [SerializeField] private Color _emberColor = new Color(1f, 0.42f, 0.3f);
-        [SerializeField] private Color _skyColor = new Color(0.45f, 0.75f, 1f);
-        [SerializeField] private Color _captionColor = new Color(0.95f, 0.93f, 0.88f, 0.78f);
 
         [Header("Панели")]
         [SerializeField] private GameObject _menuPanel;
@@ -123,7 +75,7 @@ namespace Snake3D
         [SerializeField] private Text _gameOverTitle;
         [SerializeField] private Text _daysText;
         [SerializeField] private Text _rankText;
-        [Tooltip("Значения статистики: добыча, длина, линьки, орлы, время")]
+        [Tooltip("Значения статистики: добыча, длина, линьки, хищники, время")]
         [SerializeField] private Text[] _statValues = new Text[5];
 
         [Header("Кнопки меню")]
@@ -147,34 +99,27 @@ namespace Snake3D
         [SerializeField] private Button _restartButton;
         [SerializeField] private Button _gameOverMenuButton;
 
+        // Очередь баннеров — кольцевой буфер строк.
+        private readonly string[] _bannerQueue = new string[BANNER_QUEUE];
+        private int _bannerHead;
+        private int _bannerCount;
         private float _bannerTimer;
-        private float _flash;
-        private float _startleBannerTimer;
-        private int _shownDay = -1;
-        private int _shownClock = -1;
-        private int _shownHealth = -1;
-        private int _shownSatiety = -1;
-        private bool _shownStarving;
-        private bool _shownNight;
-        private int _shownThreat = -1;
+        private bool _hungerWarned;
 
         private void OnEnable()
         {
             _game.StateChanged += OnStateChanged;
             _game.PreyCaught += OnPreyCaught;
-            _game.PlayerDamaged += OnPlayerDamaged;
             _game.MoltCompleted += OnMoltCompleted;
-            _game.ConstrictionStarted += OnConstrictionStarted;
             _game.ConstrictionEnded += OnConstrictionEnded;
             _game.BurrowChanged += OnBurrowChanged;
             _game.GoalCompleted += OnGoalCompleted;
             _game.FoxScared += OnFoxScared;
-            _wildlife.Startled += OnPreyStartled;
             _eagle.Missed += OnEagleMissed;
             _dayNight.DayStarted += OnDayStarted;
             _dayNight.NightStarted += OnNightStarted;
             _scent.Sniffed += OnSniffed;
-            _settings.Changed += ApplyMinimap;
+            _settings.Changed += ApplyHudVisibility;
 
             _playButton.onClick.AddListener(OnPlayClicked);
             _guideButton.onClick.AddListener(OnGuideClicked);
@@ -196,19 +141,16 @@ namespace Snake3D
         {
             _game.StateChanged -= OnStateChanged;
             _game.PreyCaught -= OnPreyCaught;
-            _game.PlayerDamaged -= OnPlayerDamaged;
             _game.MoltCompleted -= OnMoltCompleted;
-            _game.ConstrictionStarted -= OnConstrictionStarted;
             _game.ConstrictionEnded -= OnConstrictionEnded;
             _game.BurrowChanged -= OnBurrowChanged;
             _game.GoalCompleted -= OnGoalCompleted;
             _game.FoxScared -= OnFoxScared;
-            _wildlife.Startled -= OnPreyStartled;
             _eagle.Missed -= OnEagleMissed;
             _dayNight.DayStarted -= OnDayStarted;
             _dayNight.NightStarted -= OnNightStarted;
             _scent.Sniffed -= OnSniffed;
-            _settings.Changed -= ApplyMinimap;
+            _settings.Changed -= ApplyHudVisibility;
 
             _playButton.onClick.RemoveListener(OnPlayClicked);
             _guideButton.onClick.RemoveListener(OnGuideClicked);
@@ -233,196 +175,98 @@ namespace Snake3D
         private void Start()
         {
             _bannerGroup.alpha = 0f;
-            _threatGroup.alpha = 0f;
-            _damageFlash.alpha = 0f;
             _settingsPanel.SetActive(false);
             _leaderboardPanel.SetActive(false);
             _guidePanel.SetActive(false);
             OnStateChanged(_game.State);
-            ApplyMinimap();
+        }
+
+        private void Update()
+        {
+            if (_game.State == GameState.Playing && GameInput.ToggleHud) _settings.SetShowHud(!_settings.ShowHud);
         }
 
         private void LateUpdate()
         {
-            if (_game.State == GameState.Playing)
-            {
-                UpdateClock();
-                UpdateVitals();
-                UpdateAbilities();
-                UpdateScentPointer();
-                UpdateThreat();
-            }
-            UpdateFlash();
+            if (_game.State == GameState.Playing) WatchHunger();
             UpdateBanner();
         }
 
         // ---------------- HUD ----------------
 
-        /// <summary>Сутки и часы: текст меняется раз в десять игровых минут.</summary>
-        private void UpdateClock()
+        /// <summary>Голод напоминает о себе один раз, пока змея снова не наестся.</summary>
+        private void WatchHunger()
         {
-            int day = _dayNight.Day;
-            if (day != _shownDay)
+            float satiety = _game.Survival.Satiety01;
+            if (!_hungerWarned && satiety < 0.2f)
             {
-                _shownDay = day;
-                _dayText.text = day.ToString();
+                _hungerWarned = true;
+                ShowBanner("ПОРА НА ОХОТУ");
             }
-
-            int clock = _dayNight.Hours * 6 + _dayNight.Minutes / 10;
-            bool night = _dayNight.IsNight;
-            if (clock != _shownClock || night != _shownNight)
+            else if (_hungerWarned && satiety > 0.35f)
             {
-                _shownClock = clock;
-                _shownNight = night;
-                int h = _dayNight.Hours;
-                int m = _dayNight.Minutes / 10 * 10;
-                _clockText.text = (h < 10 ? "0" : "") + h + ":" + (m < 10 ? "0" : "") + m + "   " + PeriodName(h);
+                _hungerWarned = false;
             }
-
-            _periodFill.fillAmount = _dayNight.PeriodProgress01;
-            _periodFill.color = night ? _skyColor : _venomColor;
         }
 
-        private static string PeriodName(int hour)
+        private void ApplyHudVisibility()
         {
-            if (hour >= 5 && hour < 11) return "УТРО";
-            if (hour >= 11 && hour < 17) return "ДЕНЬ";
-            if (hour >= 17 && hour < 21) return "ВЕЧЕР";
-            return "НОЧЬ";
+            bool playing = _game.State == GameState.Playing;
+            bool hud = playing && _settings.ShowHud;
+            if (_hudRoot.activeSelf != hud) _hudRoot.SetActive(hud);
+            if (_vignetteRoot.activeSelf != playing) _vignetteRoot.SetActive(playing);
         }
 
-        private void UpdateVitals()
+        // ---------------- Баннеры ----------------
+
+        /// <summary>В очередь: одновременно на экране не больше одного баннера.</summary>
+        private void ShowBanner(string text)
         {
-            SurvivalStats s = _game.Survival;
-            _healthFill.fillAmount = s.Health01;
-            _healthFill.color = s.Health01 < 0.3f ? _emberColor : _boneColor;
-            int health = Mathf.CeilToInt(s.Health);
-            if (health != _shownHealth)
-            {
-                _shownHealth = health;
-                _healthValue.text = health.ToString();
-            }
-
-            _satietyFill.fillAmount = s.Satiety01;
-            int satiety = Mathf.CeilToInt(s.Satiety);
-            if (satiety != _shownSatiety)
-            {
-                _shownSatiety = satiety;
-                _satietyValue.text = satiety.ToString();
-            }
-
-            bool starving = s.Satiety01 < 0.2f;
-            if (starving != _shownStarving)
-            {
-                _shownStarving = starving;
-                _satietyLabel.text = starving ? HungerCaption : SatietyCaption;
-                _satietyLabel.color = starving ? _emberColor : _captionColor;
-                _satietyFill.color = starving ? _emberColor : _venomColor;
-                if (starving) ShowBanner("ПОРА НА ОХОТУ");
-            }
-
-            _moltFill.fillAmount = _game.MoltProgress01;
-        }
-
-        private void UpdateAbilities()
-        {
-            Stamina stamina = _snake.Stamina;
-            _dashFill.fillAmount = stamina.Value01;
-            _dashFill.color = stamina.IsExhausted ? _emberColor : _venomColor;
-            _smellFill.fillAmount = _scent.Charge01;
-            bool hidden = _snake.IsHidden;
-            if (_hiddenBadge.activeSelf != hidden) _hiddenBadge.SetActive(hidden);
-        }
-
-        private void UpdateScentPointer()
-        {
-            bool show = _scent.HasTarget;
-            if (_scentPointer.activeSelf != show) _scentPointer.SetActive(show);
-            if (!show) return;
-
-            // Направление на добычу в осях камеры: 0° — прямо по взгляду, вправо — по часовой.
-            Vector3 local = _cameraTransform.InverseTransformDirection(_scent.TargetPosition - _snake.HeadPosition);
-            float angle = Mathf.Atan2(local.x, local.z) * Mathf.Rad2Deg;
-            _scentArrow.localRotation = Quaternion.Euler(0f, 0f, -angle);
-        }
-
-        /// <summary>Тревога об орле: заголовок и совет меняются по фазе, надпись пульсирует.</summary>
-        private void UpdateThreat()
-        {
-            int threat = !_eagle.IsThreatening ? 0 : _eagle.IsDiving ? 2 : 1;
-            if (threat > 0 && _snake.IsHidden) threat += 2;
-            if (threat != _shownThreat)
-            {
-                _shownThreat = threat;
-                switch (threat)
-                {
-                    case 1:
-                        _threatTitle.text = "ОРЁЛ В НЕБЕ";
-                        _threatHint.text = "Уходите в высокую траву";
-                        break;
-                    case 2:
-                        _threatTitle.text = "ОРЁЛ ПИКИРУЕТ";
-                        _threatHint.text = "В траву — или бросок в последний миг";
-                        break;
-                    case 3:
-                    case 4:
-                        _threatTitle.text = "ОРЁЛ ВАС ПОТЕРЯЛ";
-                        _threatHint.text = "Оставайтесь в траве";
-                        break;
-                }
-                _threatTitle.color = threat >= 3 ? _venomColor : _emberColor;
-            }
-
-            float target = threat == 0 ? 0f : threat == 2 ? 0.6f + 0.4f * Mathf.Abs(Mathf.Sin(Time.unscaledTime * 9f)) : 1f;
-            _threatGroup.alpha = Mathf.MoveTowards(_threatGroup.alpha, target, Time.unscaledDeltaTime * 4f);
-        }
-
-        /// <summary>Вспышка урона гаснет; при низком здоровье виньетка медленно пульсирует.</summary>
-        private void UpdateFlash()
-        {
-            float dt = Time.unscaledDeltaTime;
-            _flash = Mathf.Max(0f, _flash - dt * 1.6f);
-            float pulse = 0f;
-            if (_game.State == GameState.Playing && _game.Survival.Health01 < 0.3f)
-                pulse = 0.25f + 0.15f * Mathf.Sin(Time.unscaledTime * 4f);
-            _damageFlash.alpha = Mathf.Max(_flash, pulse);
+            if (_game.State != GameState.Playing) return;
+            // Тот же текст уже ждёт в очереди или на экране — не дублируем.
+            for (int i = 0; i < _bannerCount; i++)
+                if (_bannerQueue[(_bannerHead + i) % BANNER_QUEUE] == text) return;
+            if (_bannerTimer > 0f && _bannerText.text == text) return;
+            if (_bannerCount == BANNER_QUEUE) return;
+            _bannerQueue[(_bannerHead + _bannerCount) % BANNER_QUEUE] = text;
+            _bannerCount++;
         }
 
         private void UpdateBanner()
         {
             float dt = Time.unscaledDeltaTime;
-            if (_startleBannerTimer > 0f) _startleBannerTimer -= dt;
-            if (_bannerTimer <= 0f) return;
-            _bannerTimer -= dt;
-            // Последние 0.4 сек плавно гаснет.
-            _bannerGroup.alpha = Mathf.Clamp01(_bannerTimer / 0.4f);
-        }
+            if (_bannerTimer > 0f)
+            {
+                _bannerTimer -= dt;
+                float shown = _bannerDuration - _bannerTimer;
+                // Быстро проявляется, последние 0.4 сек плавно гаснет.
+                _bannerGroup.alpha = Mathf.Min(Mathf.Clamp01(shown / 0.15f), Mathf.Clamp01(_bannerTimer / 0.4f));
+                return;
+            }
 
-        private void ShowBanner(string text)
-        {
-            _bannerText.text = text;
-            _bannerGroup.alpha = 1f;
+            _bannerGroup.alpha = 0f;
+            if (_bannerCount == 0) return;
+            _bannerText.text = _bannerQueue[_bannerHead];
+            _bannerQueue[_bannerHead] = null;
+            _bannerHead = (_bannerHead + 1) % BANNER_QUEUE;
+            _bannerCount--;
             _bannerTimer = _bannerDuration;
         }
 
-        private void ApplyMinimap()
+        private void ClearBanners()
         {
-            bool show = _settings.ShowMinimap;
-            _minimapRoot.SetActive(show);
-            _minimapCamera.enabled = show;
+            _bannerCount = 0;
+            _bannerTimer = 0f;
+            _bannerGroup.alpha = 0f;
         }
 
         // ---------------- События ----------------
 
+        // Мелкая добыча обходится без баннера — только крупная.
         private void OnPreyCaught(PreyKind kind)
         {
-            if (kind != PreyKind.Beetle) ShowBanner("+ " + PreyNames[(int)kind]);
-        }
-
-        private void OnPlayerDamaged(float amount, DamageSource source)
-        {
-            // Голод «капает» каждый кадр — вспышка только от настоящих ударов.
-            if (source != DamageSource.Starvation) _flash = Mathf.Clamp01(0.35f + amount / 60f);
+            if (kind == PreyKind.Rabbit) ShowBanner("+ КРОЛИК");
+            else if (kind == PreyKind.Bird) ShowBanner("+ ПТИЦА");
         }
 
         private void OnMoltCompleted(UpgradeType type)
@@ -430,14 +274,20 @@ namespace Snake3D
             ShowBanner(UpgradeNames[(int)type]);
         }
 
-        private void OnConstrictionStarted(PreyKind kind)
+        private void OnConstrictionEnded(bool won)
         {
-            ShowBanner("ДЕРЖИТЕ F — ОБВИТЬ");
+            if (!won) ShowBanner("ВЫРВАЛСЯ");
+        }
+
+        private void OnBurrowChanged(bool entered)
+        {
+            if (!entered) return;
+            ShowBanner(_dayNight.IsNight ? "НОРА · НОЧЬ ПРОЙДЁТ БЫСТРЕЕ" : "НОРА · ПРОГРЕСС СОХРАНЁН");
         }
 
         private void OnGoalCompleted(int index)
         {
-            ShowBanner("ЦЕЛЬ ДНЯ ВЫПОЛНЕНА");
+            ShowBanner("ЦЕЛЬ ДНЯ · " + MapJournal.GoalName(_game.Goals.Get(index).Type).ToUpperInvariant());
         }
 
         private void OnFoxScared()
@@ -445,51 +295,32 @@ namespace Snake3D
             ShowBanner("ЛИСА УБЕЖАЛА");
         }
 
-        private void OnBurrowChanged(bool entered)
-        {
-            if (_game.State != GameState.Playing) return;
-            if (!entered) return;
-            ShowBanner(_dayNight.IsNight ? "НОРА · НОЧЬ ПРОЙДЁТ БЫСТРЕЕ" : "НОРА · ПРОГРЕСС СОХРАНЁН");
-        }
-
-        private void OnConstrictionEnded(bool won)
-        {
-            if (!won) ShowBanner("ВЫРВАЛСЯ");
-        }
-
-        private void OnPreyStartled(PreyKind kind, Vector3 position)
-        {
-            if (_game.State != GameState.Playing || _startleBannerTimer > 0f) return;
-            _startleBannerTimer = 8f;
-            ShowBanner("НУЖЕН БРОСОК  ·  ЛКМ");
-        }
-
         private void OnEagleMissed()
         {
-            if (_game.State == GameState.Playing) ShowBanner("ОРЁЛ ПРОМАХНУЛСЯ");
+            ShowBanner("ОРЁЛ ПРОМАХНУЛСЯ");
         }
 
         private void OnDayStarted(int day)
         {
-            if (_game.State == GameState.Playing) ShowBanner("ДЕНЬ " + day);
+            ShowBanner("ДЕНЬ " + day);
         }
 
         private void OnNightStarted()
         {
-            if (_game.State == GameState.Playing) ShowBanner("НАСТУПАЕТ НОЧЬ");
+            ShowBanner("НАСТУПАЕТ НОЧЬ");
         }
 
         private void OnSniffed(bool found)
         {
-            if (!found && _game.State == GameState.Playing) ShowBanner("ДОБЫЧИ РЯДОМ НЕТ");
+            if (!found) ShowBanner("ДОБЫЧИ РЯДОМ НЕТ");
         }
 
         private void OnStateChanged(GameState state)
         {
             // До показа меню: пункт «Играть» превращается в «Продолжить», если змея ждёт в норе.
             if (state == GameState.Menu) RefreshPlayRow();
-            // HUD только во время партии: на паузе, линьке и в итогах он мешал бы композиции экрана.
-            _hudRoot.SetActive(state == GameState.Playing);
+
+            ApplyHudVisibility();
             _menuPanel.SetActive(state == GameState.Menu);
             _pausePanel.SetActive(state == GameState.Paused);
             _moltPanel.SetActive(state == GameState.Molting);
@@ -505,23 +336,11 @@ namespace Snake3D
 
             // Снимаем выделение с кнопок: иначе Enter/Space сработает и как Submit, и как клавиша игры.
             if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
-            _shownDay = -1;
-            _shownClock = -1;
-            _shownHealth = -1;
-            _shownSatiety = -1;
-            _shownThreat = -1;
-            _shownStarving = false;
-            _satietyLabel.text = SatietyCaption;
-            _satietyLabel.color = _captionColor;
-            _satietyFill.color = _venomColor;
+            if (state == GameState.Menu || state == GameState.GameOver) _hungerWarned = false;
 
             if (state == GameState.Molting) FillMolt();
             if (state == GameState.GameOver) FillGameOver();
-            if (state != GameState.Playing)
-            {
-                _bannerTimer = 0f;
-                _bannerGroup.alpha = 0f;
-            }
+            if (state != GameState.Playing) ClearBanners();
         }
 
         private void FillMolt()
@@ -554,7 +373,7 @@ namespace Snake3D
             SetStat(0, s.Prey.ToString());
             SetStat(1, s.Length.ToString("0.0"));
             SetStat(2, s.Molts.ToString());
-            SetStat(3, s.EaglesEvaded.ToString());
+            SetStat(3, (s.EaglesEvaded + s.FoxesScared).ToString());
             SetStat(4, TimeFormat.Clock(Mathf.FloorToInt(s.Time)));
         }
 
@@ -564,8 +383,8 @@ namespace Snake3D
             {
                 case DamageSource.Starvation: return "ГОЛОД ВЗЯЛ СВОЁ";
                 case DamageSource.Eagle: return "ДОБЫЧА ОРЛА";
-                case DamageSource.Rival: return "ПОБЕЖДЕНА СОПЕРНИЦЕЙ";
                 case DamageSource.Fox: return "ДОБЫЧА ЛИСЫ";
+                case DamageSource.Rival: return "ПОБЕЖДЕНА СОПЕРНИЦЕЙ";
                 default: return "СМЕРТЕЛЬНАЯ РАНА";
             }
         }
@@ -574,10 +393,6 @@ namespace Snake3D
         {
             if (index < _statValues.Length && _statValues[index] != null) _statValues[index].text = value;
         }
-
-        // ---------------- Кнопки ----------------
-
-        private void OnPlayClicked() { Click(); _game.PlayFromMenu(); }
 
         private void RefreshPlayRow()
         {
@@ -588,6 +403,10 @@ namespace Snake3D
                 ? "День " + save.Day + " · змея ждёт в норе. Новая жизнь — пауза, «Заново»"
                 : "Голод, хищники, смена дня и ночи";
         }
+
+        // ---------------- Кнопки ----------------
+
+        private void OnPlayClicked() { Click(); _game.PlayFromMenu(); }
         private void OnResumeClicked() { Click(); _game.Resume(); }
         private void OnRestartClicked() { Click(); _game.Restart(); }
         private void OnMenuClicked() { Click(); _game.OpenMenu(); }

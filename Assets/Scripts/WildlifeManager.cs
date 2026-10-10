@@ -143,6 +143,25 @@ namespace Snake3D
             return nearest != null;
         }
 
+        /// <summary>Ближайшая добыча, которую берут броском (для подсказок): жуки и схваченные не считаются.</summary>
+        public bool TryGetNearestBig(Vector3 from, float maxDistance, out PreyAnimal nearest)
+        {
+            nearest = null;
+            float best = maxDistance * maxDistance;
+            for (int i = 0; i < _animals.Length; i++)
+            {
+                PreyAnimal a = _animals[i];
+                if (!a.IsActive || a.IsFlying || a.IsHeld || !_config.GetPrey(a.Kind).RequiresStrike) continue;
+                Vector3 d = a.Position - from;
+                d.y = 0f;
+                float dist = d.sqrMagnitude;
+                if (dist > best) continue;
+                best = dist;
+                nearest = a;
+            }
+            return nearest != null;
+        }
+
         /// <summary>
         /// Лучшая цель для ИИ: сытность делится на расстояние, убегающая и чужая (рядом с другой змеёй) — хуже.
         /// </summary>

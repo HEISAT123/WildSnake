@@ -156,6 +156,9 @@ namespace Snake3D
             }
         }
 
+        /// <summary>Куда оттолкнуло последним ударом (от источника); нулевой — источник неизвестен.</summary>
+        public Vector3 LastHitAway { get; private set; }
+
         /// <summary>Последний бросок начат из полной засады (для целей суток).</summary>
         public bool LastStrikeFromAmbush { get; private set; }
 
@@ -495,6 +498,8 @@ namespace Snake3D
         {
             if (!IsAlive || _invulnerableTimer > 0f) return false;
             _invulnerableTimer = _invulnerabilityTime;
+            awayDirection.y = 0f;
+            LastHitAway = awayDirection.sqrMagnitude > 1e-6f ? awayDirection.normalized : Vector3.zero;
             _ambush.Break();
             PushAway(awayDirection, 0.35f * _cellSize);
             CancelStrike();
