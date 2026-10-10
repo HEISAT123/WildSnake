@@ -63,8 +63,10 @@ namespace Snake3D
             _fullscreenToggle.SetIsOnWithoutNotify(_settings.Fullscreen);
             _minimapToggle.SetIsOnWithoutNotify(_settings.ShowMinimap);
             _rivalToggle.SetIsOnWithoutNotify(_settings.RivalEnabled);
-            _qualityLabel.text = "Качество: " + _settings.QualityName;
+            _qualityLabel.text = QualityText();
         }
+
+        private string QualityText() => _settings.QualityName.ToUpperInvariant() + "   ›";
 
         private void OnMasterChanged(float v) => _settings.SetMasterVolume(v);
         private void OnMusicChanged(float v) => _settings.SetMusicVolume(v);
@@ -78,7 +80,7 @@ namespace Snake3D
         {
             _audio.Play(SoundId.Click);
             _settings.CycleQuality();
-            _qualityLabel.text = "Качество: " + _settings.QualityName;
+            _qualityLabel.text = QualityText();
         }
 
         private void OnTutorialClicked()

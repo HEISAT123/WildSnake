@@ -10,10 +10,10 @@ using UnityEngine.InputSystem.UI;
 using SettingsService = Snake3D.SettingsService;
 
 /// <summary>
-/// Весь интерфейс в едином современном стиле: тёмные полупрозрачные панели со скруглёнными углами
-/// и мягкими тенями поверх живой сцены. Главное меню — панель слева с карточками режимов,
-/// пауза, итоги, настройки и рекорды — модальные карточки по центру; HUD — компактные плашки.
-/// Вызывается из SnakeSceneBuilder.
+/// Интерфейс игры в едином стиле: крупная типографика (Bahnschrift), чернильный фон с затемнением
+/// слева поверх живой сцены, тёплый «костяной» текст и единственный акцент — ядовитый лайм.
+/// Никаких «карточек»: экраны — композиции из заголовка, нумерованных строк, тонких линий
+/// и клавиш-подсказок. HUD в той же гамме. Вызывается из SnakeSceneBuilder.
 /// </summary>
 internal static class UIBuilder
 {
@@ -35,44 +35,54 @@ internal static class UIBuilder
     }
 
     // ---------- Палитра ----------
-    private static readonly Color PanelColor = new Color(0.05f, 0.065f, 0.095f, 0.86f);
-    private static readonly Color HudPlate = new Color(0.05f, 0.065f, 0.095f, 0.72f);
-    private static readonly Color CardColor = new Color(0.075f, 0.09f, 0.13f, 0.97f);
-    private static readonly Color Surface = new Color(1f, 1f, 1f, 0.05f);
-    private static readonly Color Dim = new Color(0.02f, 0.03f, 0.05f, 0.55f);
-    private static readonly Color Text1 = new Color(0.96f, 0.97f, 0.98f);
-    private static readonly Color Text2 = new Color(0.72f, 0.76f, 0.82f);
-    private static readonly Color Text3 = new Color(0.52f, 0.57f, 0.64f);
-    private static readonly Color Green = new Color(0.36f, 0.84f, 0.5f);
-    private static readonly Color GreenDark = new Color(0.03f, 0.15f, 0.07f);
-    private static readonly Color Blue = new Color(0.42f, 0.62f, 1f);
-    private static readonly Color Red = new Color(1f, 0.45f, 0.45f);
-    private static readonly Color Gold = new Color(1f, 0.8f, 0.36f);
+    private static readonly Color Ink = new Color(0.043f, 0.055f, 0.07f);
+    private static readonly Color Bone = new Color(0.95f, 0.93f, 0.88f);
+    private static readonly Color Ash = new Color(0.62f, 0.63f, 0.6f);
+    private static readonly Color Smoke = new Color(0.46f, 0.48f, 0.48f);
+    private static readonly Color Venom = new Color(0.78f, 0.96f, 0.2f);
+    private static readonly Color Sky = new Color(0.45f, 0.75f, 1f);
+    private static readonly Color Ember = new Color(1f, 0.42f, 0.3f);
+    private static readonly Color Hair = new Color(0.95f, 0.93f, 0.88f, 0.14f);
+    private static readonly Color HudCaption = new Color(0.95f, 0.93f, 0.88f, 0.78f);
 
-    private static readonly Color[] PowerUpColors =
-    {
-        new Color(1f, 0.85f, 0.2f), new Color(0.3f, 0.85f, 1f), new Color(0.45f, 0.6f, 1f),
-        new Color(0.95f, 0.35f, 0.8f), new Color(1f, 0.6f, 0.2f)
-    };
-    private static readonly string[] PowerUpNames = { "Ускорение", "Замедление", "Щит", "Магнит", "Очки x2" };
+    private static readonly Color[] PowerUpColors = { new Color(1f, 0.85f, 0.2f), Sky, new Color(0.55f, 0.6f, 1f), new Color(0.95f, 0.4f, 0.85f), new Color(1f, 0.6f, 0.2f) };
+    private static readonly string[] PowerUpNames = { "УСКОРЕНИЕ", "ЗАМЕДЛЕНИЕ", "ЩИТ", "МАГНИТ", "ОЧКИ ×2" };
 
-    private static readonly string[] ModeNames = { "Классика", "На время", "Выживание" };
-    private static readonly string[] ModeDescriptions = { "Бесконечно, с уровнями", "Две минуты на рекорд", "Арена сужается" };
-    private static readonly Color[] ModeColors = { Green, Blue, Red };
+    private static readonly string[] ModeNames = { "КЛАССИКА", "НА ВРЕМЯ", "ВЫЖИВАНИЕ" };
+    private static readonly string[] ModeDescriptions = { "Бесконечная партия с уровнями", "Две минуты на рекорд", "Арена сужается каждые 15 секунд" };
+    private static readonly Color[] ModeColors = { Venom, Sky, Ember };
+
+    private const float LEFT = 96f;
 
     private static Font _font;
-    private static Sprite _rounded;
-    private static Sprite _pill;
-    private static Sprite _circle;
-    private static Sprite _shadow;
+    private static Sprite _chamfer;
+    private static Sprite _keycap;
+    private static Sprite _ring;
+    private static Sprite _frame;
+
+    /// <summary>Пункт списка, собранный MakeRow.</summary>
+    private struct Row
+    {
+        public Button Button;
+        public RectTransform Content;
+        public GameObject Accent;
+        public Text Label;
+        public Text Index;
+        public Text Record;
+    }
 
     public static void Build(Refs r)
     {
         _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        _rounded = UISpriteFactory.Rounded;
-        _pill = UISpriteFactory.Pill;
-        _circle = UISpriteFactory.Circle;
-        _shadow = UISpriteFactory.SoftShadow;
+        _chamfer = UISpriteFactory.Chamfer;
+        _keycap = UISpriteFactory.ChamferOutline;
+        _ring = UISpriteFactory.Ring;
+        _frame = UISpriteFactory.Frame;
+        Texture2D menuShade = UISpriteFactory.Vignette("ShadeMenu", 0.94f, 0.78f, 0f);
+        Texture2D pauseShade = UISpriteFactory.Vignette("ShadePause", 0.94f, 0.82f, 0.4f);
+        // Настройки и рекорды открываются поверх меню/паузы — слева фон непрозрачный, иначе просвечивают их надписи.
+        Texture2D deepShade = UISpriteFactory.Vignette("ShadeDeep", 1f, 1f, 0.72f);
+        Texture2D topFade = UISpriteFactory.TopFade();
 
         var canvasGo = new GameObject("Canvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         canvasGo.layer = LayerMask.NameToLayer("UI");
@@ -90,12 +100,12 @@ internal static class UIBuilder
         eventSystem.AddComponent<StandaloneInputModule>();
 #endif
 
-        var hud = BuildHud(root, r, out HudParts hudParts);
-        var menu = BuildMainMenu(root, out MenuParts menuParts);
-        var pause = BuildPause(root, out PauseParts pauseParts);
-        var over = BuildGameOver(root, out GameOverParts overParts);
-        var settings = BuildSettings(root, out SettingsParts settingsParts);
-        var board = BuildLeaderboard(root, out Object[] columns, out Button boardBack);
+        GameObject hud = BuildHud(root, r, topFade, out HudParts hp);
+        GameObject menu = BuildMainMenu(root, menuShade, out Row[] menuRows, out CanvasGroup menuGroup);
+        GameObject pause = BuildPause(root, pauseShade, out Row[] pauseRows, out CanvasGroup pauseGroup);
+        GameObject over = BuildGameOver(root, pauseShade, out Row[] overRows, out CanvasGroup overGroup, out GameOverParts op);
+        GameObject settings = BuildSettings(root, deepShade, out SettingsParts sp);
+        GameObject board = BuildLeaderboard(root, deepShade, out Object[] columns, out Button boardBack);
 
         pause.SetActive(false);
         over.SetActive(false);
@@ -104,47 +114,328 @@ internal static class UIBuilder
 
         // ---------- Компоненты ----------
         canvasGo.AddComponent<UIFontApplier>();
+        var overlays = new Object[] { settings, board };
+
+        WireList(menu, menuRows, menuGroup, r, overlays, 3);
+        WireList(pause, pauseRows, pauseGroup, r, overlays, 0);
+        WireList(over, overRows, overGroup, r, overlays, 0);
 
         var tutorial = canvasGo.AddComponent<TutorialController>();
-        SnakeSceneBuilder.Wire(tutorial, ("_game", r.Game), ("_snake", r.Player), ("_plate", hudParts.TutorialPlate), ("_text", hudParts.TutorialText));
+        SnakeSceneBuilder.Wire(tutorial, ("_game", r.Game), ("_snake", r.Player), ("_plate", hp.TutorialPlate), ("_text", hp.TutorialText));
 
         var settingsComp = settings.AddComponent<SettingsPanel>();
         SnakeSceneBuilder.Wire(settingsComp, ("_settings", r.Settings), ("_audio", r.Audio), ("_tutorial", tutorial),
-            ("_masterSlider", settingsParts.Master), ("_musicSlider", settingsParts.Music), ("_sfxSlider", settingsParts.Sfx),
-            ("_steerSlider", settingsParts.Steer), ("_fullscreenToggle", settingsParts.Fullscreen), ("_minimapToggle", settingsParts.Minimap),
-            ("_rivalToggle", settingsParts.Rival), ("_qualityButton", settingsParts.Quality), ("_qualityLabel", settingsParts.QualityLabel),
-            ("_tutorialButton", settingsParts.Tutorial), ("_backButton", settingsParts.Back));
+            ("_masterSlider", sp.Master), ("_musicSlider", sp.Music), ("_sfxSlider", sp.Sfx), ("_steerSlider", sp.Steer),
+            ("_fullscreenToggle", sp.Fullscreen), ("_minimapToggle", sp.Minimap), ("_rivalToggle", sp.Rival),
+            ("_qualityButton", sp.Quality), ("_qualityLabel", sp.QualityLabel), ("_tutorialButton", sp.Tutorial), ("_backButton", sp.Back));
 
         var boardComp = board.AddComponent<LeaderboardPanel>();
         SnakeSceneBuilder.Wire(boardComp, ("_leaderboard", r.Leaderboard), ("_audio", r.Audio), ("_backButton", boardBack));
         SnakeSceneBuilder.WireArray(boardComp, "_columns", columns);
 
-        var mainMenu = menu.AddComponent<MainMenu>();
-        SnakeSceneBuilder.Wire(mainMenu, ("_leaderboard", r.Leaderboard), ("_audio", r.Audio));
-        SnakeSceneBuilder.WireArray(mainMenu, "_items", menuParts.Items);
-        SnakeSceneBuilder.WireArray(mainMenu, "_backgrounds", menuParts.Backgrounds);
-        SnakeSceneBuilder.WireArray(mainMenu, "_accents", menuParts.Accents);
-        SnakeSceneBuilder.WireArray(mainMenu, "_recordTexts", menuParts.Records);
-        SnakeSceneBuilder.WireArray(mainMenu, "_overlays", new Object[] { settings, board });
-
         var ui = canvasGo.AddComponent<UIController>();
         SnakeSceneBuilder.Wire(ui,
             ("_game", r.Game), ("_score", r.Score), ("_snake", r.Player), ("_powerUps", r.PowerUps), ("_settings", r.Settings),
             ("_audio", r.Audio), ("_arena", r.Arena), ("_food", r.Food), ("_cameraTransform", r.CameraTransform), ("_minimapCamera", r.MinimapCamera),
-            ("_hudRoot", hud), ("_scoreText", hudParts.Score), ("_bestText", hudParts.Best), ("_levelText", hudParts.Level),
-            ("_timerPlate", hudParts.TimerPlate), ("_timerText", hudParts.Timer),
-            ("_foodPointer", hudParts.Pointer), ("_foodArrow", hudParts.Arrow), ("_dashFill", hudParts.DashFill),
-            ("_minimapRoot", hudParts.Minimap), ("_bannerGroup", hudParts.BannerGroup), ("_bannerText", hudParts.BannerText),
+            ("_hudRoot", hud), ("_scoreText", hp.Score), ("_bestText", hp.Best), ("_levelText", hp.Level),
+            ("_timerPlate", hp.TimerPlate), ("_timerText", hp.Timer),
+            ("_foodPointer", hp.Pointer), ("_foodArrow", hp.Arrow), ("_dashFill", hp.DashFill),
+            ("_minimapRoot", hp.Minimap), ("_bannerGroup", hp.BannerGroup), ("_bannerText", hp.BannerText),
             ("_menuPanel", menu), ("_pausePanel", pause), ("_gameOverPanel", over),
             ("_settingsPanel", settings), ("_leaderboardPanel", board),
-            ("_gameOverTitle", overParts.Title), ("_finalScoreText", overParts.Score), ("_rankText", overParts.Rank), ("_statsText", overParts.Stats),
-            ("_classicButton", menuParts.Items[0]), ("_timeAttackButton", menuParts.Items[1]), ("_survivalButton", menuParts.Items[2]),
-            ("_menuLeaderboardButton", menuParts.Items[3]), ("_menuSettingsButton", menuParts.Items[4]), ("_quitButton", menuParts.Items[5]),
-            ("_resumeButton", pauseParts.Resume), ("_pauseRestartButton", pauseParts.Restart),
-            ("_pauseSettingsButton", pauseParts.Settings), ("_pauseMenuButton", pauseParts.Menu),
-            ("_restartButton", overParts.Restart), ("_gameOverMenuButton", overParts.Menu));
-        SnakeSceneBuilder.WireArray(ui, "_powerUpRows", hudParts.PowerUpRows);
-        SnakeSceneBuilder.WireArray(ui, "_powerUpFills", hudParts.PowerUpFills);
+            ("_gameOverTitle", op.Title), ("_finalScoreText", op.Score), ("_rankText", op.Rank),
+            ("_classicButton", menuRows[0].Button), ("_timeAttackButton", menuRows[1].Button), ("_survivalButton", menuRows[2].Button),
+            ("_menuLeaderboardButton", menuRows[3].Button), ("_menuSettingsButton", menuRows[4].Button), ("_quitButton", menuRows[5].Button),
+            ("_resumeButton", pauseRows[0].Button), ("_pauseRestartButton", pauseRows[1].Button),
+            ("_pauseSettingsButton", pauseRows[2].Button), ("_pauseMenuButton", pauseRows[3].Button),
+            ("_restartButton", overRows[0].Button), ("_gameOverMenuButton", overRows[1].Button));
+        SnakeSceneBuilder.WireArray(ui, "_statValues", op.Stats);
+        SnakeSceneBuilder.WireArray(ui, "_powerUpRows", hp.PowerUpRows);
+        SnakeSceneBuilder.WireArray(ui, "_powerUpFills", hp.PowerUpFills);
+    }
+
+    private static void WireList(GameObject screen, Row[] rows, CanvasGroup group, Refs r, Object[] overlays, int recordCount)
+    {
+        var list = screen.AddComponent<MenuList>();
+        var buttons = new Object[rows.Length];
+        var contents = new Object[rows.Length];
+        var accents = new Object[rows.Length];
+        var labels = new Object[rows.Length];
+        var indexes = new Object[rows.Length];
+        for (int i = 0; i < rows.Length; i++)
+        {
+            buttons[i] = rows[i].Button;
+            contents[i] = rows[i].Content;
+            accents[i] = rows[i].Accent;
+            labels[i] = rows[i].Label;
+            indexes[i] = rows[i].Index;
+        }
+        var records = new Object[recordCount];
+        for (int i = 0; i < recordCount; i++) records[i] = rows[i].Record;
+
+        SnakeSceneBuilder.Wire(list, ("_audio", r.Audio), ("_leaderboard", r.Leaderboard), ("_group", group));
+        SnakeSceneBuilder.WireArray(list, "_items", buttons);
+        SnakeSceneBuilder.WireArray(list, "_contents", contents);
+        SnakeSceneBuilder.WireArray(list, "_accents", accents);
+        SnakeSceneBuilder.WireArray(list, "_labels", labels);
+        SnakeSceneBuilder.WireArray(list, "_indexes", indexes);
+        SnakeSceneBuilder.WireArray(list, "_records", records);
+        SnakeSceneBuilder.WireArray(list, "_overlays", overlays);
+    }
+
+    // =====================================================================
+    // Главное меню
+    // =====================================================================
+
+    private static GameObject BuildMainMenu(Transform root, Texture2D shade, out Row[] rows, out CanvasGroup group)
+    {
+        RectTransform screen = Screen(root, "MenuPanel", shade, out group);
+
+        // Марка: лаймовая плашка «3D» и разреженная подпись.
+        RectTransform tag = Rect("Tag", screen);
+        TopLeft(tag, LEFT, -92f, 56f, 30f);
+        Img(tag, Venom, _chamfer);
+        Text tagText = Label(tag, "Text", "3D", 19, Ink, TextAnchor.MiddleCenter, true);
+        Stretch(tagText.rectTransform);
+        TopLeft(Label(screen, "Kicker", Spaced("АРКАДА"), 20, Ash, TextAnchor.MiddleLeft, true), LEFT + 72f, -92f, 400f, 30f);
+
+        TopLeft(Label(screen, "Title", "ЗМЕЙКА", 164, Bone, TextAnchor.MiddleLeft, true), LEFT - 10f, -122f, 1000f, 200f);
+        TopLeft(Line(screen, Venom), LEFT, -330f, 72f, 5f);
+        TopLeft(Label(screen, "Tagline", "Свободное движение. Прыжки. Рывки.", 24, Ash, TextAnchor.MiddleLeft, false), LEFT, -352f, 800f, 34f);
+
+        rows = new Row[6];
+        for (int i = 0; i < 3; i++)
+            rows[i] = MakeRow(screen, i, ModeNames[i], ModeDescriptions[i], LEFT, -430f - i * 104f, 620f, 92f, 50, ModeColors[i], true);
+
+        TopLeft(Line(screen, Hair), LEFT, -756f, 620f, 1f);
+        string[] links = { "РЕКОРДЫ", "НАСТРОЙКИ", "ВЫХОД" };
+        float[] linkX = { LEFT, LEFT + 214f, LEFT + 452f };
+        for (int i = 0; i < 3; i++)
+            rows[3 + i] = MakeRow(screen, 3 + i, links[i], null, linkX[i], -774f, 200f, 60f, 26, i == 2 ? Ember : Venom, false);
+
+        HintRow(screen, new Vector2(0f, 0f), new Vector2(LEFT, 64f), new Vector2(0f, 0.5f),
+            ("↑ ↓", "выбор"), ("ENTER", "играть"));
+        Text version = Label(screen, "Version", "v1.3", 18, Smoke, TextAnchor.MiddleRight, true);
+        Anchor(version.rectTransform, new Vector2(1f, 0f), new Vector2(1f, 0.5f), new Vector2(-48f, 64f), new Vector2(200f, 24f));
+        return screen.gameObject;
+    }
+
+    // =====================================================================
+    // Пауза
+    // =====================================================================
+
+    private static GameObject BuildPause(Transform root, Texture2D shade, out Row[] rows, out CanvasGroup group)
+    {
+        RectTransform screen = Screen(root, "PausePanel", shade, out group);
+        Heading(screen, "ИГРА ОСТАНОВЛЕНА", "ПАУЗА", 150);
+
+        string[] items = { "ПРОДОЛЖИТЬ", "ЗАНОВО", "НАСТРОЙКИ", "В ГЛАВНОЕ МЕНЮ" };
+        rows = new Row[items.Length];
+        for (int i = 0; i < items.Length; i++)
+            rows[i] = MakeRow(screen, i, items[i], null, LEFT, -420f - i * 88f, 620f, 76f, 44, Venom, false);
+
+        HintRow(screen, new Vector2(0f, 0f), new Vector2(LEFT, 64f), new Vector2(0f, 0.5f),
+            ("ESC", "продолжить"), ("R", "заново"), ("↑ ↓", "выбор"));
+        return screen.gameObject;
+    }
+
+    // =====================================================================
+    // Итоги партии
+    // =====================================================================
+
+    private sealed class GameOverParts
+    {
+        public Text Title, Score, Rank;
+        public Object[] Stats;
+    }
+
+    private static GameObject BuildGameOver(Transform root, Texture2D shade, out Row[] rows, out CanvasGroup group, out GameOverParts p)
+    {
+        p = new GameOverParts { Stats = new Object[5] };
+        RectTransform screen = Screen(root, "GameOverPanel", shade, out group);
+
+        p.Rank = Label(screen, "Rank", "", 20, Venom, TextAnchor.MiddleLeft, true);
+        TopLeft(p.Rank, LEFT, -92f, 800f, 30f);
+        p.Title = Label(screen, "Title", "ИГРА ОКОНЧЕНА", 60, Bone, TextAnchor.MiddleLeft, true);
+        TopLeft(p.Title, LEFT - 4f, -126f, 1000f, 76f);
+        p.Score = Label(screen, "Score", "0", 220, Bone, TextAnchor.MiddleLeft, true);
+        TopLeft(p.Score, LEFT - 14f, -186f, 1000f, 250f);
+        TopLeft(Label(screen, "ScoreCaption", Spaced("ОЧКОВ"), 20, Smoke, TextAnchor.MiddleLeft, true), LEFT, -436f, 400f, 28f);
+
+        TopLeft(Line(screen, Hair), LEFT, -486f, 880f, 1f);
+        string[] statNames = { "ДЛИНА", "ЯБЛОКИ", "БОНУСЫ", "УРОВЕНЬ", "ВРЕМЯ" };
+        for (int i = 0; i < statNames.Length; i++)
+        {
+            float x = LEFT + i * 176f;
+            TopLeft(Label(screen, "StatLabel_" + i, Spaced(statNames[i]), 17, Smoke, TextAnchor.MiddleLeft, true), x, -506f, 170f, 24f);
+            Text value = Label(screen, "StatValue_" + i, "0", 44, Bone, TextAnchor.MiddleLeft, true);
+            TopLeft(value, x - 2f, -532f, 170f, 56f);
+            p.Stats[i] = value;
+        }
+
+        rows = new Row[2];
+        rows[0] = MakeRow(screen, 0, "ЕЩЁ РАЗ", null, LEFT, -640f, 620f, 76f, 44, Venom, false);
+        rows[1] = MakeRow(screen, 1, "В ГЛАВНОЕ МЕНЮ", null, LEFT, -728f, 620f, 76f, 44, Venom, false);
+
+        HintRow(screen, new Vector2(0f, 0f), new Vector2(LEFT, 64f), new Vector2(0f, 0.5f),
+            ("R", "ещё раз"), ("ENTER", "выбрать"));
+        return screen.gameObject;
+    }
+
+    // =====================================================================
+    // Настройки
+    // =====================================================================
+
+    private sealed class SettingsParts
+    {
+        public Slider Master, Music, Sfx, Steer;
+        public Toggle Fullscreen, Minimap, Rival;
+        public Button Quality, Tutorial, Back;
+        public Text QualityLabel;
+    }
+
+    private static GameObject BuildSettings(Transform root, Texture2D shade, out SettingsParts p)
+    {
+        p = new SettingsParts();
+        RectTransform screen = Screen(root, "SettingsPanel", shade, out _);
+        Heading(screen, "ПАРАМЕТРЫ", "НАСТРОЙКИ", 110);
+
+        const float right = LEFT + 900f;
+        Section(screen, "ЗВУК", -300f);
+        p.Master = SliderAt(screen, SettingRow(screen, "Общая громкость", -324f), right, 0f, 1f);
+        p.Music = SliderAt(screen, SettingRow(screen, "Музыка", -382f), right, 0f, 1f);
+        p.Sfx = SliderAt(screen, SettingRow(screen, "Звуки", -440f), right, 0f, 1f);
+
+        Section(screen, "УПРАВЛЕНИЕ", -522f);
+        p.Steer = SliderAt(screen, SettingRow(screen, "Чувствительность руля", -546f), right, 0.5f, 1.5f);
+
+        Section(screen, "ЭКРАН И ИГРА", -628f);
+        p.Fullscreen = SwitchAt(screen, SettingRow(screen, "Полный экран   <size=18><color=#757A7A>F11</color></size>", -652f), right);
+        p.Minimap = SwitchAt(screen, SettingRow(screen, "Мини-карта", -710f), right);
+        p.Rival = SwitchAt(screen, SettingRow(screen, "Змея-соперник   <size=18><color=#757A7A>со следующей партии</color></size>", -768f), right);
+
+        float qualityY = SettingRow(screen, "Качество графики", -826f);
+        p.Quality = LinkButton(screen, "Quality", "ULTRA   ›", 24, out p.QualityLabel);
+        Anchor((RectTransform)p.Quality.transform, new Vector2(0f, 1f), new Vector2(1f, 0.5f), new Vector2(right, qualityY), new Vector2(300f, 44f));
+        p.QualityLabel.alignment = TextAnchor.MiddleRight;
+
+        p.Back = PrimaryButton(screen, "Done", "ГОТОВО");
+        TopLeft(p.Back, LEFT, -918f, 220f, 60f);
+        p.Tutorial = LinkButton(screen, "Tutorial", "ПОКАЗАТЬ ОБУЧЕНИЕ", 22, out Text tutorialLabel);
+        TopLeft(p.Tutorial, LEFT + 252f, -918f, 360f, 60f);
+        tutorialLabel.alignment = TextAnchor.MiddleLeft;
+        return screen.gameObject;
+    }
+
+    private static void Section(RectTransform screen, string text, float y)
+    {
+        TopLeft(Label(screen, "Section", Spaced(text), 17, Venom, TextAnchor.MiddleLeft, true), LEFT, y, 600f, 24f);
+    }
+
+    /// <summary>Строка настройки: подпись слева и тонкая линия снизу. Возвращает Y центра строки.</summary>
+    private static float SettingRow(RectTransform screen, string label, float top)
+    {
+        const float height = 58f;
+        float center = top - height * 0.5f;
+        Text t = Label(screen, "Row", label, 24, Bone, TextAnchor.MiddleLeft, false);
+        Anchor(t.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(LEFT, center), new Vector2(620f, 40f));
+        TopLeft(Line(screen, Hair), LEFT, top - height, 900f, 1f);
+        return center;
+    }
+
+    /// <summary>Слайдер: волосяная дорожка, лаймовая заливка и квадратная ручка.</summary>
+    private static Slider SliderAt(RectTransform screen, float y, float right, float min, float max)
+    {
+        RectTransform rt = Rect("Slider", screen);
+        Anchor(rt, new Vector2(0f, 1f), new Vector2(1f, 0.5f), new Vector2(right, y), new Vector2(320f, 24f));
+        var slider = rt.gameObject.AddComponent<Slider>();
+
+        RectTransform track = Rect("Background", rt);
+        track.anchorMin = new Vector2(0f, 0.5f);
+        track.anchorMax = new Vector2(1f, 0.5f);
+        track.sizeDelta = new Vector2(0f, 2f);
+        Img(track, new Color(Bone.r, Bone.g, Bone.b, 0.2f), null);
+
+        RectTransform fillArea = Rect("Fill Area", rt);
+        fillArea.anchorMin = new Vector2(0f, 0.5f);
+        fillArea.anchorMax = new Vector2(1f, 0.5f);
+        fillArea.sizeDelta = new Vector2(-8f, 2f);
+        RectTransform fill = Rect("Fill", fillArea);
+        fill.sizeDelta = new Vector2(8f, 0f);
+        Img(fill, Venom, null);
+
+        RectTransform handleArea = Rect("Handle Slide Area", rt);
+        Stretch(handleArea);
+        handleArea.offsetMin = new Vector2(8f, 0f);
+        handleArea.offsetMax = new Vector2(-8f, 0f);
+        RectTransform handle = Rect("Handle", handleArea);
+        // Slider растягивает ручку на высоту родителя (24): «-8» даёт квадрат 16x16.
+        handle.sizeDelta = new Vector2(16f, -8f);
+        Image handleImg = Img(handle, Venom, null);
+        handleImg.raycastTarget = true;
+
+        slider.fillRect = fill;
+        slider.handleRect = handle;
+        slider.targetGraphic = handleImg;
+        slider.direction = Slider.Direction.LeftToRight;
+        slider.minValue = min;
+        slider.maxValue = max;
+        slider.value = max;
+        slider.navigation = new Navigation { mode = Navigation.Mode.None };
+        return slider;
+    }
+
+    /// <summary>Прямоугольный переключатель: лаймовая дорожка «вкл», серая «выкл», светлый квадрат.</summary>
+    private static Toggle SwitchAt(RectTransform screen, float y, float right)
+    {
+        RectTransform rt = Rect("Switch", screen);
+        Anchor(rt, new Vector2(0f, 1f), new Vector2(1f, 0.5f), new Vector2(right, y), new Vector2(54f, 26f));
+        Image track = Img(rt, Venom, null);
+        track.raycastTarget = true;
+
+        RectTransform knob = Rect("Knob", rt);
+        Anchor(knob, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(18f, 18f));
+        Img(knob, Ink, null);
+
+        var toggle = rt.gameObject.AddComponent<Toggle>();
+        toggle.transition = Selectable.Transition.None;
+        toggle.targetGraphic = track;
+        toggle.navigation = new Navigation { mode = Navigation.Mode.None };
+        toggle.isOn = true;
+
+        var view = rt.gameObject.AddComponent<ToggleSwitch>();
+        SnakeSceneBuilder.Wire(view, ("_track", track), ("_knob", knob));
+        SnakeSceneBuilder.SetFloat(view, "_knobTravel", 14f);
+        SnakeSceneBuilder.SetColor(view, "_onColor", Venom);
+        SnakeSceneBuilder.SetColor(view, "_offColor", new Color(Bone.r, Bone.g, Bone.b, 0.3f));
+        return toggle;
+    }
+
+    // =====================================================================
+    // Рекорды
+    // =====================================================================
+
+    private static GameObject BuildLeaderboard(Transform root, Texture2D shade, out Object[] columns, out Button back)
+    {
+        RectTransform screen = Screen(root, "LeaderboardPanel", shade, out _);
+        Heading(screen, "ЛУЧШИЕ РЕЗУЛЬТАТЫ", "РЕКОРДЫ", 110);
+
+        columns = new Object[3];
+        for (int i = 0; i < 3; i++)
+        {
+            float x = LEFT + i * 480f;
+            TopLeft(Label(screen, "Index", (i + 1).ToString("00"), 20, ModeColors[i], TextAnchor.MiddleLeft, true), x, -300f, 80f, 26f);
+            TopLeft(Label(screen, "Mode", ModeNames[i], 40, Bone, TextAnchor.MiddleLeft, true), x - 2f, -326f, 420f, 52f);
+            TopLeft(Line(screen, ModeColors[i]), x, -390f, 420f, 2f);
+            Text rows = Label(screen, "Rows", "", 23, Ash, TextAnchor.UpperLeft, false);
+            rows.lineSpacing = 1.45f;
+            TopLeft(rows, x, -414f, 420f, 460f);
+            columns[i] = rows;
+        }
+
+        back = PrimaryButton(screen, "Done", "ГОТОВО");
+        TopLeft(back, LEFT, -918f, 220f, 60f);
+        return screen.gameObject;
     }
 
     // =====================================================================
@@ -161,521 +452,322 @@ internal static class UIBuilder
         public Object[] PowerUpRows, PowerUpFills;
     }
 
-    private static GameObject BuildHud(Transform root, Refs r, out HudParts p)
+    private static GameObject BuildHud(Transform root, Refs r, Texture2D topFade, out HudParts p)
     {
         p = new HudParts();
         RectTransform hud = Rect("HUD", root);
         Stretch(hud);
 
-        RectTransform scorePlate = Plate(hud, "ScorePlate", new Vector2(0f, 1f), new Vector2(32f, -28f), new Vector2(320f, 76f), HudPlate, _rounded);
-        p.Score = Label(scorePlate, "Score", "Счёт: 0", 38, Text1, TextAnchor.MiddleLeft, true);
-        Fill(p.Score.rectTransform, 24f);
-        RectTransform levelPlate = Plate(hud, "LevelPlate", new Vector2(0f, 1f), new Vector2(32f, -114f), new Vector2(200f, 48f), HudPlate, _rounded);
-        p.Level = Label(levelPlate, "Level", "Уровень 1", 26, Green, TextAnchor.MiddleLeft, true);
-        Fill(p.Level.rectTransform, 24f);
+        // Мягкие затемнения у верхнего и нижнего края: текст читается над любой частью сцены.
+        RectTransform top = Rect("TopFade", hud);
+        Anchor(top, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), Vector2.zero, new Vector2(0f, 250f));
+        top.anchorMin = new Vector2(0f, 1f);
+        top.anchorMax = new Vector2(1f, 1f);
+        Raw(top, topFade);
+        RectTransform bottom = Rect("BottomFade", hud);
+        Anchor(bottom, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), Vector2.zero, new Vector2(0f, 200f));
+        bottom.anchorMin = new Vector2(0f, 0f);
+        bottom.anchorMax = new Vector2(1f, 0f);
+        Raw(bottom, topFade).uvRect = new Rect(0f, 1f, 1f, -1f);
 
-        RectTransform bestPlate = Plate(hud, "BestPlate", new Vector2(1f, 1f), new Vector2(-32f, -28f), new Vector2(320f, 76f), HudPlate, _rounded);
-        p.Best = Label(bestPlate, "Best", "Рекорд: 0", 38, Gold, TextAnchor.MiddleRight, true);
-        Fill(p.Best.rectTransform, 24f);
-        RectTransform timerPlate = Plate(hud, "TimerPlate", new Vector2(1f, 1f), new Vector2(-32f, -114f), new Vector2(200f, 64f), HudPlate, _rounded);
-        p.Timer = Label(timerPlate, "Timer", "2:00", 44, Text1, TextAnchor.MiddleCenter, true);
-        Fill(p.Timer.rectTransform, 8f);
-        timerPlate.gameObject.SetActive(false);
-        p.TimerPlate = timerPlate.gameObject;
+        // Счёт — слева сверху.
+        TopLeft(Label(hud, "ScoreCaption", Spaced("СЧЁТ"), 17, HudCaption, TextAnchor.MiddleLeft, true), 44f, -34f, 300f, 24f);
+        p.Score = Label(hud, "Score", "0", 78, Bone, TextAnchor.MiddleLeft, true);
+        TopLeft(p.Score, 38f, -52f, 500f, 92f);
+        p.Best = Label(hud, "Best", "РЕКОРД  0", 20, Bone, TextAnchor.MiddleLeft, true);
+        TopLeft(p.Best, 44f, -146f, 400f, 26f);
+        RectTransform chip = Rect("LevelChip", hud);
+        TopLeft(chip, 44f, -182f, 84f, 28f);
+        Img(chip, Venom, _chamfer);
+        p.Level = Label(chip, "Level", "УР 1", 19, Ink, TextAnchor.MiddleCenter, true);
+        Stretch(p.Level.rectTransform);
 
-        // Стрелка на еду — круглый компас сверху по центру.
-        RectTransform pointer = Plate(hud, "FoodPointer", new Vector2(0.5f, 1f), new Vector2(0f, -24f), new Vector2(112f, 112f), HudPlate, _circle);
+        // Таймер — справа сверху (только в режиме «На время»).
+        RectTransform timer = Rect("TimerPlate", hud);
+        Anchor(timer, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-44f, -34f), new Vector2(300f, 120f));
+        Text timerCaption = Label(timer, "Caption", Spaced("ВРЕМЯ"), 17, HudCaption, TextAnchor.UpperRight, true);
+        Anchor(timerCaption.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), Vector2.zero, new Vector2(300f, 24f));
+        p.Timer = Label(timer, "Timer", "2:00", 72, Bone, TextAnchor.UpperRight, true);
+        Anchor(p.Timer.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(4f, -18f), new Vector2(300f, 90f));
+        timer.gameObject.SetActive(false);
+        p.TimerPlate = timer.gameObject;
+
+        // Компас на еду — тонкое кольцо сверху по центру.
+        RectTransform pointer = Rect("FoodPointer", hud);
+        Anchor(pointer, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -36f), new Vector2(84f, 84f));
+        Img(pointer, new Color(Bone.r, Bone.g, Bone.b, 0.45f), _ring);
         RectTransform pivot = Rect("ArrowPivot", pointer);
-        pivot.anchorMin = pivot.anchorMax = new Vector2(0.5f, 0.56f);
-        pivot.sizeDelta = new Vector2(60f, 60f);
+        Anchor(pivot, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40f, 40f));
         RectTransform arrow = Rect("Arrow", pivot);
         Stretch(arrow);
         arrow.localRotation = Quaternion.Euler(0f, 0f, 180f); // спрайт смотрит вниз, разворачиваем вверх
-        var arrowImg = arrow.gameObject.AddComponent<Image>();
-        arrowImg.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/DropdownArrow.psd");
-        arrowImg.color = Red;
-        arrowImg.raycastTarget = false;
-        Text pointerLabel = Label(pointer, "Label", "еда", 18, Text2, TextAnchor.MiddleCenter, false);
-        Place(pointerLabel.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 12f), new Vector2(100f, 24f));
+        Image arrowImg = Img(arrow, Venom, AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/DropdownArrow.psd"));
+        arrowImg.type = Image.Type.Simple;
+        Text pointerLabel = Label(pointer, "Label", Spaced("ЕДА"), 15, HudCaption, TextAnchor.MiddleCenter, true);
+        Anchor(pointerLabel.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 1f), new Vector2(0f, -8f), new Vector2(120f, 20f));
         p.Pointer = pointer.gameObject;
         p.Arrow = pivot;
 
-        // Активные бонусы — колонка под уровнем.
+        // Активные бонусы — подпись и тонкая полоса оставшегося времени.
         p.PowerUpRows = new Object[PowerUpColors.Length];
         p.PowerUpFills = new Object[PowerUpColors.Length];
         for (int i = 0; i < PowerUpColors.Length; i++)
         {
-            RectTransform row = Plate(hud, "PowerUp_" + (PowerUpType)i, new Vector2(0f, 1f), new Vector2(32f, -178f - i * 50f), new Vector2(260f, 42f), HudPlate, _rounded);
-            Image fill = FillBar(row, new Color(PowerUpColors[i].r, PowerUpColors[i].g, PowerUpColors[i].b, 0.45f));
-            Text label = Label(row, "Label", PowerUpNames[i], 22, Text1, TextAnchor.MiddleLeft, true);
-            Fill(label.rectTransform, 16f);
+            RectTransform row = Rect("PowerUp_" + (PowerUpType)i, hud);
+            TopLeft(row, 44f, -236f - i * 44f, 220f, 36f);
+            Text label = Label(row, "Label", PowerUpNames[i], 16, Bone, TextAnchor.UpperLeft, true);
+            Anchor(label.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), Vector2.zero, new Vector2(220f, 22f));
+            RectTransform track = Rect("Track", row);
+            Anchor(track, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 4f), new Vector2(220f, 2f));
+            Img(track, Hair, null);
+            RectTransform fillRt = Rect("Fill", row);
+            Anchor(fillRt, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 3f), new Vector2(220f, 4f));
+            Image fill = Img(fillRt, PowerUpColors[i], null);
+            fill.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
+            fill.type = Image.Type.Filled;
+            fill.fillMethod = Image.FillMethod.Horizontal;
+            fill.fillOrigin = 0;
             row.gameObject.SetActive(false);
             p.PowerUpRows[i] = row.gameObject;
             p.PowerUpFills[i] = fill;
         }
 
-        RectTransform dash = Plate(hud, "DashPlate", new Vector2(0f, 0f), new Vector2(32f, 28f), new Vector2(260f, 48f), HudPlate, _rounded);
-        p.DashFill = FillBar(dash, new Color(0.4f, 0.8f, 1f, 0.45f));
-        Text dashLabel = Label(dash, "Label", "Рывок  ·  Shift", 22, Text1, TextAnchor.MiddleLeft, true);
-        Fill(dashLabel.rectTransform, 16f);
+        // Рывок — слева снизу: подпись, клавиша и полоса готовности.
+        RectTransform dash = Rect("Dash", hud);
+        Anchor(dash, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(44f, 44f), new Vector2(260f, 60f));
+        Text dashLabel = Label(dash, "Label", Spaced("РЫВОК"), 17, HudCaption, TextAnchor.MiddleLeft, true);
+        Anchor(dashLabel.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), Vector2.zero, new Vector2(140f, 28f));
+        RectTransform shiftKey = Keycap(dash, "SHIFT");
+        Anchor(shiftKey, new Vector2(1f, 1f), new Vector2(1f, 1f), Vector2.zero, shiftKey.sizeDelta);
+        RectTransform dashTrack = Rect("Track", dash);
+        Anchor(dashTrack, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 4f), new Vector2(260f, 3f));
+        Img(dashTrack, Hair, null);
+        RectTransform dashFillRt = Rect("Fill", dash);
+        Anchor(dashFillRt, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(0f, 3f), new Vector2(260f, 5f));
+        p.DashFill = Img(dashFillRt, Venom, AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd"));
+        p.DashFill.type = Image.Type.Filled;
+        p.DashFill.fillMethod = Image.FillMethod.Horizontal;
+        p.DashFill.fillOrigin = 0;
 
-        RectTransform hint = Plate(hud, "HintPlate", new Vector2(0.5f, 0f), new Vector2(0f, 28f), new Vector2(860f, 46f), HudPlate, _pill);
-        Text hintText = Label(hint, "Hint", "A D / ← →  руль      Space  прыжок      Shift  рывок      Esc  пауза", 21, Text2, TextAnchor.MiddleCenter, false);
-        Fill(hintText.rectTransform, 12f);
+        HintRow(hud, new Vector2(0.5f, 0f), new Vector2(0f, 44f), new Vector2(0.5f, 0.5f),
+            ("A D", "руль"), ("SPACE", "прыжок"), ("SHIFT", "рывок"), ("ESC", "пауза"));
+        // Подсказки поверх светлой травы: подписи светлее, чем в меню.
+        foreach (Text t in hud.Find("Hints").GetComponentsInChildren<Text>(true)) t.color = HudCaption;
 
-        RectTransform minimap = Plate(hud, "Minimap", new Vector2(1f, 0f), new Vector2(-32f, 28f), new Vector2(280f, 280f), HudPlate, _rounded);
-        RectTransform mapImage = Rect("MinimapImage", minimap);
+        // Мини-карта — справа снизу, тонкая рамка и подпись.
+        RectTransform minimap = Rect("Minimap", hud);
+        Anchor(minimap, new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-44f, 44f), new Vector2(250f, 250f));
+        RectTransform mapImage = Rect("Map", minimap);
         Stretch(mapImage);
-        mapImage.offsetMin = new Vector2(10f, 10f);
-        mapImage.offsetMax = new Vector2(-10f, -10f);
-        var raw = mapImage.gameObject.AddComponent<RawImage>();
-        raw.texture = r.MinimapTexture;
-        raw.raycastTarget = false;
+        mapImage.offsetMin = new Vector2(5f, 5f);
+        mapImage.offsetMax = new Vector2(-5f, -5f);
+        Raw(mapImage, r.MinimapTexture);
+        RectTransform frame = Rect("Frame", minimap);
+        Stretch(frame);
+        Img(frame, new Color(Bone.r, Bone.g, Bone.b, 0.4f), _frame);
+        Text mapLabel = Label(minimap, "Label", Spaced("КАРТА"), 15, HudCaption, TextAnchor.LowerLeft, true);
+        Anchor(mapLabel.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 0f), new Vector2(0f, 8f), new Vector2(200f, 20f));
         p.Minimap = minimap.gameObject;
 
-        RectTransform tutorial = Plate(hud, "TutorialPlate", new Vector2(0.5f, 0f), new Vector2(0f, 96f), new Vector2(1100f, 60f), new Color(0.1f, 0.32f, 0.18f, 0.9f), _pill);
-        p.TutorialText = Label(tutorial, "Text", "", 26, Text1, TextAnchor.MiddleCenter, true);
-        Fill(p.TutorialText.rectTransform, 24f);
+        // Подсказка обучения — тёмная полоса с лаймовой меткой.
+        RectTransform tutorial = Rect("Tutorial", hud);
+        Anchor(tutorial, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 126f), new Vector2(1100f, 54f));
+        Img(tutorial, new Color(Ink.r, Ink.g, Ink.b, 0.85f), null);
+        RectTransform tutorialTag = Rect("Tag", tutorial);
+        Anchor(tutorialTag, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(12f, 0f), new Vector2(150f, 30f));
+        Img(tutorialTag, Venom, _chamfer);
+        Text tagText = Label(tutorialTag, "Text", "ПОДСКАЗКА", 17, Ink, TextAnchor.MiddleCenter, true);
+        Stretch(tagText.rectTransform);
+        p.TutorialText = Label(tutorial, "Text", "", 23, Bone, TextAnchor.MiddleLeft, false);
+        Stretch(p.TutorialText.rectTransform);
+        p.TutorialText.rectTransform.offsetMin = new Vector2(184f, 0f);
         tutorial.gameObject.SetActive(false);
         p.TutorialPlate = tutorial.gameObject;
 
+        // Баннер событий — крупная надпись с лаймовой чертой.
         RectTransform banner = Rect("Banner", hud);
-        Place(banner, new Vector2(0.5f, 0.72f), Vector2.zero, new Vector2(1200f, 110f));
+        Anchor(banner, new Vector2(0.5f, 0.7f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1400f, 130f));
         p.BannerGroup = banner.gameObject.AddComponent<CanvasGroup>();
         p.BannerGroup.alpha = 0f;
         p.BannerGroup.blocksRaycasts = false;
         p.BannerGroup.interactable = false;
-        p.BannerText = Label(banner, "Text", "", 64, Gold, TextAnchor.MiddleCenter, true);
+        p.BannerText = Label(banner, "Text", "", 88, Bone, TextAnchor.MiddleCenter, true);
         Stretch(p.BannerText.rectTransform);
+        RectTransform bannerLine = Line(banner, Venom);
+        Anchor(bannerLine, new Vector2(0.5f, 0f), new Vector2(0.5f, 0.5f), new Vector2(0f, 4f), new Vector2(90f, 5f));
 
-        // Текст HUD висит над 3D-сценой — лёгкая тень для читаемости на светлом фоне.
-        foreach (Text t in hud.GetComponentsInChildren<Text>(true)) AddShadow(t, 0.45f);
+        // Тексты висят над 3D-сценой — лёгкая тень для читаемости.
+        foreach (Text t in hud.GetComponentsInChildren<Text>(true))
+            if (t.color != Ink) AddShadow(t);
         return hud.gameObject;
-    }
-
-    // =====================================================================
-    // Главное меню: панель слева поверх живой сцены
-    // =====================================================================
-
-    private sealed class MenuParts
-    {
-        public Button[] Items;
-        public Object[] Backgrounds, Accents, Records;
-    }
-
-    private static GameObject BuildMainMenu(Transform root, out MenuParts p)
-    {
-        p = new MenuParts { Items = new Button[6], Backgrounds = new Object[6], Accents = new Object[6], Records = new Object[3] };
-
-        RectTransform menu = Rect("MenuPanel", root);
-        Stretch(menu);
-
-        RectTransform side = Rect("SidePanel", menu);
-        side.anchorMin = new Vector2(0f, 0f);
-        side.anchorMax = new Vector2(0f, 1f);
-        side.pivot = new Vector2(0f, 0.5f);
-        side.sizeDelta = new Vector2(640f, 0f);
-        Img(side, PanelColor, null).raycastTarget = true;
-
-        RectTransform edge = Rect("Edge", side);
-        edge.anchorMin = new Vector2(1f, 0f);
-        edge.anchorMax = new Vector2(1f, 1f);
-        edge.pivot = new Vector2(1f, 0.5f);
-        edge.sizeDelta = new Vector2(1f, 0f);
-        Img(edge, new Color(1f, 1f, 1f, 0.08f), null);
-
-        const float left = 72f;
-        TopLeft(Label(side, "Overline", "3D  АРКАДА", 22, Green, TextAnchor.MiddleLeft, true), left, -118f, 480f, 30f);
-        TopLeft(Label(side, "Title", "Змейка", 116, Text1, TextAnchor.MiddleLeft, true), left - 6f, -146f, 540f, 140f);
-        TopLeft(Label(side, "Tagline", "Свободное движение, прыжки и рывки", 26, Text2, TextAnchor.MiddleLeft, false), left, -290f, 520f, 36f);
-        TopLeft(Label(side, "Section", "ВЫБЕРИТЕ РЕЖИМ", 19, Text3, TextAnchor.MiddleLeft, true), left, -372f, 480f, 26f);
-
-        // Карточки режимов.
-        for (int i = 0; i < 3; i++)
-        {
-            RectTransform card = Rect("Mode_" + ModeNames[i], side);
-            TopLeft(card, left, -410f - i * 118f, 496f, 104f);
-            Image bg = Img(card, new Color(1f, 1f, 1f, 0.06f), _rounded);
-            bg.raycastTarget = true;
-            Button button = card.gameObject.AddComponent<Button>();
-            button.transition = Selectable.Transition.None;
-            button.navigation = new Navigation { mode = Navigation.Mode.None };
-            card.gameObject.AddComponent<MenuItemHover>();
-
-            RectTransform accent = Rect("Accent", card);
-            Place(accent, new Vector2(0f, 0.5f), new Vector2(0f, 0f), new Vector2(6f, 56f));
-            accent.pivot = new Vector2(0f, 0.5f);
-            Img(accent, ModeColors[i], _pill);
-            accent.gameObject.SetActive(false);
-
-            RectTransform dot = Rect("Dot", card);
-            Place(dot, new Vector2(0f, 0.5f), new Vector2(34f, 0f), new Vector2(16f, 16f));
-            Img(dot, ModeColors[i], _circle);
-
-            Text name = Label(card, "Name", ModeNames[i], 34, Text1, TextAnchor.MiddleLeft, true);
-            Place(name.rectTransform, new Vector2(0f, 0.5f), new Vector2(60f, 16f), new Vector2(300f, 44f));
-            name.rectTransform.pivot = new Vector2(0f, 0.5f);
-            Text desc = Label(card, "Description", ModeDescriptions[i], 21, Text2, TextAnchor.MiddleLeft, false);
-            Place(desc.rectTransform, new Vector2(0f, 0.5f), new Vector2(60f, -20f), new Vector2(300f, 30f));
-            desc.rectTransform.pivot = new Vector2(0f, 0.5f);
-            Text record = Label(card, "Record", "", 20, Text2, TextAnchor.MiddleRight, false);
-            Place(record.rectTransform, new Vector2(1f, 0.5f), new Vector2(-24f, 0f), new Vector2(180f, 30f));
-            record.rectTransform.pivot = new Vector2(1f, 0.5f);
-
-            p.Items[i] = button;
-            p.Backgrounds[i] = bg;
-            p.Accents[i] = accent.gameObject;
-            p.Records[i] = record;
-        }
-
-        // Нижний ряд: рекорды, настройки, выход.
-        string[] names = { "Рекорды", "Настройки", "Выйти" };
-        for (int i = 0; i < 3; i++)
-        {
-            RectTransform b = Rect("Button_" + names[i], side);
-            TopLeft(b, left + i * 170f, -778f, 156f, 60f);
-            Image bg = Img(b, new Color(1f, 1f, 1f, 0.08f), _rounded);
-            bg.raycastTarget = true;
-            Button button = b.gameObject.AddComponent<Button>();
-            button.transition = Selectable.Transition.None;
-            button.navigation = new Navigation { mode = Navigation.Mode.None };
-            b.gameObject.AddComponent<MenuItemHover>();
-            Text label = Label(b, "Label", names[i], 24, i == 2 ? Red : Text1, TextAnchor.MiddleCenter, true);
-            Stretch(label.rectTransform);
-
-            p.Items[3 + i] = button;
-            p.Backgrounds[3 + i] = bg;
-        }
-
-        Text footer = Label(side, "Footer", "↑ ↓  выбор        Enter  играть", 21, Text2, TextAnchor.MiddleLeft, false);
-        Place(footer.rectTransform, new Vector2(0f, 0f), new Vector2(left, 52f), new Vector2(480f, 30f));
-        footer.rectTransform.pivot = new Vector2(0f, 0.5f);
-
-        Text version = Label(menu, "Version", "Змейка 3D  ·  v1.2", 18, new Color(1f, 1f, 1f, 0.6f), TextAnchor.LowerRight, false);
-        Place(version.rectTransform, new Vector2(1f, 0f), new Vector2(-36f, 28f), new Vector2(400f, 28f));
-        version.rectTransform.pivot = new Vector2(1f, 0f);
-        AddShadow(version, 0.5f);
-        return menu.gameObject;
-    }
-
-    // =====================================================================
-    // Пауза
-    // =====================================================================
-
-    private sealed class PauseParts
-    {
-        public Button Resume, Restart, Settings, Menu;
-    }
-
-    private static GameObject BuildPause(Transform root, out PauseParts p)
-    {
-        p = new PauseParts();
-        RectTransform card = Modal(root, "PausePanel", new Vector2(520f, 560f), out GameObject panel);
-        TopCenter(Label(card, "Title", "Пауза", 56, Text1, TextAnchor.MiddleCenter, true), -44f, 440f, 70f);
-        TopCenter(Label(card, "Subtitle", "Игра остановлена", 24, Text2, TextAnchor.MiddleCenter, false), -116f, 440f, 34f);
-        p.Resume = PrimaryButton(card, "Resume", "Продолжить", -184f, 420f);
-        p.Restart = SecondaryButton(card, "Restart", "Заново", -266f, 420f, Text1);
-        p.Settings = SecondaryButton(card, "Settings", "Настройки", -348f, 420f, Text1);
-        p.Menu = SecondaryButton(card, "Menu", "В главное меню", -430f, 420f, Text1);
-        return panel;
-    }
-
-    // =====================================================================
-    // Итоги партии
-    // =====================================================================
-
-    private sealed class GameOverParts
-    {
-        public Text Title, Score, Rank, Stats;
-        public Button Restart, Menu;
-    }
-
-    private static GameObject BuildGameOver(Transform root, out GameOverParts p)
-    {
-        p = new GameOverParts();
-        RectTransform card = Modal(root, "GameOverPanel", new Vector2(620f, 740f), out GameObject panel);
-        p.Rank = Label(card, "Rank", "", 22, Gold, TextAnchor.MiddleCenter, true);
-        TopCenter(p.Rank, -40f, 560f, 30f);
-        p.Title = Label(card, "Title", "Игра окончена", 46, Text1, TextAnchor.MiddleCenter, true);
-        TopCenter(p.Title, -74f, 560f, 60f);
-        p.Score = Label(card, "Score", "0", 112, Text1, TextAnchor.MiddleCenter, true);
-        TopCenter(p.Score, -138f, 560f, 130f);
-        TopCenter(Label(card, "ScoreCaption", "очков", 22, Text3, TextAnchor.MiddleCenter, false), -262f, 560f, 30f);
-
-        RectTransform stats = Rect("Stats", card);
-        TopCenterRect(stats, -312f, 520f, 236f);
-        Img(stats, Surface, _rounded);
-        Text labels = Label(stats, "Labels", "Длина\nЯблоки\nБонусы\nУровень\nВремя", 25, Text2, TextAnchor.MiddleLeft, false);
-        labels.lineSpacing = 1.3f;
-        Stretch(labels.rectTransform);
-        labels.rectTransform.offsetMin = new Vector2(32f, 0f);
-        p.Stats = Label(stats, "Values", "", 25, Text1, TextAnchor.MiddleRight, true);
-        p.Stats.lineSpacing = 1.3f;
-        Stretch(p.Stats.rectTransform);
-        p.Stats.rectTransform.offsetMax = new Vector2(-32f, 0f);
-
-        p.Restart = PrimaryButton(card, "Restart", "Ещё раз", -578f, 250f);
-        p.Restart.GetComponent<RectTransform>().anchoredPosition = new Vector2(-133f, -578f);
-        p.Menu = SecondaryButton(card, "Menu", "В меню", -578f, 250f, Text1);
-        p.Menu.GetComponent<RectTransform>().anchoredPosition = new Vector2(133f, -578f);
-        TopCenter(Label(card, "Hint", "R или Enter — ещё раз", 19, Text3, TextAnchor.MiddleCenter, false), -672f, 560f, 28f);
-        return panel;
-    }
-
-    // =====================================================================
-    // Настройки
-    // =====================================================================
-
-    private sealed class SettingsParts
-    {
-        public Slider Master, Music, Sfx, Steer;
-        public Toggle Fullscreen, Minimap, Rival;
-        public Button Quality, Tutorial, Back;
-        public Text QualityLabel;
-    }
-
-    private static GameObject BuildSettings(Transform root, out SettingsParts p)
-    {
-        p = new SettingsParts();
-        RectTransform card = Modal(root, "SettingsPanel", new Vector2(760f, 880f), out GameObject panel);
-        TopCenter(Label(card, "Title", "Настройки", 48, Text1, TextAnchor.MiddleCenter, true), -36f, 680f, 64f);
-
-        Section(card, "Звук", -128f);
-        p.Master = SliderRow(card, "Общая громкость", -168f, 0f, 1f);
-        p.Music = SliderRow(card, "Музыка", -228f, 0f, 1f);
-        p.Sfx = SliderRow(card, "Звуки", -288f, 0f, 1f);
-
-        Section(card, "Управление", -356f);
-        p.Steer = SliderRow(card, "Чувствительность руля", -396f, 0.5f, 1.5f);
-
-        Section(card, "Экран и игра", -464f);
-        p.Fullscreen = SwitchRow(card, "Полный экран  (F11)", -504f);
-        p.Minimap = SwitchRow(card, "Мини-карта", -564f);
-        p.Rival = SwitchRow(card, "Змея-соперник  <size=19><color=#85919F>со следующей партии</color></size>", -624f);
-
-        RowLabel(card, "Качество графики", -700f);
-        p.Quality = SecondaryButton(card, "Quality", "Качество", -700f, 240f, Text1);
-        RectTransform q = p.Quality.GetComponent<RectTransform>();
-        q.anchorMin = q.anchorMax = new Vector2(1f, 1f);
-        q.pivot = new Vector2(1f, 0.5f);
-        q.anchoredPosition = new Vector2(-56f, -700f);
-        q.sizeDelta = new Vector2(240f, 52f);
-        p.QualityLabel = p.Quality.GetComponentInChildren<Text>();
-        p.QualityLabel.fontSize = 22;
-
-        p.Tutorial = SecondaryButton(card, "Tutorial", "Показать обучение", -784f, 310f, Text1);
-        p.Tutorial.GetComponent<RectTransform>().anchoredPosition = new Vector2(-170f, -784f);
-        p.Back = PrimaryButton(card, "Done", "Готово", -784f, 310f);
-        p.Back.GetComponent<RectTransform>().anchoredPosition = new Vector2(170f, -784f);
-        return panel;
-    }
-
-    private static void Section(RectTransform card, string text, float y)
-    {
-        Text t = Label(card, "Section_" + text, text.ToUpperInvariant(), 20, Text3, TextAnchor.MiddleLeft, true);
-        Place(t.rectTransform, new Vector2(0f, 1f), new Vector2(56f, y), new Vector2(500f, 26f));
-        t.rectTransform.pivot = new Vector2(0f, 0.5f);
-    }
-
-    private static void RowLabel(RectTransform card, string text, float y)
-    {
-        Text t = Label(card, "Label", text, 26, Text1, TextAnchor.MiddleLeft, false);
-        Place(t.rectTransform, new Vector2(0f, 1f), new Vector2(56f, y), new Vector2(380f, 40f));
-        t.rectTransform.pivot = new Vector2(0f, 0.5f);
-    }
-
-    private static Slider SliderRow(RectTransform card, string label, float y, float min, float max)
-    {
-        RowLabel(card, label, y);
-        RectTransform rt = Rect("Slider", card);
-        Place(rt, new Vector2(1f, 1f), new Vector2(-56f, y), new Vector2(280f, 30f));
-        rt.pivot = new Vector2(1f, 0.5f);
-        var slider = rt.gameObject.AddComponent<Slider>();
-
-        RectTransform track = Rect("Background", rt);
-        track.anchorMin = new Vector2(0f, 0.5f);
-        track.anchorMax = new Vector2(1f, 0.5f);
-        track.sizeDelta = new Vector2(0f, 8f);
-        Img(track, new Color(1f, 1f, 1f, 0.12f), _pill);
-
-        RectTransform fillArea = Rect("Fill Area", rt);
-        fillArea.anchorMin = new Vector2(0f, 0.5f);
-        fillArea.anchorMax = new Vector2(1f, 0.5f);
-        fillArea.sizeDelta = new Vector2(-14f, 8f);
-        RectTransform fill = Rect("Fill", fillArea);
-        fill.sizeDelta = new Vector2(14f, 0f);
-        Img(fill, Green, _pill);
-
-        RectTransform handleArea = Rect("Handle Slide Area", rt);
-        Stretch(handleArea);
-        handleArea.offsetMin = new Vector2(13f, 0f);
-        handleArea.offsetMax = new Vector2(-13f, 0f);
-        RectTransform handle = Rect("Handle", handleArea);
-        // Slider растягивает ручку на всю высоту, поэтому высоту задаём «минус 4» от 30 = 26.
-        handle.sizeDelta = new Vector2(26f, -4f);
-        Image handleImg = Img(handle, Color.white, _circle);
-        handleImg.raycastTarget = true;
-
-        slider.fillRect = fill;
-        slider.handleRect = handle;
-        slider.targetGraphic = handleImg;
-        slider.direction = Slider.Direction.LeftToRight;
-        slider.minValue = min;
-        slider.maxValue = max;
-        slider.value = max;
-        slider.navigation = new Navigation { mode = Navigation.Mode.None };
-        return slider;
-    }
-
-    private static Toggle SwitchRow(RectTransform card, string label, float y)
-    {
-        RowLabel(card, label, y);
-        RectTransform rt = Rect("Switch", card);
-        Place(rt, new Vector2(1f, 1f), new Vector2(-56f, y), new Vector2(60f, 32f));
-        rt.pivot = new Vector2(1f, 0.5f);
-        Image track = Img(rt, Green, _pill);
-        track.raycastTarget = true;
-
-        RectTransform knob = Rect("Knob", rt);
-        Place(knob, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(24f, 24f));
-        Img(knob, Color.white, _circle);
-
-        var toggle = rt.gameObject.AddComponent<Toggle>();
-        toggle.transition = Selectable.Transition.None;
-        toggle.targetGraphic = track;
-        toggle.navigation = new Navigation { mode = Navigation.Mode.None };
-        toggle.isOn = true;
-
-        var view = rt.gameObject.AddComponent<ToggleSwitch>();
-        SnakeSceneBuilder.Wire(view, ("_track", track), ("_knob", knob));
-        return toggle;
-    }
-
-    // =====================================================================
-    // Рекорды
-    // =====================================================================
-
-    private static GameObject BuildLeaderboard(Transform root, out Object[] columns, out Button back)
-    {
-        RectTransform card = Modal(root, "LeaderboardPanel", new Vector2(1120f, 780f), out GameObject panel);
-        TopCenter(Label(card, "Title", "Рекорды", 48, Text1, TextAnchor.MiddleCenter, true), -36f, 1000f, 64f);
-
-        columns = new Object[3];
-        for (int i = 0; i < 3; i++)
-        {
-            RectTransform col = Rect("Column_" + ModeNames[i], card);
-            TopCenterRect(col, -124f, 330f, 540f);
-            col.anchoredPosition = new Vector2(-350f + i * 350f, -124f);
-            Img(col, Surface, _rounded);
-
-            RectTransform dot = Rect("Dot", col);
-            Place(dot, new Vector2(0f, 1f), new Vector2(32f, -40f), new Vector2(14f, 14f));
-            Img(dot, ModeColors[i], _circle);
-            Text header = Label(col, "Header", ModeNames[i], 28, Text1, TextAnchor.MiddleLeft, true);
-            Place(header.rectTransform, new Vector2(0f, 1f), new Vector2(54f, -40f), new Vector2(250f, 40f));
-            header.rectTransform.pivot = new Vector2(0f, 0.5f);
-
-            Text rows = Label(col, "Rows", "", 23, Text2, TextAnchor.UpperLeft, false);
-            rows.lineSpacing = 1.25f;
-            Stretch(rows.rectTransform);
-            rows.rectTransform.offsetMin = new Vector2(32f, 24f);
-            rows.rectTransform.offsetMax = new Vector2(-24f, -80f);
-            columns[i] = rows;
-        }
-
-        back = PrimaryButton(card, "Done", "Готово", -690f, 300f);
-        return panel;
     }
 
     // =====================================================================
     // Строительные блоки
     // =====================================================================
 
-    /// <summary>Затемнение экрана, мягкая тень и скруглённая карточка по центру. Возвращает карточку.</summary>
-    private static RectTransform Modal(Transform root, string name, Vector2 size, out GameObject panel)
+    /// <summary>Полноэкранный слой с затемнением (блокирует клики под собой) и CanvasGroup для появления.</summary>
+    private static RectTransform Screen(Transform root, string name, Texture2D shade, out CanvasGroup group)
     {
-        RectTransform dim = Rect(name, root);
-        Stretch(dim);
-        Img(dim, Dim, null).raycastTarget = true;
-
-        RectTransform shadow = Rect("Shadow", dim);
-        Place(shadow, new Vector2(0.5f, 0.5f), new Vector2(0f, -10f), size + new Vector2(90f, 90f));
-        Img(shadow, new Color(0f, 0f, 0f, 0.6f), _shadow);
-
-        RectTransform card = Rect("Card", dim);
-        Place(card, new Vector2(0.5f, 0.5f), Vector2.zero, size);
-        Img(card, CardColor, _rounded).raycastTarget = true;
-
-        panel = dim.gameObject;
-        return card;
+        RectTransform screen = Rect(name, root);
+        Stretch(screen);
+        RawImage bg = Raw(screen, shade);
+        bg.raycastTarget = true;
+        group = screen.gameObject.AddComponent<CanvasGroup>();
+        return screen;
     }
 
-    private static Button PrimaryButton(RectTransform card, string name, string text, float y, float width)
+    /// <summary>Заголовок экрана: лаймовая надпись-кикер, крупный заголовок и короткая черта.</summary>
+    private static void Heading(RectTransform screen, string kicker, string title, int size)
     {
-        Button b = MakeButton(card, name, y, width, Green);
-        ColorBlock c = b.colors;
-        c.normalColor = new Color(0.9f, 0.9f, 0.9f, 1f);
-        c.highlightedColor = Color.white;
-        c.pressedColor = new Color(0.75f, 0.75f, 0.75f, 1f);
-        c.selectedColor = c.normalColor;
-        c.colorMultiplier = 1.1f;
-        b.colors = c;
-        Text label = Label(b.transform, "Label", text, 28, GreenDark, TextAnchor.MiddleCenter, true);
-        Stretch(label.rectTransform);
-        return b;
+        TopLeft(Label(screen, "Kicker", Spaced(kicker), 20, Venom, TextAnchor.MiddleLeft, true), LEFT, -92f, 900f, 30f);
+        float height = size * 1.18f;
+        TopLeft(Label(screen, "Title", title, size, Bone, TextAnchor.MiddleLeft, true), LEFT - size * 0.06f, -122f, 1400f, height);
+        TopLeft(Line(screen, Venom), LEFT, -122f - height - 8f, 72f, 5f);
     }
 
-    /// <summary>Полупрозрачная кнопка: множитель 2 даёт «подсветку» альфы при наведении.</summary>
-    private static Button SecondaryButton(RectTransform card, string name, string text, float y, float width, Color textColor)
+    /// <summary>
+    /// Пункт списка: номер «01», крупная подпись, необязательное описание и рекорд.
+    /// Акцентная полоса стоит снаружи содержимого, поэтому не уезжает вместе с ним.
+    /// </summary>
+    private static Row MakeRow(RectTransform parent, int index, string label, string description, float x, float y, float width, float height,
+        int labelSize, Color accentColor, bool withRecord)
     {
-        Button b = MakeButton(card, name, y, width, new Color(1f, 1f, 1f, 0.08f));
-        ColorBlock c = b.colors;
-        c.colorMultiplier = 2f;
-        c.normalColor = new Color(0.5f, 0.5f, 0.5f, 0.5f);
-        c.highlightedColor = new Color(1f, 1f, 1f, 1f);
-        c.pressedColor = new Color(0.75f, 0.75f, 0.75f, 0.75f);
-        c.selectedColor = c.normalColor;
-        b.colors = c;
-        Text label = Label(b.transform, "Label", text, 26, textColor, TextAnchor.MiddleCenter, true);
-        Stretch(label.rectTransform);
-        return b;
+        var row = new Row();
+        RectTransform root = Rect("Row_" + label, parent);
+        TopLeft(root, x, y, width, height);
+        Image hit = Img(root, new Color(0f, 0f, 0f, 0f), null);
+        hit.raycastTarget = true;
+        row.Button = root.gameObject.AddComponent<Button>();
+        row.Button.transition = Selectable.Transition.None;
+        row.Button.navigation = new Navigation { mode = Navigation.Mode.None };
+        root.gameObject.AddComponent<MenuItemHover>().Index = index;
+
+        RectTransform accent = Rect("Accent", root);
+        Anchor(accent, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(-22f, 0f), new Vector2(4f, height * 0.6f));
+        Img(accent, accentColor, null);
+        accent.gameObject.SetActive(false);
+        row.Accent = accent.gameObject;
+
+        RectTransform content = Rect("Content", root);
+        Stretch(content);
+        row.Content = content;
+
+        bool sub = description != null;
+        float labelY = sub ? height * 0.14f : 0f;
+        bool small = labelSize < 34;
+        float labelX = small ? 0f : 64f;
+
+        if (!small)
+        {
+            row.Index = Label(content, "Index", (index + 1).ToString("00"), 21, Smoke, TextAnchor.MiddleLeft, true);
+            Anchor(row.Index.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, labelY + labelSize * 0.12f), new Vector2(56f, 28f));
+        }
+
+        row.Label = Label(content, "Label", label, labelSize, Ash, TextAnchor.MiddleLeft, true);
+        Anchor(row.Label.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(labelX, labelY), new Vector2(width - labelX, labelSize * 1.3f));
+
+        if (sub)
+        {
+            Text d = Label(content, "Description", description, 20, Smoke, TextAnchor.MiddleLeft, false);
+            Anchor(d.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(labelX + 2f, labelY - labelSize * 0.66f), new Vector2(width - labelX, 26f));
+        }
+
+        if (withRecord)
+        {
+            row.Record = Label(content, "Record", "", 18, Smoke, TextAnchor.MiddleRight, true);
+            Anchor(row.Record.rectTransform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(0f, labelY), new Vector2(220f, 24f));
+        }
+        return row;
     }
 
-    private static Button MakeButton(RectTransform card, string name, float y, float width, Color color)
+    /// <summary>Ряд подсказок «клавиша — действие»; раскладку делает HorizontalLayoutGroup.</summary>
+    private static void HintRow(RectTransform parent, Vector2 anchor, Vector2 position, Vector2 pivot, params (string key, string action)[] hints)
     {
-        RectTransform rt = Rect(name, card);
-        TopCenterRect(rt, y, width, 66f);
-        Image img = Img(rt, color, _rounded);
+        RectTransform row = Rect("Hints", parent);
+        row.anchorMin = row.anchorMax = anchor;
+        row.pivot = pivot;
+        row.anchoredPosition = position;
+        var layout = row.gameObject.AddComponent<HorizontalLayoutGroup>();
+        layout.spacing = 10f;
+        layout.childAlignment = TextAnchor.MiddleLeft;
+        layout.childControlWidth = true;
+        layout.childControlHeight = true;
+        layout.childForceExpandWidth = false;
+        layout.childForceExpandHeight = false;
+        var fitter = row.gameObject.AddComponent<ContentSizeFitter>();
+        fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+        for (int i = 0; i < hints.Length; i++)
+        {
+            RectTransform key = Keycap(row, hints[i].key);
+            var element = key.gameObject.AddComponent<LayoutElement>();
+            element.preferredWidth = key.sizeDelta.x;
+            element.preferredHeight = key.sizeDelta.y;
+            Text action = Label(row, "Action", hints[i].action, 19, Ash, TextAnchor.MiddleLeft, false);
+            if (i < hints.Length - 1) action.text += "      ";
+        }
+    }
+
+    /// <summary>Клавиша-подсказка: контур со скошенными углами и надпись.</summary>
+    private static RectTransform Keycap(Transform parent, string key)
+    {
+        RectTransform rt = Rect("Key_" + key, parent);
+        rt.sizeDelta = new Vector2(Mathf.Max(34f, 20f + key.Length * 11f), 32f);
+        Img(rt, new Color(Bone.r, Bone.g, Bone.b, 0.55f), _keycap);
+        Text t = Label(rt, "Text", key, 16, Bone, TextAnchor.MiddleCenter, true);
+        Stretch(t.rectTransform);
+        return rt;
+    }
+
+    /// <summary>Главная кнопка: лаймовая плашка со скошенными углами и тёмный текст.</summary>
+    private static Button PrimaryButton(RectTransform parent, string name, string text)
+    {
+        RectTransform rt = Rect(name, parent);
+        Image img = Img(rt, Venom, _chamfer);
         img.raycastTarget = true;
         var b = rt.gameObject.AddComponent<Button>();
         b.targetGraphic = img;
         b.navigation = new Navigation { mode = Navigation.Mode.None };
+        ColorBlock c = b.colors;
+        c.normalColor = new Color(0.9f, 0.9f, 0.9f, 1f);
+        c.highlightedColor = Color.white;
+        c.pressedColor = new Color(0.72f, 0.72f, 0.72f, 1f);
+        c.selectedColor = c.normalColor;
+        c.colorMultiplier = 1.1f;
+        b.colors = c;
+        Text label = Label(rt, "Label", Spaced(text), 20, Ink, TextAnchor.MiddleCenter, true);
+        Stretch(label.rectTransform);
         return b;
     }
 
-    private static RectTransform Plate(Transform parent, string name, Vector2 anchor, Vector2 position, Vector2 size, Color color, Sprite sprite)
+    /// <summary>Текстовая кнопка: подпись светлеет при наведении.</summary>
+    private static Button LinkButton(RectTransform parent, string name, string text, int size, out Text label)
     {
         RectTransform rt = Rect(name, parent);
-        rt.anchorMin = rt.anchorMax = rt.pivot = anchor;
-        rt.anchoredPosition = position;
-        rt.sizeDelta = size;
-        Img(rt, color, sprite);
-        return rt;
+        Image hit = Img(rt, new Color(0f, 0f, 0f, 0f), null);
+        hit.raycastTarget = true;
+        label = Label(rt, "Label", text, size, Color.white, TextAnchor.MiddleCenter, true);
+        Stretch(label.rectTransform);
+        var b = rt.gameObject.AddComponent<Button>();
+        b.targetGraphic = label;
+        b.navigation = new Navigation { mode = Navigation.Mode.None };
+        ColorBlock c = b.colors;
+        c.normalColor = Ash;
+        c.highlightedColor = Bone;
+        c.pressedColor = Venom;
+        c.selectedColor = Ash;
+        c.colorMultiplier = 1f;
+        b.colors = c;
+        return b;
     }
 
-    /// <summary>Полоса заполнения внутри плашки (Image типа Filled, слева направо).</summary>
-    private static Image FillBar(RectTransform parent, Color color)
+    private static RectTransform Line(Transform parent, Color color)
     {
-        RectTransform rt = Rect("Fill", parent);
-        Stretch(rt);
-        rt.offsetMin = new Vector2(4f, 4f);
-        rt.offsetMax = new Vector2(-4f, -4f);
-        Image img = Img(rt, color, _rounded);
-        img.type = Image.Type.Filled;
-        img.fillMethod = Image.FillMethod.Horizontal;
-        img.fillOrigin = 0;
-        img.fillAmount = 1f;
-        return img;
+        RectTransform rt = Rect("Line", parent);
+        Img(rt, color, null);
+        return rt;
     }
 
     private static Image Img(RectTransform rt, Color color, Sprite sprite)
@@ -691,6 +783,14 @@ internal static class UIBuilder
         return img;
     }
 
+    private static RawImage Raw(RectTransform rt, Texture texture)
+    {
+        var raw = rt.gameObject.AddComponent<RawImage>();
+        raw.texture = texture;
+        raw.raycastTarget = false;
+        return raw;
+    }
+
     private static Text Label(Transform parent, string name, string value, int size, Color color, TextAnchor align, bool bold)
     {
         RectTransform rt = Rect(name, parent);
@@ -698,19 +798,35 @@ internal static class UIBuilder
         t.font = _font;
         t.text = value;
         t.fontSize = size;
-        t.fontStyle = bold ? FontStyle.Bold : FontStyle.Normal;
+        // Жирный у системного шрифта синтезируется — на мелких кеглях он «мылит» буквы,
+        // поэтому мелкие подписи всегда обычного начертания.
+        t.fontStyle = bold && size > 22 ? FontStyle.Bold : FontStyle.Normal;
         t.color = color;
         t.alignment = align;
+        t.lineSpacing = 1f;
+        t.supportRichText = true;
         t.horizontalOverflow = HorizontalWrapMode.Overflow;
         t.verticalOverflow = VerticalWrapMode.Overflow;
         t.raycastTarget = false;
         return t;
     }
 
-    private static void AddShadow(Text text, float alpha)
+    /// <summary>Разрядка для мелких заголовков: тонкий пробел между буквами (у Text нет межбуквенного интервала).</summary>
+    private static string Spaced(string text)
+    {
+        var sb = new System.Text.StringBuilder(text.Length * 2);
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (i > 0) sb.Append(' ');
+            sb.Append(text[i]);
+        }
+        return sb.ToString();
+    }
+
+    private static void AddShadow(Text text)
     {
         var shadow = text.gameObject.AddComponent<Shadow>();
-        shadow.effectColor = new Color(0f, 0f, 0f, alpha);
+        shadow.effectColor = new Color(0f, 0f, 0f, 0.55f);
         shadow.effectDistance = new Vector2(0f, -2f);
     }
 
@@ -731,41 +847,17 @@ internal static class UIBuilder
         rt.offsetMax = Vector2.zero;
     }
 
-    /// <summary>Растянуть по родителю с горизонтальными отступами.</summary>
-    private static void Fill(RectTransform rt, float padding)
-    {
-        Stretch(rt);
-        rt.offsetMin = new Vector2(padding, 0f);
-        rt.offsetMax = new Vector2(-padding, 0f);
-    }
-
-    private static void Place(RectTransform rt, Vector2 anchor, Vector2 position, Vector2 size)
+    private static void Anchor(RectTransform rt, Vector2 anchor, Vector2 pivot, Vector2 position, Vector2 size)
     {
         rt.anchorMin = rt.anchorMax = anchor;
-        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.pivot = pivot;
         rt.anchoredPosition = position;
         rt.sizeDelta = size;
     }
 
-    /// <summary>Привязка к левому верхнему углу родителя.</summary>
+    /// <summary>Привязка к левому верхнему углу родителя: x вправо, y вниз (отрицательный).</summary>
     private static void TopLeft(Component c, float x, float y, float w, float h)
     {
-        var rt = (RectTransform)c.transform;
-        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0f, 1f);
-        rt.anchoredPosition = new Vector2(x, y);
-        rt.sizeDelta = new Vector2(w, h);
-    }
-
-    private static void TopCenter(Text t, float y, float w, float h)
-    {
-        TopCenterRect(t.rectTransform, y, w, h);
-    }
-
-    /// <summary>Привязка к верхнему краю по центру; y — отступ верхней кромки (отрицательный).</summary>
-    private static void TopCenterRect(RectTransform rt, float y, float w, float h)
-    {
-        rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0.5f, 1f);
-        rt.anchoredPosition = new Vector2(0f, y);
-        rt.sizeDelta = new Vector2(w, h);
+        Anchor((RectTransform)c.transform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(x, y), new Vector2(w, h));
     }
 }

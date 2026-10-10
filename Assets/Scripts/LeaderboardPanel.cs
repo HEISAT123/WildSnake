@@ -37,12 +37,12 @@ namespace Snake3D
             {
                 sb.Clear();
                 Leaderboard board = _leaderboard.GetBoard((GameMode)m);
-                if (board.Count == 0) sb.Append("пока пусто");
+                if (board.Count == 0) sb.Append("Пока пусто — сыграйте первым");
                 for (int i = 0; i < board.Count; i++)
                 {
                     LeaderboardEntry e = board.Entries[i];
-                    sb.Append(i + 1).Append(".   ").Append(e.Score)
-                      .Append("     длина ").Append(e.Length.ToString("0.0", CultureInfo.InvariantCulture))
+                    sb.Append((i + 1).ToString("00")).Append("      ").Append(e.Score)
+                      .Append("      ").Append(e.Length.ToString("0.0", CultureInfo.InvariantCulture)).Append(" м")
                       .Append('\n');
                 }
                 _columns[m].text = sb.ToString();

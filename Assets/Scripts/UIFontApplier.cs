@@ -4,7 +4,7 @@ using UnityEngine.UI;
 namespace Snake3D
 {
     /// <summary>
-    /// Ставит всем текстам интерфейса системный шрифт (Segoe UI в Windows) — он современнее
+    /// Ставит всем текстам интерфейса системный шрифт (Bahnschrift в Windows, DIN-подобный) — он современнее
     /// встроенного Arial и поддерживает кириллицу. Шрифт берётся из ОС при запуске, поэтому
     /// это не сторонний ассет; если его нет, остаётся встроенный.
     /// </summary>
@@ -12,7 +12,7 @@ namespace Snake3D
     {
         [Header("Шрифт")]
         [Tooltip("Системные шрифты по приоритету: берётся первый установленный")]
-        [SerializeField] private string[] _fontNames = { "Segoe UI", "Helvetica Neue", "Arial" };
+        [SerializeField] private string[] _fontNames = { "Bahnschrift", "Segoe UI", "Helvetica Neue", "Arial" };
 
         [Tooltip("Базовый размер для растеризации")]
         [SerializeField, Min(8)] private int _baseSize = 32;

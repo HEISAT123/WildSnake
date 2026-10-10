@@ -183,7 +183,8 @@ namespace Snake3D
                     else if (GameInput.Restart) Restart();
                     break;
                 case GameState.GameOver:
-                    if (GameInput.Restart || GameInput.Confirm) Restart();
+                    // Enter/Space обрабатывает список на экране итогов («Ещё раз» выбран по умолчанию).
+                    if (GameInput.Restart) Restart();
                     break;
             }
         }

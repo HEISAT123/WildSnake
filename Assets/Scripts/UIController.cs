@@ -11,7 +11,7 @@ namespace Snake3D
     /// </summary>
     public class UIController : MonoBehaviour
     {
-        private static readonly string[] PowerUpNames = { "Ускорение", "Замедление", "Щит", "Магнит", "Очки x2" };
+        private static readonly string[] PowerUpNames = { "УСКОРЕНИЕ", "ЗАМЕДЛЕНИЕ", "ЩИТ", "МАГНИТ", "ОЧКИ ×2" };
         private const int POWER_UP_COUNT = 5;
 
         [Header("Источники данных")]
@@ -76,7 +76,8 @@ namespace Snake3D
         [SerializeField] private Text _gameOverTitle;
         [SerializeField] private Text _finalScoreText;
         [SerializeField] private Text _rankText;
-        [SerializeField] private Text _statsText;
+        [Tooltip("Значения статистики: длина, яблоки, бонусы, уровень, время")]
+        [SerializeField] private Text[] _statValues = new Text[5];
 
         [Header("Кнопки меню")]
         [SerializeField] private Button _classicButton;
@@ -239,34 +240,35 @@ namespace Snake3D
         // Тексты меняются только по событию, а не каждый кадр, поэтому строки не мусорят.
         private void OnScoreChanged(int score, int best)
         {
-            _scoreText.text = "Счёт: " + score;
-            _bestText.text = "Рекорд: " + best;
+            _scoreText.text = score.ToString();
+            _bestText.text = "РЕКОРД  " + best;
         }
 
         private void OnLevelChanged(int level)
         {
-            _levelText.text = "Уровень " + level;
-            if (level > 1 && _game.State == GameState.Playing) ShowBanner("Уровень " + level + "!");
+            _levelText.text = "УР " + level;
+            if (level > 1 && _game.State == GameState.Playing) ShowBanner("УРОВЕНЬ " + level);
         }
 
         private void OnPowerUpActivated(PowerUpType type)
         {
-            ShowBanner(PowerUpNames[(int)type] + "!");
+            ShowBanner(PowerUpNames[(int)type]);
         }
 
         private void OnShieldUsed(Vector3 position)
         {
-            ShowBanner("Щит спас!");
+            ShowBanner("ЩИТ СПАС");
         }
 
         private void OnArenaShrunk()
         {
-            ShowBanner("Арена сужается!");
+            ShowBanner("АРЕНА СУЖАЕТСЯ");
         }
 
         private void OnStateChanged(GameState state)
         {
-            _hudRoot.SetActive(state != GameState.Menu);
+            // HUD только во время партии: на паузе и в итогах он мешал бы композиции экрана.
+            _hudRoot.SetActive(state == GameState.Playing);
             _menuPanel.SetActive(state == GameState.Menu);
             _pausePanel.SetActive(state == GameState.Paused);
             _gameOverPanel.SetActive(state == GameState.GameOver);
@@ -289,22 +291,27 @@ namespace Snake3D
         /// Экран итогов: крупный счёт, место в таблице и столбец значений статистики
         /// (подписи к ним статичны и лежат рядом в разметке).
         /// </summary>
+        /// <summary>Экран итогов: крупный счёт, место в таблице и строка статистики по колонкам.</summary>
         private void FillGameOver()
         {
             bool timeUp = _game.IsTimed && _game.TimeLeft <= 0f;
-            _gameOverTitle.text = timeUp ? "Время вышло" : "Игра окончена";
+            _gameOverTitle.text = timeUp ? "ВРЕМЯ ВЫШЛО" : "ИГРА ОКОНЧЕНА";
             _finalScoreText.text = _score.Score.ToString();
 
             int rank = _game.LastRank;
-            _rankText.text = rank == 0 ? "Новый рекорд!" : rank > 0 ? "Место " + (rank + 1) + " в таблице рекордов" : "Рекорд: " + _score.Best;
+            _rankText.text = rank == 0 ? "НОВЫЙ РЕКОРД" : rank > 0 ? "МЕСТО " + (rank + 1) + " В ТАБЛИЦЕ" : "РЕКОРД  " + _score.Best;
 
             RunStats s = _game.Stats;
-            _statsText.text =
-                s.Length.ToString("0.0") + "\n" +
-                s.Apples + (s.Golden > 0 || s.Rotten > 0 ? "  (золотых " + s.Golden + ", гнилых " + s.Rotten + ")" : "") + "\n" +
-                s.PowerUps + "\n" +
-                s.MaxLevel + "\n" +
-                FormatTime(Mathf.FloorToInt(s.Time));
+            SetStat(0, s.Length.ToString("0.0"));
+            SetStat(1, s.Apples.ToString());
+            SetStat(2, s.PowerUps.ToString());
+            SetStat(3, s.MaxLevel.ToString());
+            SetStat(4, FormatTime(Mathf.FloorToInt(s.Time)));
+        }
+
+        private void SetStat(int index, string value)
+        {
+            if (index < _statValues.Length && _statValues[index] != null) _statValues[index].text = value;
         }
 
         private static string FormatTime(int totalSeconds)

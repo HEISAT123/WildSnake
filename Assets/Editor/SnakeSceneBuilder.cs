@@ -731,10 +731,11 @@ public static class SnakeSceneBuilder
         }
 
         // Текстуры неонового меню больше не используются.
-        foreach (string name in new[] { "MenuSky", "MenuSun", "MenuMountains", "MenuGrid" })
+        foreach (string name in new[] { "MenuSky.asset", "MenuSun.asset", "MenuMountains.asset", "MenuGrid.asset",
+                     "Rounded.png", "Pill.png", "Circle.png", "SoftShadow.png" })
         {
-            string path = "Assets/Materials/UI/" + name + ".asset";
-            if (AssetDatabase.LoadAssetAtPath<Texture2D>(path) != null) AssetDatabase.DeleteAsset(path);
+            string path = "Assets/Materials/UI/" + name;
+            if (AssetDatabase.LoadAssetAtPath<Object>(path) != null) AssetDatabase.DeleteAsset(path);
         }
 
         // Шахматная текстура пола заменена травой из EnvironmentBuilder.
@@ -791,7 +792,7 @@ public static class SnakeSceneBuilder
         so.ApplyModifiedPropertiesWithoutUndo();
     }
 
-    private static void SetColor(Object target, string field, Color value)
+    internal static void SetColor(Object target, string field, Color value)
     {
         SerializedObject so = FindForWrite(target, field, out SerializedProperty prop);
         if (prop == null) return;
