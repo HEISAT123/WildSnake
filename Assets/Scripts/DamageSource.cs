@@ -14,6 +14,8 @@ namespace Snake3D
         /// <summary>Укус лисы.</summary>
         Fox,
         /// <summary>Колючки свернувшегося ежа.</summary>
-        Hedgehog
+        Hedgehog,
+        /// <summary>Птица, защищающая гнездо.</summary>
+        Bird
     }
 }

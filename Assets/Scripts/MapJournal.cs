@@ -18,7 +18,9 @@ namespace Snake3D
             "Поймать трёх мышей",
             "Отпугнуть лису броском",
             "Уйти от атаки орла",
-            "Прогреться на солнечном камне"
+            "Прогреться на солнечном камне",
+            "Поймать две рыбы",
+            "Съесть три яйца из птичьих гнёзд"
         };
 
         [Header("Источники")]
@@ -107,18 +109,25 @@ namespace Snake3D
         {
             _dayText.text = "ДЕНЬ " + _dayNight.Day + (_dayNight.IsNight ? "  ·  НОЧЬ" : "");
             MainQuest quest = _game.Quest;
+            string generation = quest.Generation > 1 ? "Поколение " + quest.Generation + "  ·  " : "";
             if (quest.Stage == QuestStage.Grow)
             {
-                _questText.text = "1 из 2  ·  Повзрослеть";
-                _questNote.text = "Длина " + _game.SnakeLength.ToString("0.0") + " из " + quest.TargetLength.ToString("0")
-                                  + ", линьки " + Mathf.Min(_game.Stats.Molts, quest.TargetMolts) + " из " + quest.TargetMolts
+                _questText.text = generation + "1 из 3  ·  Повзрослеть";
+                _questNote.text = "Длина " + _game.SnakeLength.ToString("0.0") + " из " + quest.TargetLength.ToString("0.#")
+                                  + ", линьки " + Mathf.Min(_game.GenerationMolts, quest.TargetMolts) + " из " + quest.TargetMolts
                                   + ". Потом на карте появится гнездо.";
+            }
+            else if (quest.Stage == QuestStage.Nest)
+            {
+                _questText.text = generation + "2 из 3  ·  Отложить яйца в гнезде";
+                _questNote.text = "Гнездо — светлая метка на карте и столб света на поле. Нужны ночь и сытость "
+                                  + Mathf.RoundToInt(quest.NestSatiety * 100f) + "%.";
             }
             else
             {
-                _questText.text = "2 из 2  ·  Отложить яйца в гнезде";
-                _questNote.text = "Гнездо — светлая метка на карте и столб света на поле. Нужны ночь и сытость "
-                                  + Mathf.RoundToInt(quest.NestSatiety * 100f) + "%.";
+                _questText.text = generation + "3 из 3  ·  Охранять кладку";
+                _questNote.text = "Яиц " + quest.Eggs + ". Лиса придёт за ними — будьте рядом и отгоняйте её броском. "
+                                  + "Вылупление через " + TimeFormat.Clock(Mathf.CeilToInt(quest.HatchSecondsLeft)) + ".";
             }
             DailyGoals goals = _game.Goals;
             for (int i = 0; i < _goalLabels.Length; i++)

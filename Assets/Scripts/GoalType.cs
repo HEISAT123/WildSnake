@@ -16,6 +16,10 @@ namespace Snake3D
         /// <summary>Уйти от атаки орла.</summary>
         EvadeEagle = 5,
         /// <summary>Прогреться на солнечном камне.</summary>
-        BaskStone = 6
+        BaskStone = 6,
+        /// <summary>Поймать рыбу броском.</summary>
+        CatchFish = 7,
+        /// <summary>Съесть яйца из птичьих гнёзд.</summary>
+        EatEggs = 8
     }
 }

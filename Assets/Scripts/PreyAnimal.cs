@@ -3,7 +3,7 @@ using UnityEngine;
 namespace Snake3D
 {
     /// <summary>
-    /// Одно животное-добыча: жук, мышь, лягушка, птица или кролик. Бродит, замечает змею (если та не в траве),
+    /// Одно животное-добыча: жук, мышь, лягушка, птица, кролик, ёж или рыба. Бродит, замечает змею (если та не в траве),
     /// после короткой реакции убегает, а устав — замирает. Птица не бегает, а улетает и исчезает.
     /// Кролик скачет; схваченный броском, он бьётся в кольцах змеи (Held), пока та его душит или он не вырвется.
     /// Логика в данных (позиция, курс, высота прыжка), Transform только показывает результат.
@@ -75,6 +75,12 @@ namespace Snake3D
         [Tooltip("Через сколько секунд улетевшая птица исчезает")]
         [SerializeField, Min(0.5f)] private float _flyAwayTime = 3f;
 
+        [Tooltip("Рыба: как часто выпрыгивает из воды, раз в секунду")]
+        [SerializeField, Min(0f)] private float _leapRate = 0.06f;
+
+        [Tooltip("Рыба: длительность прыжка над водой, сек")]
+        [SerializeField, Min(0.1f)] private float _leapTime = 0.55f;
+
         public PreyKind Kind => _kind;
         public bool IsActive { get; private set; }
 
@@ -117,6 +123,9 @@ namespace Snake3D
         private float _lureRadius;
         private bool _lured;
         private Vector3 _lurePos;
+        private float _leap;
+
+        private bool IsFish => _kind == PreyKind.Fish;
 
         /// <summary>Однократная настройка из WildlifeManager.</summary>
         public void Initialize(GridManager grid, GameConfig config)
@@ -143,6 +152,7 @@ namespace Snake3D
             _hopPhase = 0f;
             _speedBoost = 0f;
             _appear = 0f;
+            _leap = 0f;
             _animTime = Random.value * 10f;
             SetMode(Mode.Idle, Random.Range(0.4f, 2f));
             SetScent(false);
@@ -224,6 +234,7 @@ namespace Snake3D
             }
 
             _velocity = Vector3.zero;
+            if (IsFish) TickLeap(dt);
             switch (_mode)
             {
                 case Mode.Idle:
@@ -309,6 +320,19 @@ namespace Snake3D
             if (d.sqrMagnitude > radius * radius) return false;
             _lurePos = t.Position;
             return true;
+        }
+
+        /// <summary>Рыба изредка выпрыгивает из воды — так её видно издалека; испуганная — чаще.</summary>
+        private void TickLeap(float dt)
+        {
+            if (_leap > 0f)
+            {
+                _leap -= dt;
+                _height = _leap > 0f ? Mathf.Sin((1f - _leap / _leapTime) * Mathf.PI) * 0.55f * _grid.CellSize : 0f;
+                return;
+            }
+            float rate = _mode == Mode.Flee ? _leapRate * 4f : _leapRate;
+            if (Random.value < rate * dt) _leap = _leapTime;
         }
 
         private void StartWander()
@@ -426,7 +450,8 @@ namespace Snake3D
             if (Mathf.Abs(local.x) > half.x - margin || Mathf.Abs(local.z) > half.y - margin) return true;
             Vector2Int cell = _grid.WorldToCell(point);
             if (!_grid.IsInside(cell)) return false;
-            // В воду заходит только лягушка.
+            // Рыба не выходит из воды, в воду заходит только лягушка.
+            if (IsFish) return !_grid.IsWater(cell);
             if (_kind != PreyKind.Frog && _grid.IsWater(cell)) return true;
             return _grid.GetObstacleHeight(cell) > 0f;
         }
@@ -443,14 +468,19 @@ namespace Snake3D
         {
             _mode = mode;
             _stateTimer = duration;
-            if (mode != Mode.FlyAway && mode != Mode.Wander && mode != Mode.Flee) _height = 0f;
+            if (mode != Mode.FlyAway && mode != Mode.Wander && mode != Mode.Flee && !(IsFish && _leap > 0f)) _height = 0f;
         }
 
         // ---------------- Визуал ----------------
 
-        /// <summary>По чему идёт животное: лягушка держится на воде, остальные — по земле.</summary>
+        /// <summary>По чему идёт животное: лягушка держится на воде, рыба — под самой поверхностью, остальные — по земле.</summary>
         private float Surface(Vector3 p)
         {
+            if (IsFish)
+            {
+                float level = _grid.WaterLevelAt(p);
+                return level > float.NegativeInfinity ? level - 0.12f * _grid.CellSize : _grid.GroundHeight(p);
+            }
             return _kind == PreyKind.Frog ? _grid.SurfaceHeight(p) : _grid.GroundHeight(p);
         }
 
@@ -484,6 +514,10 @@ namespace Snake3D
                 case PreyKind.Beetle:
                     if (moving) bob = Mathf.Abs(Mathf.Sin(_animTime * 30f)) * 0.015f;
                     break;
+                case PreyKind.Fish:
+                    // В прыжке тело следует дуге: вверх носом, потом вниз.
+                    if (_leap > 0f) pitch = Mathf.Lerp(-40f, 40f, 1f - _leap / _leapTime);
+                    break;
             }
             if (_kind == PreyKind.Hedgehog)
             {
@@ -500,7 +534,9 @@ namespace Snake3D
                 _body.localPosition = new Vector3(0f, Mathf.Abs(Mathf.Sin(_animTime * 29f)) * 0.05f, 0f);
                 return;
             }
-            _body.localRotation = Quaternion.Euler(pitch, 0f, 0f);
+            // Рыба виляет хвостом всем телом.
+            float sway = IsFish ? Mathf.Sin(_animTime * (moving ? 16f : 5f)) * (moving ? 14f : 6f) : 0f;
+            _body.localRotation = Quaternion.Euler(pitch, sway, 0f);
             _body.localPosition = new Vector3(0f, bob, 0f);
 
             if (_leftWing == null || _rightWing == null) return;

@@ -199,7 +199,7 @@ namespace Snake3D
         [SerializeField] private PreyStats[] _prey = CreateDefaultPrey();
 
         [Tooltip("Размер бугра при переваривании по видам (порядок как в PreyKind; 0 — бугра нет, 1 — кролик)")]
-        [SerializeField] private float[] _digestSize = { 0f, 0.3f, 0.3f, 0.45f, 1f, 0.5f };
+        [SerializeField] private float[] _digestSize = { 0f, 0.3f, 0.3f, 0.45f, 1f, 0.5f, 0.4f };
 
         [Tooltip("Урон от колючек свернувшегося ежа")]
         [SerializeField, Min(0f)] private float _hedgehogDamage = 14f;
@@ -299,6 +299,35 @@ namespace Snake3D
 
         [Tooltip("С какого расстояния до гнезда можно отложить яйца, клеток")]
         [SerializeField, Min(0.3f)] private float _nestRadius = 1.6f;
+
+        [Header("Птичьи гнёзда")]
+        [Tooltip("Сколько сытости даёт яйцо из птичьего гнезда")]
+        [SerializeField, Min(0f)] private float _eggSatiety = 14f;
+
+        [Tooltip("На сколько клеток удлиняет змею яйцо")]
+        [SerializeField, Min(0f)] private float _eggGrowth = 0.35f;
+
+        [Tooltip("Урон от клевка птицы, защищающей гнездо")]
+        [SerializeField, Min(0f)] private float _birdPeckDamage = 6f;
+
+        [Tooltip("Через сколько секунд разорённое гнездо снова полно яиц")]
+        [SerializeField, Min(1f)] private float _nestRefillSeconds = 200f;
+
+        [Header("Кладка и поколения")]
+        [Tooltip("Сколько яиц в кладке змеи")]
+        [SerializeField, Range(1, 9)] private int _clutchSize = 5;
+
+        [Tooltip("Сколько секунд кладка зреет до вылупления")]
+        [SerializeField, Min(5f)] private float _hatchSeconds = 170f;
+
+        [Tooltip("Как часто лиса у гнезда утаскивает яйцо, сек")]
+        [SerializeField, Min(0.5f)] private float _foxRaidInterval = 6f;
+
+        [Tooltip("Во сколько раз чаще приходит лиса, пока змея охраняет кладку")]
+        [SerializeField, Min(1f)] private float _guardFoxEagerness = 3f;
+
+        [Tooltip("На сколько клеток длиннее должна вырасти змея каждого следующего поколения")]
+        [SerializeField, Min(0f)] private float _generationLengthStep = 1.5f;
 
         [Header("Цели суток")]
         [Tooltip("Какую долю роста до линьки даёт выполненная охотничья цель")]
@@ -424,6 +453,16 @@ namespace Snake3D
         public float NestSatiety => _nestSatiety;
         public float NestRadius => _nestRadius;
 
+        public float EggSatiety => _eggSatiety;
+        public float EggGrowth => _eggGrowth;
+        public float BirdPeckDamage => _birdPeckDamage;
+        public float NestRefillSeconds => _nestRefillSeconds;
+        public int ClutchSize => _clutchSize;
+        public float HatchSeconds => _hatchSeconds;
+        public float FoxRaidInterval => _foxRaidInterval;
+        public float GuardFoxEagerness => _guardFoxEagerness;
+        public float GenerationLengthStep => _generationLengthStep;
+
         public float RivalRespawnDelay => _rivalRespawnDelay;
         public float RivalMaxHealth => _rivalMaxHealth;
 
@@ -461,14 +500,27 @@ namespace Snake3D
         public bool EnsurePreyDefaults()
         {
             PreyStats[] defaults = CreateDefaultPrey();
-            if (_prey.Length >= defaults.Length) return false;
-            var merged = new PreyStats[defaults.Length];
-            for (int i = 0; i < merged.Length; i++) merged[i] = i < _prey.Length ? _prey[i] : defaults[i];
-            _prey = merged;
-            return true;
+            bool changed = false;
+            if (_prey.Length < defaults.Length)
+            {
+                var merged = new PreyStats[defaults.Length];
+                for (int i = 0; i < merged.Length; i++) merged[i] = i < _prey.Length ? _prey[i] : defaults[i];
+                _prey = merged;
+                changed = true;
+            }
+            // Бугор переваривания новых видов — тоже по умолчанию.
+            float[] digest = { 0f, 0.3f, 0.3f, 0.45f, 1f, 0.5f, 0.4f };
+            if (_digestSize.Length < digest.Length)
+            {
+                var merged = new float[digest.Length];
+                for (int i = 0; i < merged.Length; i++) merged[i] = i < _digestSize.Length ? _digestSize[i] : digest[i];
+                _digestSize = merged;
+                changed = true;
+            }
+            return changed;
         }
 
-        private const int DefaultPreyCount = 6;
+        private const int DefaultPreyCount = 7;
         private PreyStats[] _fallbackPrey;
 
         private static PreyStats[] CreateDefaultPrey()
@@ -480,7 +532,8 @@ namespace Snake3D
                 new PreyStats(26f, 0.8f, 0f, 4.4f, 3.5f, 2.4f, true, 18, 22),   // Лягушка
                 new PreyStats(40f, 1.2f, 0.9f, 7f, 6f, 3f, true, 18, 12),       // Птица
                 new PreyStats(70f, 1.8f, 1.6f, 6.4f, 5f, 3.2f, true, 12, 6),    // Кролик
-                new PreyStats(38f, 1f, 0.7f, 0f, 3f, 1f, true, 4, 10)            // Ёж
+                new PreyStats(38f, 1f, 0.7f, 0f, 3f, 1f, true, 4, 10),           // Ёж
+                new PreyStats(30f, 0.9f, 0.9f, 4.6f, 3.2f, 1.6f, true, 16, 12)   // Рыба
             };
         }
     }

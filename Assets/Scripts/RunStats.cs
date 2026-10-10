@@ -21,7 +21,16 @@ namespace Snake3D
         public float Length;
         public DamageSource Cause;
 
-        /// <summary>Жизнь закончилась победой: яйца отложены, род продолжен.</summary>
+        /// <summary>Род продолжен хотя бы раз: яйца отложены.</summary>
         public bool Won;
+
+        /// <summary>Сколько поколений сменилось (вылуплений).</summary>
+        public int Generations;
+
+        /// <summary>Сколько змеёнышей вылупилось за все поколения.</summary>
+        public int Hatchlings;
+
+        /// <summary>Сколько птичьих яиц съедено.</summary>
+        public int Eggs;
     }
 }

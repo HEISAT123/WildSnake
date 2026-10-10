@@ -69,6 +69,38 @@ namespace Snake3D.Tests
         // ---------------- Раскладка ----------------
 
         [Test]
+        public void River_Bridges_HollowLogs_BirdNests_AreConsistent()
+        {
+            GridManager grid = CreateGrid();
+            Assert.Greater(grid.RiverPointCount, 20, "Должна быть река");
+            int riverCells = 0;
+            foreach (Vector2Int c in AllCells(grid))
+            {
+                if (grid.IsRiver(c)) riverCells++;
+                if (grid.IsBridge(c)) Assert.IsFalse(grid.IsWater(c), $"Мост должен быть сушей: {c}");
+                if (grid.IsHollow(c))
+                {
+                    Assert.AreEqual(ObstacleType.None, grid.GetObstacle(c), $"Полое бревно проходимо: {c}");
+                    Assert.IsTrue(grid.IsCover(c), $"В полом бревне змея укрыта: {c}");
+                }
+            }
+            Assert.Greater(riverCells, 60, "Река слишком короткая");
+            // Уровень воды вниз по течению не растёт.
+            for (int i = 1; i < grid.RiverPointCount; i++)
+                Assert.LessOrEqual(grid.GetRiverPoint(i).y, grid.GetRiverPoint(i - 1).y + 1e-4f, $"Река течёт вверх у точки {i}");
+            Assert.Greater(grid.HollowLogCount, 0, "Нет полых брёвен");
+            Assert.Greater(grid.BirdNestCount, 0, "Нет птичьих гнёзд");
+            for (int i = 0; i < grid.BirdNestCount; i++)
+            {
+                Vector2Int c = grid.WorldToCell(grid.GetBirdNest(i));
+                Assert.IsFalse(grid.IsWater(c));
+                Assert.AreEqual(ObstacleType.None, grid.GetObstacle(c));
+            }
+            Assert.IsTrue(grid.TryGetRandomWaterCell(out Vector2Int fishCell), "Рыбе негде плавать");
+            Assert.IsTrue(grid.IsWater(fishCell));
+        }
+
+        [Test]
         public void Pond_SunStones_Burrows_DoNotOverlapObstacles()
         {
             GridManager grid = CreateGrid();
@@ -80,7 +112,8 @@ namespace Snake3D.Tests
             foreach (Vector2Int c in AllCells(grid))
             {
                 bool feature = grid.IsWater(c) || grid.IsSunStone(c) || grid.IsBurrowCell(c);
-                if (feature) Assert.AreEqual(ObstacleType.None, grid.GetObstacle(c), $"Препятствие на воде, камне или норе: {c}");
+                // Река течёт и по подножию гор — гора там остаётся границей.
+                if (feature && !grid.IsMountain(c)) Assert.AreEqual(ObstacleType.None, grid.GetObstacle(c), $"Препятствие на воде, камне или норе: {c}");
                 if (grid.IsWater(c)) Assert.IsFalse(grid.IsCover(c), $"Трава в воде: {c}");
             }
             for (int i = 0; i < grid.BurrowCount; i++)

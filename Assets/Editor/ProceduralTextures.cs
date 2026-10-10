@@ -371,7 +371,8 @@ public static class ProceduralTextures
     }
 
     /// <summary>Цвет рельефа по высоте и крутизне: трава, земля, скала, снег.</summary>
-    public static Texture2D Terrain(int size, System.Func<float, float, float> heightAt, float worldSize, Vector3 center)
+    public static Texture2D Terrain(int size, System.Func<float, float, float> heightAt, float worldSize, Vector3 center,
+        System.Func<float, float, Color, Color> tint = null)
     {
         var pixels = new Color[size * size];
         float step = worldSize / size;
@@ -404,6 +405,7 @@ public static class ProceduralTextures
                 Color c = Color.Lerp(grassA, grassB, n);
                 c = Color.Lerp(c, dirt, Mathf.Clamp01((Fbm(wx * 0.02f, wz * 0.02f, 3, 8.1f) - 0.62f) * 4f));
                 c = Color.Lerp(c, sand, Mathf.Clamp01((-h - 2.2f) * 1.5f)); // дно водоёмов, а не каждая низина
+                if (tint != null) c = tint(wx, wz, c);
                 c = Color.Lerp(c, rock, Mathf.Clamp01((slope - 0.55f) * 3f));
                 // Скала темнеет с высотой, снег — только на вершинах и пологих местах.
                 c = Color.Lerp(c, rock * 0.85f, Mathf.Clamp01((h - 12f) * 0.08f));
@@ -417,6 +419,28 @@ public static class ProceduralTextures
         Texture2D tex = Create(size, pixels, "Terrain", false);
         tex.wrapMode = TextureWrapMode.Clamp;
         return tex;
+    }
+
+    /// <summary>Кора берёзы: белая с короткими тёмными поперечными чёрточками.</summary>
+    public static Texture2D BirchBark(int size)
+    {
+        var pixels = new Color[size * size];
+        var white = new Color(0.9f, 0.89f, 0.84f);
+        var dark = new Color(0.12f, 0.11f, 0.1f);
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float u = (float)x / size, v = (float)y / size;
+                Color c = white * (0.88f + 0.12f * Fbm(u * 6f, v * 2f, 3, 2f));
+                float band = Mathf.PerlinNoise(u * 3f + 11f, v * 40f);
+                float dash = Mathf.PerlinNoise(u * 9f + 2f, Mathf.Floor(v * 22f) * 1.7f);
+                if (band > 0.7f && dash > 0.5f) c = Color.Lerp(c, dark, 0.85f);
+                c.a = 1f;
+                pixels[y * size + x] = c;
+            }
+        }
+        return Create(size, pixels, "BirchBark", false);
     }
 
     // ===================== Утилиты =====================

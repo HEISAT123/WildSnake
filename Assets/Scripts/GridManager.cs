@@ -4,9 +4,11 @@ namespace Snake3D
 {
     /// <summary>
     /// Логика мира: размеры, рельеф (карта высот по TerrainShape — холмы внутри, горы по краю как граница),
-    /// препятствия, рощи (деревья с кронами — тень и укрытие от орла), заросли высокой травы (укрытия), озеро и пруды
-    /// со своим уровнем воды, солнечные камни, норы, гнездо (главная цель), клетки для появления добычи
-    /// и перевод клетка &lt;-&gt; мир. Раскладка детерминирована сидом. Визуал строит BoardView.
+    /// препятствия, рощи (деревья с кронами — тень и укрытие от орла; часть рощ — берёзовые), заросли высокой травы
+    /// и камыша (укрытия), озеро и пруды со своим уровнем воды, река с гор в озеро (уровень падает вниз по течению,
+    /// через неё лежат брёвна-мосты), болото в пойме с бочагами, каменистая гряда, полые брёвна-туннели, птичьи гнёзда,
+    /// солнечные камни, норы, гнездо (главная цель), клетки для появления добычи и перевод клетка &lt;-&gt; мир.
+    /// Раскладка детерминирована сидом. Визуал строит BoardView.
     /// </summary>
     public class GridManager : MonoBehaviour
     {
@@ -14,6 +16,18 @@ namespace Snake3D
         private const float MOUNTAIN_HEIGHT = 60f;
         private const int MAX_BURROWS = 12;
         private const int MAX_PONDS = 6;
+        private const int MAX_RIVER_POINTS = 512;
+        private const int MAX_BRIDGES = 6;
+        private const int MAX_HOLLOW_LOGS = 24;
+        private const int MAX_BIRD_NESTS = 16;
+
+        /// <summary>Чья вода в клетке: пруда, реки или болотного бочага.</summary>
+        private const byte WATER_POND = 1;
+        private const byte WATER_RIVER = 2;
+        private const byte WATER_SWAMP = 3;
+
+        private const byte BIOME_SWAMP = 1;
+        private const byte BIOME_RIDGE = 2;
 
         [Header("Размер мира")]
         [Tooltip("Количество клеток по оси X")]
@@ -73,6 +87,9 @@ namespace Snake3D
         [Tooltip("Насколько далеко от ствола тянется крона (тень, укрытие от орла), клеток")]
         [SerializeField, Min(0)] private int _canopyRadius = 2;
 
+        [Tooltip("Доля рощ, которые растут березняком")]
+        [SerializeField, Range(0f, 1f)] private float _birchShare = 0.35f;
+
         [Header("Вода")]
         [Tooltip("Радиус большого озера, клеток (0 — без озера)")]
         [SerializeField, Min(0f)] private float _lakeRadius = 11f;
@@ -82,6 +99,49 @@ namespace Snake3D
 
         [Tooltip("Радиус пруда, клеток (мин, макс)")]
         [SerializeField] private Vector2 _pondRadius = new Vector2(3.5f, 5f);
+
+        [Header("Река")]
+        [Tooltip("Река с гор через равнину в озеро")]
+        [SerializeField] private bool _river = true;
+
+        [Tooltip("Полуширина русла у истока и у устья, клеток")]
+        [SerializeField] private Vector2 _riverHalfWidth = new Vector2(0.9f, 1.8f);
+
+        [Tooltip("Глубина русла под уровнем воды, мировых единиц")]
+        [SerializeField, Min(0.2f)] private float _riverDepth = 0.9f;
+
+        [Tooltip("Сколько брёвен-мостов лежит через реку")]
+        [SerializeField, Range(0, MAX_BRIDGES)] private int _bridgeCount = 3;
+
+        [Header("Болото")]
+        [Tooltip("Радиус болота в пойме реки, клеток (0 — без болота)")]
+        [SerializeField, Min(0f)] private float _swampRadius = 13f;
+
+        [Tooltip("Порог шума для бочагов: меньше — больше открытой воды")]
+        [SerializeField, Range(0.3f, 0.9f)] private float _swampPoolThreshold = 0.57f;
+
+        [Tooltip("Сколько сухих деревьев стоит в болоте")]
+        [SerializeField, Min(0)] private int _swampTreeCount = 10;
+
+        [Header("Каменистая гряда")]
+        [Tooltip("Радиус гряды, клеток (0 — без гряды)")]
+        [SerializeField, Min(0f)] private float _ridgeRadius = 11f;
+
+        [Tooltip("Насколько гряда поднимается над равниной, мировых единиц")]
+        [SerializeField, Min(0f)] private float _ridgeLift = 1.8f;
+
+        [Tooltip("Валунов на гряде")]
+        [SerializeField, Min(0)] private int _ridgeBoulders = 10;
+
+        [Tooltip("Стоячих камней на гряде")]
+        [SerializeField, Min(0)] private int _ridgeStones = 9;
+
+        [Header("Полые брёвна и птичьи гнёзда")]
+        [Tooltip("Сколько полых брёвен-туннелей: внутри змею не видят ни орёл, ни лиса")]
+        [SerializeField, Range(0, MAX_HOLLOW_LOGS)] private int _hollowLogCount = 14;
+
+        [Tooltip("Сколько птичьих гнёзд с яйцами в траве и по опушкам")]
+        [SerializeField, Range(0, MAX_BIRD_NESTS)] private int _birdNestCount = 8;
 
         [Header("Солнечные камни")]
         [Tooltip("Сколько плоских камней, на которых змея греется")]
@@ -108,6 +168,14 @@ namespace Snake3D
         private bool[] _burrowCell;
         private bool[] _forest;
         private bool[] _canopy;
+        private bool[] _birch;
+        private bool[] _reed;
+        private bool[] _hollow;
+        private bool[] _bridge;
+        private bool[] _birdNestCell;
+        private byte[] _waterKind;
+        private byte[] _biome;
+        private float[] _shoreDist;
         private float[] _heights;
         private Vector2Int _nest;
         private bool _hasNest;
@@ -118,6 +186,33 @@ namespace Snake3D
         private readonly float[] _pondPhases = new float[MAX_PONDS];
         private readonly float[] _pondLevels = new float[MAX_PONDS];
         private int _ponds;
+
+        private readonly Vector2[] _riverPts = new Vector2[MAX_RIVER_POINTS];
+        private readonly float[] _riverLevels = new float[MAX_RIVER_POINTS];
+        private readonly float[] _riverHalf = new float[MAX_RIVER_POINTS];
+        private int _riverCount;
+        private float _riverReach;
+
+        private readonly Vector3[] _bridgeA = new Vector3[MAX_BRIDGES];
+        private readonly Vector3[] _bridgeB = new Vector3[MAX_BRIDGES];
+        private int _bridges;
+
+        private readonly Vector2Int[] _hollowStart = new Vector2Int[MAX_HOLLOW_LOGS];
+        private readonly bool[] _hollowAlongX = new bool[MAX_HOLLOW_LOGS];
+        private readonly int[] _hollowLength = new int[MAX_HOLLOW_LOGS];
+        private int _hollowLogs;
+
+        private readonly Vector2Int[] _birdNests = new Vector2Int[MAX_BIRD_NESTS];
+        private int _placedBirdNests;
+
+        private Vector2 _swampCenter;
+        private float _swampPhase;
+        private float _swampBase;
+        private bool _hasSwamp;
+        private Vector2 _ridgeCenter;
+        private float _ridgePhase;
+        private bool _hasRidge;
+
         private int _placedBurrows;
         private int _placedSunStones;
 
@@ -166,6 +261,20 @@ namespace Snake3D
                     h = h * 31 + _sunStoneCount;
                     h = h * 31 + _burrowCount;
                     h = h * 31 + _burrowSpacing.GetHashCode();
+                    h = h * 31 + _birchShare.GetHashCode();
+                    h = h * 31 + (_river ? 1 : 0);
+                    h = h * 31 + _riverHalfWidth.GetHashCode();
+                    h = h * 31 + _riverDepth.GetHashCode();
+                    h = h * 31 + _bridgeCount;
+                    h = h * 31 + _swampRadius.GetHashCode();
+                    h = h * 31 + _swampPoolThreshold.GetHashCode();
+                    h = h * 31 + _swampTreeCount;
+                    h = h * 31 + _ridgeRadius.GetHashCode();
+                    h = h * 31 + _ridgeLift.GetHashCode();
+                    h = h * 31 + _ridgeBoulders;
+                    h = h * 31 + _ridgeStones;
+                    h = h * 31 + _hollowLogCount;
+                    h = h * 31 + _birdNestCount;
                     return h;
                 }
             }
@@ -190,25 +299,43 @@ namespace Snake3D
             _burrowCell = new bool[n];
             _forest = new bool[n];
             _canopy = new bool[n];
+            _birch = new bool[n];
+            _reed = new bool[n];
+            _hollow = new bool[n];
+            _bridge = new bool[n];
+            _birdNestCell = new bool[n];
+            _waterKind = new byte[n];
+            _biome = new byte[n];
+            _shoreDist = new float[n];
             for (int i = 0; i < n; i++) _waterLevel[i] = float.NegativeInfinity;
 
             // Горы — граница мира: непроходимые клетки по краю.
             PlaceMountains();
             // System.Random, а не UnityEngine.Random: свой генератор с сидом не сбивает глобальный.
-            // Вода — первой, чтобы препятствия её обходили; рельеф под водой — чаша.
+            // Вода — первой, чтобы препятствия её обходили; рельеф под водой — чаша, под рекой — русло.
             PlaceWater(new System.Random(_obstacleSeed * 13 + 5));
+            PlanRiver(new System.Random(_obstacleSeed * 29 + 7));
+            PlanSwampAndRidge(new System.Random(_obstacleSeed * 31 + 17));
             BuildHeights();
+            MarkRiverAndSwamp();
+            PlaceBridges();
+            PlaceRidgeRocks(new System.Random(_obstacleSeed * 37 + 5));
             var rng = new System.Random(_obstacleSeed);
             PlaceObstacles(rng, ObstacleType.Block, _blockCount);
             PlaceObstacles(rng, ObstacleType.Pillar, _pillarCount);
             PlaceObstacles(rng, ObstacleType.LowWall, _lowWallCount);
+            PlaceSwampTrees(new System.Random(_obstacleSeed * 47 + 3));
             PlaceGroves(new System.Random(_obstacleSeed * 23 + 11));
+            PlaceHollowLogs(new System.Random(_obstacleSeed * 41 + 9));
             var features = new System.Random(_obstacleSeed * 17 + 3);
             PlaceBurrows(features);
             PlaceSunStones(features);
             PlaceNest(features);
+            ComputeShoreDistance();
             // Траву раскладываем отдельным генератором: изменение зарослей не сдвигает препятствия.
             PlaceCover(new System.Random(_obstacleSeed * 7 + 13));
+            PlaceReedsAndLogCover();
+            PlaceBirdNests(new System.Random(_obstacleSeed * 43 + 21));
 
             for (int y = 0; y < _height; y++)
                 for (int x = 0; x < _width; x++)
@@ -294,6 +421,152 @@ namespace Snake3D
         {
             return IsCanopy(WorldToCell(world));
         }
+
+        /// <summary>Роща растёт березняком (белые стволы, светлая листва).</summary>
+        public bool IsBirch(Vector2Int cell)
+        {
+            return IsInside(cell) && _birch[ToIndex(cell)];
+        }
+
+        /// <summary>Укрытие здесь — камыш у воды, а не трава.</summary>
+        public bool IsReed(Vector2Int cell)
+        {
+            return IsInside(cell) && _reed[ToIndex(cell)];
+        }
+
+        /// <summary>Внутри полого бревна: змею не видят ни орёл, ни лиса.</summary>
+        public bool IsHollow(Vector2Int cell)
+        {
+            return IsInside(cell) && _hollow[ToIndex(cell)];
+        }
+
+        public bool IsHollowAt(Vector3 world)
+        {
+            return IsHollow(WorldToCell(world));
+        }
+
+        /// <summary>Бревно-мост через реку: по нему ползут посуху.</summary>
+        public bool IsBridge(Vector2Int cell)
+        {
+            return IsInside(cell) && _bridge[ToIndex(cell)];
+        }
+
+        /// <summary>Клетка болота.</summary>
+        public bool IsSwamp(Vector2Int cell)
+        {
+            return IsInside(cell) && _biome[ToIndex(cell)] == BIOME_SWAMP;
+        }
+
+        /// <summary>Клетка каменистой гряды.</summary>
+        public bool IsRidge(Vector2Int cell)
+        {
+            return IsInside(cell) && _biome[ToIndex(cell)] == BIOME_RIDGE;
+        }
+
+        /// <summary>Вода реки (течёт; там живёт рыба).</summary>
+        public bool IsRiver(Vector2Int cell)
+        {
+            return IsInside(cell) && _waterKind[ToIndex(cell)] == WATER_RIVER;
+        }
+
+        /// <summary>Вода озера или пруда (у них своя круглая «чаша» и свой меш).</summary>
+        public bool IsPondWater(Vector2Int cell)
+        {
+            return IsInside(cell) && _waterKind[ToIndex(cell)] == WATER_POND;
+        }
+
+        /// <summary>Насколько точка в болоте, 0..1 (для окраски земли).</summary>
+        public float SwampWeight(Vector3 world)
+        {
+            Vector2 c = WorldToCellFloat(world);
+            return SwampBlend(c.x, c.y);
+        }
+
+        /// <summary>Насколько точка на каменистой гряде, 0..1 (для окраски земли).</summary>
+        public float RidgeWeight(Vector3 world)
+        {
+            Vector2 c = WorldToCellFloat(world);
+            return RidgeBlend(c.x, c.y);
+        }
+
+        /// <summary>Расстояние до ближайшей воды, клеток (плавно между центрами клеток; вне поля — далеко).</summary>
+        public float ShoreDistance(Vector3 world)
+        {
+            if (_shoreDist == null) return float.MaxValue;
+            Vector2 c = WorldToCellFloat(world);
+            int x0 = Mathf.FloorToInt(c.x);
+            int y0 = Mathf.FloorToInt(c.y);
+            if (x0 < 0 || y0 < 0 || x0 >= _width - 1 || y0 >= _height - 1) return float.MaxValue;
+            float fx = c.x - x0, fy = c.y - y0;
+            float a = _shoreDist[y0 * _width + x0], b = _shoreDist[y0 * _width + x0 + 1];
+            float d = _shoreDist[(y0 + 1) * _width + x0], e = _shoreDist[(y0 + 1) * _width + x0 + 1];
+            return Mathf.Lerp(Mathf.Lerp(a, b, fx), Mathf.Lerp(d, e, fx), fy);
+        }
+
+        /// <summary>Точек на осевой линии реки (0 — реки нет).</summary>
+        public int RiverPointCount => _riverCount;
+
+        /// <summary>Точка осевой линии реки на уровне воды.</summary>
+        public Vector3 GetRiverPoint(int index)
+        {
+            Vector2 c = _riverPts[index];
+            Vector3 p = CornerOrigin + new Vector3((c.x + 0.5f) * _cellSize, 0f, (c.y + 0.5f) * _cellSize);
+            p.y = _riverLevels[index];
+            return p;
+        }
+
+        /// <summary>
+        /// Координаты точки относительно реки: возвращает путь вдоль русла от истока (клеток), lateral — смещение
+        /// поперёк (клеток, со знаком). Для UV воды: рябь бежит вниз по течению.
+        /// </summary>
+        public float RiverCoordinate(Vector3 world, out float lateral)
+        {
+            lateral = 0f;
+            Vector2 p = WorldToCellFloat(world);
+            float best = float.MaxValue, along = 0f;
+            for (int i = 0; i + 1 < _riverCount; i++)
+            {
+                Vector2 a = _riverPts[i], ab = _riverPts[i + 1] - a;
+                float len2 = Mathf.Max(1e-5f, ab.sqrMagnitude);
+                float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / len2);
+                Vector2 q = a + ab * t;
+                float d = (p - q).sqrMagnitude;
+                if (d >= best) continue;
+                best = d;
+                // Точки русла идут через одну клетку — путь вдоль равен индексу.
+                along = i + t;
+                lateral = (ab.x * (p.y - a.y) - ab.y * (p.x - a.x)) / Mathf.Sqrt(len2);
+            }
+            return along;
+        }
+
+        /// <summary>Полуширина реки в точке, мировых единиц.</summary>
+        public float GetRiverHalfWidth(int index) => _riverHalf[index] * _cellSize;
+
+        public int BridgeCount => _bridges;
+
+        /// <summary>Концы бревна-моста (на берегах, по верху бревна).</summary>
+        public void GetBridge(int index, out Vector3 a, out Vector3 b)
+        {
+            a = _bridgeA[index];
+            b = _bridgeB[index];
+        }
+
+        public int HollowLogCount => _hollowLogs;
+
+        /// <summary>Центры крайних клеток полого бревна (на земле).</summary>
+        public void GetHollowLog(int index, out Vector3 a, out Vector3 b)
+        {
+            Vector2Int s = _hollowStart[index];
+            Vector2Int e = _hollowAlongX[index] ? new Vector2Int(s.x + _hollowLength[index] - 1, s.y) : new Vector2Int(s.x, s.y + _hollowLength[index] - 1);
+            a = CellToWorld(s);
+            b = CellToWorld(e);
+        }
+
+        public int BirdNestCount => _placedBirdNests;
+
+        /// <summary>Птичье гнездо i в мире (на земле).</summary>
+        public Vector3 GetBirdNest(int index) => CellToWorld(_birdNests[index]);
 
         /// <summary>Есть ли в мире гнездо (место для кладки — главная цель).</summary>
         public bool HasNest => _hasNest;
@@ -492,6 +765,32 @@ namespace Snake3D
             return false;
         }
 
+        /// <summary>
+        /// Случайная клетка поглубже в воде (для рыбы): сама вода и четыре соседа — вода, не мост и не гора.
+        /// Без аллокаций; если воды нет — false.
+        /// </summary>
+        public bool TryGetRandomWaterCell(out Vector2Int cell)
+        {
+            int n = _water.Length;
+            for (int attempt = 0; attempt < 400; attempt++)
+            {
+                int i = Random.Range(0, n);
+                if (!IsDeepWater(i)) continue;
+                cell = new Vector2Int(i % _width, i / _width);
+                return true;
+            }
+            cell = default;
+            return false;
+        }
+
+        private bool IsDeepWater(int i)
+        {
+            if (!_water[i] || _occupied[i] || _obstacles[i] != ObstacleType.None) return false;
+            int x = i % _width, y = i / _width;
+            if (x < 1 || y < 1 || x >= _width - 1 || y >= _height - 1) return false;
+            return _water[i - 1] && _water[i + 1] && _water[i - _width] && _water[i + _width];
+        }
+
         /// <summary>Случайная свободная клетка у самой воды (для лягушек); если воды нет — любая свободная.</summary>
         public bool TryGetRandomShoreCell(out Vector2Int cell)
         {
@@ -544,6 +843,7 @@ namespace Snake3D
             if (_occupied[index] || _nearObstacle[index] || _water[index] || _burrowCell[index]) return false;
             if (_obstacles[index] != ObstacleType.None) return false;
             if (_hasNest && index == _nest.y * _width + _nest.x) return false;
+            if (_birdNestCell[index] || _hollow[index]) return false;
             return IsCellInArena(new Vector2Int(index % _width, index / _width), _itemBorderMargin);
         }
 
@@ -612,6 +912,7 @@ namespace Snake3D
                         float edge = PondEdge(index, Mathf.Atan2(dy, dx));
                         if (dx * dx + dy * dy > edge * edge) continue;
                         _water[i] = true;
+                        _waterKind[i] = WATER_POND;
                         _waterLevel[i] = _pondLevels[index];
                     }
                 }
@@ -647,6 +948,11 @@ namespace Snake3D
                     float wx = o.x + x * _cellSize;
                     float wz = o.z + y * _cellSize;
                     float h = c.y + TerrainShape.Height(wx, wz, c);
+                    // Угол сетки в координатах клеток (центры клеток — целые числа).
+                    float gx = x - 0.5f, gy = y - 0.5f;
+                    h += RidgeLift(gx, gy);
+                    h = SwampFlatten(h, gx, gy);
+                    h = CarveRiver(h, gx, gy);
                     for (int p = 0; p < _ponds; p++)
                     {
                         // Угол сетки в координатах клеток (центры клеток — целые числа).
@@ -714,6 +1020,7 @@ namespace Snake3D
                 float py = cy + Mathf.Sin(angle) * dist;
                 float radius = _groveRadius * (0.8f + (float)rng.NextDouble() * 0.4f);
                 float phase = (float)rng.NextDouble() * 6.283f;
+                bool birch = rng.NextDouble() < _birchShare;
                 int r = Mathf.CeilToInt(radius * 1.35f);
                 for (int y = Mathf.FloorToInt(py) - r; y <= Mathf.CeilToInt(py) + r; y++)
                 {
@@ -721,10 +1028,12 @@ namespace Snake3D
                     {
                         if (x < 2 || y < 2 || x >= _width - 2 || y >= _height - 2) continue;
                         int i = y * _width + x;
-                        if (_water[i] || _obstacles[i] == ObstacleType.Mountain) continue;
+                        if (_water[i] || _obstacles[i] == ObstacleType.Mountain || _biome[i] != 0) continue;
                         float dx = x - px, dy = y - py;
                         float edge = radius * (1f + 0.25f * Mathf.Sin(Mathf.Atan2(dy, dx) * 3f + phase));
-                        if (dx * dx + dy * dy <= edge * edge) _forest[i] = true;
+                        if (dx * dx + dy * dy > edge * edge) continue;
+                        _forest[i] = true;
+                        _birch[i] = birch;
                     }
                 }
             }
@@ -803,15 +1112,496 @@ namespace Snake3D
         {
             _placedSunStones = 0;
             int target = Mathf.Min(_sunStoneCount, _sunStones.Length);
+            // Гряда — каменистое место: сначала несколько камней там.
+            if (_hasRidge)
+            {
+                int ridgeTarget = Mathf.Min(target, 6);
+                for (int attempt = 0; attempt < 400 && _placedSunStones < ridgeTarget; attempt++)
+                {
+                    int x = Mathf.RoundToInt(_ridgeCenter.x + ((float)rng.NextDouble() * 2f - 1f) * _ridgeRadius * 0.8f);
+                    int y = Mathf.RoundToInt(_ridgeCenter.y + ((float)rng.NextDouble() * 2f - 1f) * _ridgeRadius * 0.8f);
+                    if (x < 3 || y < 3 || x >= _width - 4 || y >= _height - 4) continue;
+                    if (IsOpenArea(x, y, 2, 1)) AddSunStone(x, y);
+                }
+            }
             for (int attempt = 0; attempt < 3000 && _placedSunStones < target; attempt++)
             {
                 int x = rng.Next(3, _width - 4);
                 int y = rng.Next(3, _height - 4);
-                if (!IsOpenArea(x, y, 2, 1)) continue;
-                _sunStones[_placedSunStones++] = new Vector2Int(x, y);
-                for (int dy = 0; dy < 2; dy++)
-                    for (int dx = 0; dx < 2; dx++)
-                        _sunStone[(y + dy) * _width + x + dx] = true;
+                if (IsOpenArea(x, y, 2, 1)) AddSunStone(x, y);
+            }
+        }
+
+        private void AddSunStone(int x, int y)
+        {
+            _sunStones[_placedSunStones++] = new Vector2Int(x, y);
+            for (int dy = 0; dy < 2; dy++)
+                for (int dx = 0; dx < 2; dx++)
+                    _sunStone[(y + dy) * _width + x + dx] = true;
+        }
+
+        // ---------------- Река, болото, гряда ----------------
+
+        private float CellHeight(float x, float y)
+        {
+            Vector3 p = CellCenterFlat(x, y);
+            return Center.y + TerrainShape.Height(p.x, p.z, Center);
+        }
+
+        private Vector2 WorldToCellFloat(Vector3 world)
+        {
+            Vector3 local = world - transform.position;
+            return new Vector2(local.x / _cellSize + (_width - 1) * 0.5f, local.z / _cellSize + (_height - 1) * 0.5f);
+        }
+
+        private static float Hash01(int x, int y)
+        {
+            unchecked
+            {
+                uint h = (uint)(x * 73856093) ^ (uint)(y * 19349663);
+                h ^= h >> 13;
+                h *= 0x5bd1e995;
+                h ^= h >> 15;
+                return (h & 0xFFFF) / 65535f;
+            }
+        }
+
+        /// <summary>
+        /// Русло: от подножия гор к озеру. Каждый шаг — в сторону озера, с плавным меандром и уклоном вниз по склону
+        /// (вода ищет низину), в обход старта. Уровень воды вниз по течению не растёт, у устья равен уровню водоёма.
+        /// </summary>
+        private void PlanRiver(System.Random rng)
+        {
+            _riverCount = 0;
+            _riverReach = 0f;
+            if (!_river || _ponds == 0) return;
+            var c = new Vector2((_width - 1) * 0.5f, (_height - 1) * 0.5f);
+            Vector2 lake = _pondCenters[0];
+            Vector2 toLake = lake - c;
+            float lakeAngle = Mathf.Atan2(toLake.y, toLake.x);
+            float side = rng.NextDouble() < 0.5 ? -1f : 1f;
+            float a0 = lakeAngle + side * (1.1f + 0.5f * (float)rng.NextDouble());
+            float startR = TerrainShape.PlayRadius / _cellSize + 1f;
+            Vector2 pos = c + new Vector2(Mathf.Cos(a0), Mathf.Sin(a0)) * startR;
+            Vector2 heading = (lake - pos).normalized;
+            float phase = (float)rng.NextDouble() * 6.283f;
+            float clear = _startClearRadius + 8f;
+            int mouth = -1;
+            for (int step = 0; step < MAX_RIVER_POINTS; step++)
+            {
+                _riverPts[_riverCount++] = pos;
+                for (int p = 0; p < _ponds && mouth < 0; p++)
+                {
+                    Vector2 d = pos - _pondCenters[p];
+                    if (d.magnitude < PondEdge(p, Mathf.Atan2(d.y, d.x)) * 0.8f) mouth = p;
+                }
+                if (mouth >= 0 || _riverCount >= MAX_RIVER_POINTS) break;
+
+                Vector2 toTarget = (lake - pos).normalized;
+                var perp = new Vector2(-toTarget.y, toTarget.x);
+                var grad = new Vector2(CellHeight(pos.x + 1f, pos.y) - CellHeight(pos.x - 1f, pos.y),
+                    CellHeight(pos.x, pos.y + 1f) - CellHeight(pos.x, pos.y - 1f)) * 0.5f;
+                // После 250 шагов — прямо к озеру, чтобы река наверняка до него дошла.
+                float wander = step < 250 ? 1f : 0f;
+                Vector2 want = toTarget + (perp * (Mathf.Sin(step * 0.11f + phase) * 0.75f) - grad * 0.8f) * wander;
+                Vector2 fromC = pos - c;
+                float dc = fromC.magnitude;
+                if (dc < clear && dc > 1e-3f) want += fromC / dc * 1.5f;
+                heading = Vector2.Lerp(heading, want.normalized, 0.3f).normalized;
+                pos += heading;
+            }
+
+            float level = float.MaxValue;
+            float floor = mouth >= 0 ? _pondLevels[mouth] : float.NegativeInfinity;
+            for (int i = 0; i < _riverCount; i++)
+            {
+                Vector2 p = _riverPts[i];
+                level = Mathf.Min(level - 0.004f, CellHeight(p.x, p.y) - 0.45f);
+                _riverLevels[i] = Mathf.Max(level, floor);
+                float t = _riverCount > 1 ? (float)i / (_riverCount - 1) : 0f;
+                _riverHalf[i] = Mathf.Lerp(_riverHalfWidth.x, _riverHalfWidth.y, t) * (0.85f + 0.3f * Mathf.PerlinNoise(i * 0.15f, 3.7f));
+                _riverReach = Mathf.Max(_riverReach, _riverHalf[i] * 2.4f + 1f);
+            }
+        }
+
+        /// <summary>Расстояние (клеток) от точки до осевой линии реки; level и half — уровень и полуширина в ближайшем месте.</summary>
+        private float RiverQuery(float x, float y, out float level, out float half)
+        {
+            level = 0f;
+            half = 0f;
+            float best = float.MaxValue;
+            float reach = _riverReach;
+            for (int i = 0; i + 1 < _riverCount; i++)
+            {
+                Vector2 a = _riverPts[i], b = _riverPts[i + 1];
+                if (x < Mathf.Min(a.x, b.x) - reach || x > Mathf.Max(a.x, b.x) + reach ||
+                    y < Mathf.Min(a.y, b.y) - reach || y > Mathf.Max(a.y, b.y) + reach) continue;
+                Vector2 ab = b - a;
+                float t = Mathf.Clamp01(((x - a.x) * ab.x + (y - a.y) * ab.y) / Mathf.Max(1e-5f, ab.sqrMagnitude));
+                float dx = a.x + ab.x * t - x, dy = a.y + ab.y * t - y;
+                float d = dx * dx + dy * dy;
+                if (d >= best) continue;
+                best = d;
+                level = Mathf.Lerp(_riverLevels[i], _riverLevels[i + 1], t);
+                half = Mathf.Lerp(_riverHalf[i], _riverHalf[i + 1], t);
+            }
+            return best == float.MaxValue ? float.MaxValue : Mathf.Sqrt(best);
+        }
+
+        /// <summary>Русло — желоб под уровнем воды, берега — пологая долина, а не ступенька.</summary>
+        private float CarveRiver(float h, float x, float y)
+        {
+            if (_riverCount < 2) return h;
+            float d = RiverQuery(x, y, out float level, out float half);
+            if (d == float.MaxValue) return h;
+            float bed = half * 1.15f;
+            if (d < bed)
+            {
+                float k = d / bed;
+                return Mathf.Min(h, level - 0.12f - _riverDepth * (1f - k * k));
+            }
+            float valley = half * 2.4f;
+            if (d >= valley) return h;
+            // Берег плавно поднимается от кромки к природной высоте; на низкой стороне склона — невысокий вал,
+            // чтобы вода не растекалась за русло.
+            float s = (d - bed) / (valley - bed);
+            return Mathf.Lerp(level + 0.22f, h, s * s * (3f - 2f * s));
+        }
+
+        /// <summary>Болото — в пойме сбоку от реки; гряда — подальше от воды, болота и старта.</summary>
+        private void PlanSwampAndRidge(System.Random rng)
+        {
+            _hasSwamp = false;
+            _hasRidge = false;
+            var c = new Vector2((_width - 1) * 0.5f, (_height - 1) * 0.5f);
+            float play = TerrainShape.PlayRadius / _cellSize;
+            _swampPhase = (float)rng.NextDouble() * 6.283f;
+            _ridgePhase = (float)rng.NextDouble() * 6.283f;
+
+            if (_swampRadius > 0f && _riverCount > 8)
+            {
+                for (int attempt = 0; attempt < 32 && !_hasSwamp; attempt++)
+                {
+                    int i = Mathf.Clamp((int)(_riverCount * (0.35f + 0.4f * (float)rng.NextDouble())), 1, _riverCount - 2);
+                    Vector2 dir = (_riverPts[i + 1] - _riverPts[i - 1]).normalized;
+                    Vector2 perp = new Vector2(-dir.y, dir.x) * (rng.NextDouble() < 0.5 ? -1f : 1f);
+                    Vector2 p = _riverPts[i] + perp * (_swampRadius * 0.45f);
+                    float dist = (p - c).magnitude;
+                    if (dist < _swampRadius + _startClearRadius + 4f || dist + _swampRadius > play - 2f) continue;
+                    if (!FarFromPonds(p, _swampRadius * 0.6f)) continue;
+                    _swampCenter = p;
+                    _swampBase = _riverLevels[i] + 0.3f;
+                    _hasSwamp = true;
+                }
+            }
+
+            if (_ridgeRadius > 0f)
+            {
+                for (int attempt = 0; attempt < 300 && !_hasRidge; attempt++)
+                {
+                    float a = (float)rng.NextDouble() * 6.283f;
+                    float dist = Mathf.Lerp(play * 0.3f, play * 0.72f, (float)rng.NextDouble());
+                    Vector2 p = c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * dist;
+                    if (dist < _ridgeRadius + _startClearRadius + 4f || dist + _ridgeRadius > play - 3f) continue;
+                    if (!FarFromPonds(p, _ridgeRadius + 6f)) continue;
+                    if (_hasSwamp && (p - _swampCenter).magnitude < _swampRadius + _ridgeRadius + 6f) continue;
+                    if (NearRiver(p, _ridgeRadius + 6f)) continue;
+                    _ridgeCenter = p;
+                    _hasRidge = true;
+                }
+            }
+        }
+
+        private bool FarFromPonds(Vector2 p, float gap)
+        {
+            for (int i = 0; i < _ponds; i++)
+                if ((p - _pondCenters[i]).magnitude < _pondRadii[i] + gap) return false;
+            return true;
+        }
+
+        private bool NearRiver(Vector2 p, float gap)
+        {
+            for (int i = 0; i < _riverCount; i++)
+                if ((p - _riverPts[i]).sqrMagnitude < gap * gap) return true;
+            return false;
+        }
+
+        private float SwampBlend(float x, float y)
+        {
+            if (!_hasSwamp) return 0f;
+            float dx = x - _swampCenter.x, dy = y - _swampCenter.y;
+            float edge = _swampRadius * (1f + 0.2f * Mathf.Sin(Mathf.Atan2(dy, dx) * 3f + _swampPhase));
+            float k = 1f - Mathf.Sqrt(dx * dx + dy * dy) / edge;
+            return Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(k * 2.5f));
+        }
+
+        private float RidgeBlend(float x, float y)
+        {
+            if (!_hasRidge) return 0f;
+            float dx = x - _ridgeCenter.x, dy = y - _ridgeCenter.y;
+            float edge = _ridgeRadius * (1f + 0.25f * Mathf.Sin(Mathf.Atan2(dy, dx) * 2f + _ridgePhase));
+            float k = 1f - Mathf.Sqrt(dx * dx + dy * dy) / edge;
+            return Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(k * 2f));
+        }
+
+        private float PoolNoise(float x, float y) => Mathf.PerlinNoise(x * 0.23f + 71.3f, y * 0.23f + 12.9f);
+
+        /// <summary>Гряда — бугристый каменный холм.</summary>
+        private float RidgeLift(float x, float y)
+        {
+            if (!_hasRidge) return 0f;
+            return _ridgeLift * RidgeBlend(x, y) * (0.6f + 0.8f * Mathf.PerlinNoise(x * 0.3f + 17f, y * 0.3f + 5f));
+        }
+
+        /// <summary>Болото — плоская низина чуть выше реки; в бочагах дно ниже воды.</summary>
+        private float SwampFlatten(float h, float x, float y)
+        {
+            float w = SwampBlend(x, y);
+            if (w <= 0f) return h;
+            float flat = Mathf.Lerp(h, _swampBase, w);
+            if (w > 0.5f) flat = Mathf.Max(flat, _swampBase - 0.05f);
+            if (w > 0.55f && PoolNoise(x, y) > _swampPoolThreshold) flat = Mathf.Min(flat, _swampBase - 0.42f);
+            return flat;
+        }
+
+        /// <summary>Вода реки и бочагов болота, области болота и гряды.</summary>
+        private void MarkRiverAndSwamp()
+        {
+            for (int y = 0; y < _height; y++)
+            {
+                for (int x = 0; x < _width; x++)
+                {
+                    int i = y * _width + x;
+                    bool mountain = _obstacles[i] == ObstacleType.Mountain;
+                    float sw = SwampBlend(x, y);
+                    if (!mountain && sw > 0.4f) _biome[i] = BIOME_SWAMP;
+                    else if (!mountain && RidgeBlend(x, y) > 0.4f) _biome[i] = BIOME_RIDGE;
+                    if (_water[i] || x < 3 || y < 3 || x >= _width - 3 || y >= _height - 3) continue;
+
+                    // Река течёт и по подножию гор — там её видно, хотя змея туда не доберётся.
+                    if (_riverCount > 1 && RiverQuery(x, y, out float level, out float half) < half)
+                    {
+                        _water[i] = true;
+                        _waterKind[i] = WATER_RIVER;
+                        _waterLevel[i] = level;
+                    }
+                    else if (!mountain && sw > 0.55f && PoolNoise(x, y) > _swampPoolThreshold + 0.03f)
+                    {
+                        _water[i] = true;
+                        _waterKind[i] = WATER_SWAMP;
+                        _waterLevel[i] = _swampBase - 0.12f;
+                    }
+                }
+            }
+        }
+
+        /// <summary>Брёвна-мосты поперёк реки: клетки под ними — суша на высоте бревна.</summary>
+        private void PlaceBridges()
+        {
+            _bridges = 0;
+            if (_riverCount < 20) return;
+            int count = Mathf.Min(_bridgeCount, MAX_BRIDGES);
+            for (int b = 0; b < count; b++)
+            {
+                int i = Mathf.Clamp((int)(_riverCount * (0.2f + 0.65f * (b + 0.5f) / count)), 1, _riverCount - 2);
+                Vector2 p = _riverPts[i];
+                // В болоте и у самых гор мост ни к чему.
+                if (SwampBlend(p.x, p.y) > 0.3f || IsMountain(new Vector2Int(Mathf.RoundToInt(p.x), Mathf.RoundToInt(p.y)))) continue;
+                Vector2 dir = (_riverPts[i + 1] - _riverPts[i - 1]).normalized;
+                var n = new Vector2(-dir.y, dir.x);
+                float halfLen = _riverHalf[i] * 1.3f + 1.6f;
+                Vector2 a = p - n * halfLen, e = p + n * halfLen;
+                float logTop = 0.42f * _cellSize;
+                Vector3 wa = CellCenterFlat(a.x, a.y);
+                wa.y = GroundHeight(wa) + logTop;
+                Vector3 we = CellCenterFlat(e.x, e.y);
+                we.y = GroundHeight(we) + logTop;
+                _bridgeA[_bridges] = wa;
+                _bridgeB[_bridges] = we;
+                _bridges++;
+                float step = 0.4f / (halfLen * 2f);
+                for (float t = 0f; t <= 1f; t += step)
+                {
+                    Vector2 q = Vector2.Lerp(a, e, t);
+                    int cx = Mathf.RoundToInt(q.x), cy = Mathf.RoundToInt(q.y);
+                    if (cx < 1 || cy < 1 || cx >= _width - 1 || cy >= _height - 1) continue;
+                    int k = cy * _width + cx;
+                    _bridge[k] = true;
+                    _water[k] = false;
+                    _waterKind[k] = 0;
+                    _waterLevel[k] = Mathf.Lerp(wa.y, we.y, t);
+                }
+            }
+        }
+
+        private void PlaceRidgeRocks(System.Random rng)
+        {
+            if (!_hasRidge) return;
+            PlaceInRegion(rng, ObstacleType.Block, _ridgeBoulders, _ridgeCenter, _ridgeRadius * 0.9f);
+            PlaceInRegion(rng, ObstacleType.Pillar, _ridgeStones, _ridgeCenter, _ridgeRadius);
+        }
+
+        /// <summary>Сухие деревья в болоте (колонны: BoardView рисует их голыми стволами).</summary>
+        private void PlaceSwampTrees(System.Random rng)
+        {
+            if (_hasSwamp) PlaceInRegion(rng, ObstacleType.Pillar, _swampTreeCount, _swampCenter, _swampRadius * 0.85f);
+        }
+
+        private void PlaceInRegion(System.Random rng, ObstacleType type, int count, Vector2 center, float radius)
+        {
+            int size = type == ObstacleType.Block ? 2 : 1;
+            int placed = 0;
+            for (int attempt = 0; attempt < count * 30 && placed < count; attempt++)
+            {
+                float a = (float)rng.NextDouble() * 6.283f;
+                float r = Mathf.Sqrt((float)rng.NextDouble()) * radius;
+                int ox = Mathf.RoundToInt(center.x + Mathf.Cos(a) * r);
+                int oy = Mathf.RoundToInt(center.y + Mathf.Sin(a) * r);
+                if (ox < 2 || oy < 2 || ox + size >= _width - 2 || oy + size >= _height - 2) continue;
+                if (!CanPlace(ox, oy, size, size)) continue;
+                for (int y = oy; y < oy + size; y++)
+                    for (int x = ox; x < ox + size; x++)
+                        _obstacles[y * _width + x] = type;
+                placed++;
+            }
+        }
+
+        /// <summary>Полые брёвна-туннели по 3 клетки: внутри — укрытие, по сторонам свободно.</summary>
+        private void PlaceHollowLogs(System.Random rng)
+        {
+            _hollowLogs = 0;
+            int target = Mathf.Min(_hollowLogCount, MAX_HOLLOW_LOGS);
+            float cx = (_width - 1) * 0.5f, cy = (_height - 1) * 0.5f;
+            float play = TerrainShape.PlayRadius / _cellSize - 5f;
+            float clear = _startClearRadius + 3f;
+            const int length = 3;
+            for (int attempt = 0; attempt < 3000 && _hollowLogs < target; attempt++)
+            {
+                bool alongX = rng.Next(2) == 0;
+                int ox = rng.Next(4, _width - 8), oy = rng.Next(4, _height - 8);
+                float dx = ox - cx, dy = oy - cy;
+                float r2 = dx * dx + dy * dy;
+                if (r2 > play * play || r2 < clear * clear) continue;
+                int sx = alongX ? length : 1, sy = alongX ? 1 : length;
+                bool ok = true;
+                for (int y = oy - 1; y <= oy + sy && ok; y++)
+                {
+                    for (int x = ox - 1; x <= ox + sx && ok; x++)
+                    {
+                        int i = y * _width + x;
+                        ok = _obstacles[i] == ObstacleType.None && !_water[i] && !_hollow[i] && !_bridge[i] && _biome[i] != BIOME_RIDGE;
+                    }
+                }
+                if (!ok) continue;
+                for (int y = oy; y < oy + sy; y++)
+                    for (int x = ox; x < ox + sx; x++)
+                        _hollow[y * _width + x] = true;
+                _hollowStart[_hollowLogs] = new Vector2Int(ox, oy);
+                _hollowAlongX[_hollowLogs] = alongX;
+                _hollowLength[_hollowLogs] = length;
+                _hollowLogs++;
+            }
+        }
+
+        /// <summary>Расстояние до воды в клетках: два прохода «фаски» — приближённо евклидово.</summary>
+        private void ComputeShoreDistance()
+        {
+            const float Far = 999f;
+            const float Diagonal = 1.414f;
+            for (int i = 0; i < _shoreDist.Length; i++) _shoreDist[i] = _water[i] ? 0f : Far;
+            for (int y = 0; y < _height; y++)
+            {
+                for (int x = 0; x < _width; x++)
+                {
+                    int i = y * _width + x;
+                    float d = _shoreDist[i];
+                    if (x > 0) d = Mathf.Min(d, _shoreDist[i - 1] + 1f);
+                    if (y > 0)
+                    {
+                        d = Mathf.Min(d, _shoreDist[i - _width] + 1f);
+                        if (x > 0) d = Mathf.Min(d, _shoreDist[i - _width - 1] + Diagonal);
+                        if (x < _width - 1) d = Mathf.Min(d, _shoreDist[i - _width + 1] + Diagonal);
+                    }
+                    _shoreDist[i] = d;
+                }
+            }
+            for (int y = _height - 1; y >= 0; y--)
+            {
+                for (int x = _width - 1; x >= 0; x--)
+                {
+                    int i = y * _width + x;
+                    float d = _shoreDist[i];
+                    if (x < _width - 1) d = Mathf.Min(d, _shoreDist[i + 1] + 1f);
+                    if (y < _height - 1)
+                    {
+                        d = Mathf.Min(d, _shoreDist[i + _width] + 1f);
+                        if (x < _width - 1) d = Mathf.Min(d, _shoreDist[i + _width + 1] + Diagonal);
+                        if (x > 0) d = Mathf.Min(d, _shoreDist[i + _width - 1] + Diagonal);
+                    }
+                    _shoreDist[i] = d;
+                }
+            }
+        }
+
+        /// <summary>Камыш: полосой по берегам и пятнами по болоту — тоже укрытие. Полые брёвна прячут всегда.</summary>
+        private void PlaceReedsAndLogCover()
+        {
+            for (int y = 1; y < _height - 1; y++)
+            {
+                for (int x = 1; x < _width - 1; x++)
+                {
+                    int i = y * _width + x;
+                    if (_hollow[i])
+                    {
+                        _cover[i] = true;
+                        continue;
+                    }
+                    if (_water[i] || _obstacles[i] != ObstacleType.None || _sunStone[i] || _burrowCell[i] || _bridge[i]) continue;
+                    if (_hasNest && x == _nest.x && y == _nest.y) continue;
+                    bool swamp = _biome[i] == BIOME_SWAMP && Mathf.PerlinNoise(x * 0.31f + 5.1f, y * 0.31f + 9.4f) > 0.56f;
+                    bool bank = _shoreDist[i] <= 1.5f && Hash01(x, y) < 0.35f;
+                    if (!swamp && !bank) continue;
+                    _cover[i] = true;
+                    _reed[i] = true;
+                }
+            }
+        }
+
+        /// <summary>Птичьи гнёзда — в траве или в роще, далеко друг от друга, от старта и от гнезда змеи.</summary>
+        private void PlaceBirdNests(System.Random rng)
+        {
+            _placedBirdNests = 0;
+            int target = Mathf.Min(_birdNestCount, MAX_BIRD_NESTS);
+            float cx = (_width - 1) * 0.5f, cy = (_height - 1) * 0.5f;
+            float play = TerrainShape.PlayRadius / _cellSize - 5f;
+            float clear = _startClearRadius + 6f;
+            for (int attempt = 0; attempt < 4000 && _placedBirdNests < target; attempt++)
+            {
+                int x = rng.Next(4, _width - 4), y = rng.Next(4, _height - 4);
+                int i = y * _width + x;
+                float dx = x - cx, dy = y - cy;
+                float r2 = dx * dx + dy * dy;
+                if (r2 > play * play || r2 < clear * clear) continue;
+                bool hidden = (_cover[i] && !_reed[i]) || _forest[i];
+                if (!hidden || _hollow[i] || _bridge[i] || _biome[i] == BIOME_SWAMP) continue;
+                if (!IsOpenArea(x, y, 1, 1)) continue;
+                var cell = new Vector2Int(x, y);
+                if (_hasNest && (_nest - cell).sqrMagnitude < 100) continue;
+                bool far = true;
+                for (int k = 0; k < _placedBirdNests && far; k++) far = (_birdNests[k] - cell).sqrMagnitude >= 256;
+                if (!far) continue;
+                _birdNests[_placedBirdNests++] = cell;
+                _birdNestCell[i] = true;
+                // Маленькая полянка вокруг гнезда: само гнездо видно, а трава рядом — укрытие для подхода.
+                for (int oy = -1; oy <= 1; oy++)
+                {
+                    for (int ox = -1; ox <= 1; ox++)
+                    {
+                        int k = (y + oy) * _width + x + ox;
+                        _cover[k] = false;
+                        _reed[k] = false;
+                    }
+                }
             }
         }
 
@@ -825,6 +1615,7 @@ namespace Snake3D
                     if (xx < 1 || yy < 1 || xx >= _width - 1 || yy >= _height - 1) return false;
                     int i = yy * _width + xx;
                     if (_obstacles[i] != ObstacleType.None || _water[i] || _burrowCell[i] || _sunStone[i]) return false;
+                    if (_hollow[i] || _bridge[i]) return false;
                 }
             }
             return true;
@@ -854,6 +1645,8 @@ namespace Snake3D
                         int i = y * _width + x;
                         if (_obstacles[i] != ObstacleType.None || _water[i] || _sunStone[i] || _burrowCell[i]) continue;
                         if (_hasNest && x == _nest.x && y == _nest.y) continue;
+                        // На голых камнях гряды трава не растёт.
+                        if (_biome[i] == BIOME_RIDGE) continue;
                         float dx = x - px;
                         float dy = y - py;
                         float angle = Mathf.Atan2(dy, dx);

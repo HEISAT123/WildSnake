@@ -32,6 +32,10 @@ namespace Snake3D
             NestNight,
             NestFood,
             Hedgehog,
+            BirdEggs,
+            ScareBird,
+            Hollow,
+            GuardClutch,
             Count
         }
 
@@ -39,7 +43,7 @@ namespace Snake3D
 
         private static readonly string[] Keys =
         {
-            "F", "E", "ЛКМ", "ЛКМ", "ПКМ", "ЛКМ", "E", "", "SPACE", "CTRL", "WASD", "", "E", "", "E", "", "", ""
+            "F", "E", "ЛКМ", "ЛКМ", "ПКМ", "ЛКМ", "E", "", "SPACE", "CTRL", "WASD", "", "E", "", "E", "", "", "", "", "ЛКМ", "", ""
         };
 
         private static readonly string[] Texts =
@@ -61,11 +65,15 @@ namespace Snake3D
             "отложить яйца",
             "гнездо — вернитесь ночью",
             "гнездо — сначала наешьтесь",
-            "ёж свернулся — уколетесь, подождите"
+            "ёж свернулся — уколетесь, подождите",
+            "птичье гнездо — подползите к яйцам",
+            "бросок отгонит птицу",
+            "в бревне не видят ни орёл, ни лиса",
+            "лиса идёт к кладке — отгоните её"
         };
 
         // Сколько раз показывать каждую подсказку.
-        private static readonly int[] Limits = { 6, 4, 4, 4, 4, 3, 4, 3, 3, 3, 3, 3, 3, 3, 99, 99, 99, 4 };
+        private static readonly int[] Limits = { 6, 4, 4, 4, 4, 3, 4, 3, 3, 3, 3, 3, 3, 3, 99, 99, 99, 4, 3, 4, 3, 99 };
 
         [Header("Источники")]
         [SerializeField] private GameManager _game;
@@ -76,6 +84,7 @@ namespace Snake3D
         [SerializeField] private EagleHunter _eagle;
         [SerializeField] private FoxHunter _fox;
         [SerializeField] private ScentTracker _scent;
+        [SerializeField] private BirdNests _birdNests;
 
         [Header("Элементы")]
         [SerializeField] private CanvasGroup _group;
@@ -211,6 +220,9 @@ namespace Snake3D
             if (hasPrey && !prey.IsFleeing && !prey.IsCurled && !_snake.IsCoiled && preyDist > _config.StrikeDistance && preyDist <= _config.ChargedStrikeDistance
                 && Allow(Hint.Coil) != Hint.None) return Hint.Coil;
 
+            if (_birdNests.IsAttacking(head, 2f * cs) && Allow(Hint.ScareBird) != Hint.None) return Hint.ScareBird;
+            if (_game.Quest.Stage == QuestStage.Guard && _fox.IsActive && !_fox.IsChasing && Allow(Hint.GuardClutch) != Hint.None) return Hint.GuardClutch;
+
             if (_fox.IsChasing && _game.Survival.Health01 > _config.FoxScareHealth)
             {
                 Vector3 d = _fox.Position - head;
@@ -220,6 +232,8 @@ namespace Snake3D
 
             if (_game.NearbyBurrow >= 0 && Allow(Hint.BurrowEnter) != Hint.None) return Hint.BurrowEnter;
             if (_eagle.IsThreatening && !_snake.IsHidden && Allow(Hint.Eagle) != Hint.None) return Hint.Eagle;
+            if (_grid.IsHollowAt(head) && Allow(Hint.Hollow) != Hint.None) return Hint.Hollow;
+            if (_birdNests.TryGetNearest(head, 4f * cs, out _, out _) && Allow(Hint.BirdEggs) != Hint.None) return Hint.BirdEggs;
             if (_snake.IsMoving && LogAhead() && Allow(Hint.Jump) != Hint.None) return Hint.Jump;
 
             if (hasPrey && !prey.IsFleeing && _snake.IsMoving && _snake.Pace != SnakePace.Sneak

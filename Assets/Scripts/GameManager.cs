@@ -58,6 +58,13 @@ namespace Snake3D
         [Tooltip("Сброшенная кожа при линьке")]
         [SerializeField] private SkinShedEffect _skinShed;
 
+        [Header("Гнёзда и потомство")]
+        [Tooltip("Птичьи гнёзда с яйцами")]
+        [SerializeField] private BirdNests _birdNests;
+
+        [Tooltip("Змеёныши, расползающиеся при вылуплении")]
+        [SerializeField] private Hatchlings _hatchlings;
+
         [Header("Гнездо")]
         [Tooltip("Яйца в гнезде: появляются, когда змея их отложит")]
         [SerializeField] private GameObject _nestEggs;
@@ -164,6 +171,18 @@ namespace Snake3D
         /// <summary>Змея у гнезда, но отложить яйца пока нельзя (чего не хватает).</summary>
         public event Action<NestCheck> NestBlocked;
 
+        /// <summary>Лиса утащила яйцо из кладки (сколько осталось).</summary>
+        public event Action<int> ClutchRaided;
+
+        /// <summary>Лиса утащила все яйца — кладку надо делать заново.</summary>
+        public event Action ClutchLost;
+
+        /// <summary>Кладка вылупилась: (номер нового поколения, сколько змеёнышей).</summary>
+        public event Action<int, int> GenerationStarted;
+
+        /// <summary>Бросок отогнал птицу от её гнезда.</summary>
+        public event Action BirdScared;
+
         public GameState State { get; private set; } = GameState.Menu;
         public RunStats Stats => _stats;
         public SurvivalStats Survival => _survival;
@@ -179,6 +198,9 @@ namespace Snake3D
 
         /// <summary>Главная цель «Продолжить род».</summary>
         public MainQuest Quest => _quest;
+
+        /// <summary>Сколько линек пережила змея текущего поколения (для цели «повзрослеть»).</summary>
+        public int GenerationMolts => _generationMolts;
 
         /// <summary>Змея у гнезда (можно попробовать отложить яйца клавишей E).</summary>
         public bool NearNest
@@ -237,6 +259,7 @@ namespace Snake3D
         private RunStats _stats;
         private float _moltProgress;
         private bool _moltPending;
+        private int _generationMolts;
         private float _rivalHealth;
         private float _rivalRespawnTimer = -1f;
         private float _menuRespawnTimer = -1f;
@@ -250,9 +273,12 @@ namespace Snake3D
                 RegenPerSecond = _config.RegenPerSecond,
                 WellFedThreshold = _config.WellFedThreshold
             };
-            _quest.TargetLength = _config.QuestLength;
+            _quest.BaseLength = _config.QuestLength;
+            _quest.LengthStep = _config.GenerationLengthStep;
             _quest.TargetMolts = _config.QuestMolts;
             _quest.NestSatiety = _config.NestSatiety;
+            _quest.ClutchSize = _config.ClutchSize;
+            _quest.HatchSeconds = _config.HatchSeconds;
             _constriction.Duration = _config.ConstrictDuration;
             _constriction.Patience = _config.ConstrictPatience;
         }
@@ -280,6 +306,10 @@ namespace Snake3D
             _eagle.Missed += OnEagleMissed;
             _fox.Appeared += OnFoxAppeared;
             _fox.Bit += OnFoxBit;
+            _fox.Raided += OnFoxRaided;
+            _birdNests.EggEaten += OnEggEaten;
+            _birdNests.Pecked += OnBirdPecked;
+            _birdNests.ParentScared += OnBirdScared;
             _dayNight.DayStarted += OnDayStarted;
             _dayNight.NightStarted += OnNightStarted;
             _settings.Changed += ApplySettings;
@@ -308,6 +338,10 @@ namespace Snake3D
             _eagle.Missed -= OnEagleMissed;
             _fox.Appeared -= OnFoxAppeared;
             _fox.Bit -= OnFoxBit;
+            _fox.Raided -= OnFoxRaided;
+            _birdNests.EggEaten -= OnEggEaten;
+            _birdNests.Pecked -= OnBirdPecked;
+            _birdNests.ParentScared -= OnBirdScared;
             _dayNight.DayStarted -= OnDayStarted;
             _dayNight.NightStarted -= OnNightStarted;
             _settings.Changed -= ApplySettings;
@@ -417,6 +451,7 @@ namespace Snake3D
             _survival.HealFull();
             _skinShed.Shed();
             _stats.Molts++;
+            _generationMolts++;
             Emit(_moltParticles, _snake.HeadPosition, _moltParticleCount);
             SetState(GameState.Playing);
             MoltCompleted?.Invoke(type);
@@ -432,11 +467,15 @@ namespace Snake3D
             ApplyUpgrades();
             _moltProgress = 0f;
             _moltPending = false;
+            _generationMolts = 0;
             MoltChoiceCount = 0;
             _stats = new RunStats();
             LastRank = -1;
             _quest.Reset();
             SetNestVisuals(false, false);
+            SetRaid(false);
+            _birdNests.ResetAll();
+            _hatchlings.Clear();
 
             if (_rival != null)
             {
@@ -472,6 +511,7 @@ namespace Snake3D
             _cameraRig.Showcase = menu;
             _cameraRig.OrbitInput = running;
             _wildlife.IsRunning = running || menu;
+            _birdNests.IsRunning = running;
             _dayNight.Running = running;
             _eagle.HuntingAllowed = running && !_dayNight.IsNight;
             _fox.HuntingAllowed = running;
@@ -494,6 +534,7 @@ namespace Snake3D
             _wildlife.IsNight = _dayNight.IsNight;
             _eagle.HuntingAllowed = !_dayNight.IsNight;
             _fox.IsNight = _dayNight.IsNight;
+            _birdNests.IsNight = _dayNight.IsNight;
 
             TickHunger(dt);
             if (State != GameState.Playing) return;
@@ -502,7 +543,13 @@ namespace Snake3D
             _snake.Stamina.RegenMultiplier = Mathf.Lerp(_config.HungryStaminaRegen, 1f, Mathf.Clamp01(_survival.Satiety01 * 2f))
                                              * _snake.Temperature.RegenMultiplier;
             TickFoxScare();
-            if (_quest.Update(_snake.BodyLengthCells, _stats.Molts))
+            // Кладка зреет, пока змея её охраняет; вылупились — следующее поколение.
+            if (_quest.TickHatch(dt))
+            {
+                HatchClutch();
+                return;
+            }
+            if (_quest.Update(_snake.BodyLengthCells, _generationMolts))
             {
                 SetNestVisuals(true, false);
                 _audio.Play(SoundId.Goal);
@@ -591,6 +638,7 @@ namespace Snake3D
                 _survival.HealFull();
                 _skinShed.Shed();
                 _stats.Molts++;
+                _generationMolts++;
                 return;
             }
             _audio.Play(SoundId.Molt);
@@ -755,6 +803,7 @@ namespace Snake3D
             if (kind == PreyKind.Mouse) ReportGoal(GoalType.CatchMice);
             if (kind == PreyKind.Rabbit) ReportGoal(GoalType.ConstrictRabbit);
             if (kind == PreyKind.Bird && _snake.LastStrikeFromAmbush) ReportGoal(GoalType.AmbushBird);
+            if (kind == PreyKind.Fish) ReportGoal(GoalType.CatchFish);
 
             Emit(_eatParticles, position, big ? _eatParticleCount : _eatParticleCount / 2);
             _audio.Play(big ? SoundId.Feast : SoundId.Catch);
@@ -773,7 +822,7 @@ namespace Snake3D
                 return;
             }
 
-            if (NearNest && _quest.Stage != QuestStage.Grow && !_constriction.IsActive)
+            if (NearNest && _quest.Stage == QuestStage.Nest && !_constriction.IsActive)
             {
                 TryLayEggs();
                 return;
@@ -793,7 +842,7 @@ namespace Snake3D
             }
         }
 
-        /// <summary>Кладка у гнезда: ночью и сытой — победа, иначе объясняем, чего не хватает.</summary>
+        /// <summary>Кладка у гнезда: ночью и сытой — род продолжен, начинается охрана кладки; иначе объясняем, чего не хватает.</summary>
         private void TryLayEggs()
         {
             NestCheck check = NestStatus;
@@ -804,11 +853,12 @@ namespace Snake3D
             }
             _quest.TryLay(_dayNight.IsNight, _survival.Satiety01);
             SetNestVisuals(false, true);
+            ShowClutch(_quest.Eggs);
+            SetRaid(true);
             _stats.Won = true;
             _audio.Play(SoundId.Molt);
             Emit(_moltParticles, _grid.NestPosition, _moltParticleCount);
             QuestAdvanced?.Invoke(_quest.Stage);
-            EndGame();
         }
 
         private void SetNestVisuals(bool beacon, bool eggs)
@@ -861,7 +911,13 @@ namespace Snake3D
                 EaglesEvaded = _stats.EaglesEvaded,
                 FoxesScared = _stats.FoxesScared,
                 Burrow = _burrowIndex,
-                Quest = (int)_quest.Stage
+                Quest = (int)_quest.Stage,
+                Generation = _quest.Generation,
+                GenerationMolts = _generationMolts,
+                ClutchEggs = _quest.Eggs,
+                HatchTime = _quest.HatchTime,
+                Generations = _stats.Generations,
+                Hatchlings = _stats.Hatchlings
             };
             _upgrades.CopyLevels(save.Upgrades);
             return save;
@@ -881,8 +937,115 @@ namespace Snake3D
             _stats.Molts = save.Molts;
             _stats.EaglesEvaded = save.EaglesEvaded;
             _stats.FoxesScared = save.FoxesScared;
-            _quest.Restore(save.Quest == (int)QuestStage.Nest ? QuestStage.Nest : QuestStage.Grow);
-            SetNestVisuals(_quest.Stage == QuestStage.Nest, false);
+            var stage = (QuestStage)Mathf.Clamp(save.Quest, 0, (int)QuestStage.Guard);
+            _quest.Restore(stage, save.Generation, save.ClutchEggs, save.HatchTime);
+            _generationMolts = save.GenerationMolts;
+            _stats.Generations = save.Generations;
+            _stats.Hatchlings = save.Hatchlings;
+            _stats.Won = save.Generations > 0 || stage == QuestStage.Guard;
+            bool guard = _quest.Stage == QuestStage.Guard;
+            SetNestVisuals(_quest.Stage == QuestStage.Nest, guard);
+            if (guard) ShowClutch(_quest.Eggs);
+            SetRaid(guard);
+        }
+
+        // ---------------- Птичьи гнёзда, кладка и поколения ----------------
+
+        private void OnEggEaten(Vector3 position)
+        {
+            if (State != GameState.Playing) return;
+            _survival.Feed(_config.EggSatiety * _upgrades.FeedMultiplier);
+            _snake.Grow(_config.EggGrowth);
+            _moltProgress += _config.EggGrowth;
+            if (_moltProgress >= _config.MoltGrowth) _moltPending = true;
+            _stats.Eggs++;
+            ReportGoal(GoalType.EatEggs);
+            Emit(_eatParticles, position, _eatParticleCount / 2);
+            _audio.Play(SoundId.Catch);
+        }
+
+        private void OnBirdPecked(Vector3 from)
+        {
+            if (State != GameState.Playing) return;
+            _snake.TakeHit(_config.BirdPeckDamage, DamageSource.Bird, _snake.HeadPosition - from);
+        }
+
+        private void OnBirdScared()
+        {
+            if (State != GameState.Playing) return;
+            _audio.Play(SoundId.Dash);
+            BirdScared?.Invoke();
+        }
+
+        /// <summary>Лиса у кладки утащила яйцо; все яйца — кладка погибла, откладывать заново.</summary>
+        private void OnFoxRaided()
+        {
+            if (State != GameState.Playing || _quest.Stage != QuestStage.Guard) return;
+            bool lost = _quest.LoseEgg();
+            ShowClutch(_quest.Eggs);
+            _audio.Play(SoundId.FoxYip);
+            if (!lost)
+            {
+                ClutchRaided?.Invoke(_quest.Eggs);
+                return;
+            }
+            SetRaid(false);
+            SetNestVisuals(true, false);
+            ClutchLost?.Invoke();
+            QuestAdvanced?.Invoke(_quest.Stage);
+        }
+
+        /// <summary>
+        /// Кладка вылупилась: змеёныши расползаются, а игра продолжается одним из них — маленькой змейкой у гнезда
+        /// с тем же набором улучшений. Цель следующего поколения — повзрослеть чуть сильнее.
+        /// </summary>
+        private void HatchClutch()
+        {
+            Vector3 nest = _grid.NestPosition;
+            int hatched = _quest.Hatch();
+            SetRaid(false);
+            SetNestVisuals(false, false);
+            _hatchlings.Release(nest, hatched);
+            _stats.Generations++;
+            _stats.Hatchlings += hatched;
+
+            EndConstriction(false, false);
+            _snake.SetLength(_config.StartLength);
+            Vector3 face = _grid.Center - nest;
+            face.y = 0f;
+            face = face.sqrMagnitude > 0.01f ? face.normalized : Vector3.forward;
+            _snake.ExitBurrow(nest + face * (0.8f * _grid.CellSize), Mathf.Atan2(face.x, face.z) * Mathf.Rad2Deg);
+            _snake.Digestion.Reset();
+            _survival.HealFull();
+            _moltProgress = 0f;
+            _moltPending = false;
+            _generationMolts = 0;
+            _cameraRig.LookBehindSnake();
+            _audio.Play(SoundId.Goal);
+            Emit(_moltParticles, nest, _moltParticleCount);
+            GenerationStarted?.Invoke(_quest.Generation, hatched);
+            QuestAdvanced?.Invoke(_quest.Stage);
+        }
+
+        /// <summary>Лиса идёт к кладке, пока её охраняют.</summary>
+        private void SetRaid(bool on)
+        {
+            _fox.Raiding = on;
+            _fox.RaidPoint = _grid.NestPosition;
+            _fox.Eagerness = on ? _config.GuardFoxEagerness : 1f;
+        }
+
+        /// <summary>В гнезде видно столько яиц, сколько осталось в кладке.</summary>
+        private void ShowClutch(int eggs)
+        {
+            if (_nestEggs == null) return;
+            Transform t = _nestEggs.transform;
+            for (int i = 0; i < t.childCount; i++)
+            {
+                GameObject egg = t.GetChild(i).gameObject;
+                bool visible = i < eggs;
+                if (egg.activeSelf != visible) egg.SetActive(visible);
+            }
         }
 
         // ---------------- Обвивание ----------------

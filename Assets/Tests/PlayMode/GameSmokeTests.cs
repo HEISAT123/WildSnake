@@ -195,7 +195,7 @@ namespace Snake3D.Tests
         }
 
         [UnityTest]
-        public IEnumerator Nest_LayingEggsAtNight_WinsTheGame()
+        public IEnumerator Nest_LayingEggsAtNight_StartsGuard_ThenNextGeneration()
         {
             _game.StartGame();
             SnakeController snake = FindPlayer();
@@ -219,9 +219,21 @@ namespace Snake3D.Tests
             _game.Survival.Feed(100f);
             yield return null;
             interact.Invoke(_game, null);
-            Assert.AreEqual(GameState.GameOver, _game.State);
-            Assert.IsTrue(_game.Stats.Won, "Кладка ночью и сытой должна давать победу");
-            Assert.AreEqual(QuestStage.Done, _game.Quest.Stage);
+            Assert.AreEqual(GameState.Playing, _game.State, "После кладки игра продолжается — охрана кладки");
+            Assert.IsTrue(_game.Stats.Won, "Кладка ночью и сытой — род продолжен");
+            Assert.AreEqual(QuestStage.Guard, _game.Quest.Stage);
+            var fox = Object.FindAnyObjectByType<FoxHunter>();
+            Assert.IsTrue(fox.Raiding, "Пока кладку охраняют, лиса идёт к гнезду");
+
+            // Кладка дозрела — играем змеёнышем следующего поколения.
+            _game.Quest.TickHatch(_game.Quest.HatchSeconds);
+            yield return null;
+            yield return null;
+            Assert.AreEqual(2, _game.Quest.Generation);
+            Assert.AreEqual(QuestStage.Grow, _game.Quest.Stage);
+            Assert.AreEqual(1, _game.Stats.Generations);
+            Assert.Less(snake.BodyLengthCells, 4f, "Новое поколение начинает маленькой змейкой");
+            Assert.IsFalse(fox.Raiding);
         }
 
         private static SnakeController FindPlayer()

@@ -10,7 +10,7 @@ namespace Snake3D
     public class DailyGoals
     {
         public const int MAX_GOALS = 2;
-        public const int TYPE_COUNT = 7;
+        public const int TYPE_COUNT = 9;
 
         private readonly DailyGoal[] _goals = new DailyGoal[MAX_GOALS];
         private readonly int[] _pool = new int[TYPE_COUNT];
@@ -85,12 +85,22 @@ namespace Snake3D
             return -1;
         }
 
-        public static int TargetFor(GoalType type) => type == GoalType.CatchMice ? 3 : 1;
+        public static int TargetFor(GoalType type)
+        {
+            switch (type)
+            {
+                case GoalType.CatchMice: return 3;
+                case GoalType.CatchFish: return 2;
+                case GoalType.EatEggs: return 3;
+                default: return 1;
+            }
+        }
 
         /// <summary>Охотничьи цели дают очко линьки, остальные — полное восстановление.</summary>
         public static bool GivesMolt(GoalType type)
         {
-            return type == GoalType.AmbushBird || type == GoalType.ConstrictRabbit || type == GoalType.CatchMice;
+            return type == GoalType.AmbushBird || type == GoalType.ConstrictRabbit || type == GoalType.CatchMice
+                   || type == GoalType.CatchFish;
         }
     }
 }

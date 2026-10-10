@@ -2,12 +2,12 @@ using NUnit.Framework;
 
 namespace Snake3D.Tests
 {
-    /// <summary>Главная цель: повзрослеть, затем ночью и сытой отложить яйца в гнезде.</summary>
+    /// <summary>Главная цель: повзрослеть, ночью и сытой отложить яйца, охранять кладку, вылупление — новое поколение.</summary>
     public class MainQuestTests
     {
         private static MainQuest Create()
         {
-            var q = new MainQuest { TargetLength = 10f, TargetMolts = 2, NestSatiety = 0.6f };
+            var q = new MainQuest { BaseLength = 10f, LengthStep = 2f, TargetMolts = 2, NestSatiety = 0.6f, ClutchSize = 4, HatchSeconds = 10f };
             q.Reset();
             return q;
         }
@@ -52,9 +52,53 @@ namespace Snake3D.Tests
             q.Update(10f, 2);
             Assert.IsFalse(q.TryLay(false, 1f));
             Assert.IsTrue(q.TryLay(true, 1f));
-            Assert.AreEqual(QuestStage.Done, q.Stage);
+            Assert.AreEqual(QuestStage.Guard, q.Stage);
+            Assert.AreEqual(4, q.Eggs);
             Assert.AreEqual(NestCheck.AlreadyDone, q.CanLay(true, 1f));
             Assert.IsFalse(q.TryLay(true, 1f));
+        }
+
+        [Test]
+        public void Hatch_StartsNextGeneration_WithHigherTarget()
+        {
+            MainQuest q = Create();
+            q.Update(10f, 2);
+            q.TryLay(true, 1f);
+            Assert.IsFalse(q.TickHatch(6f));
+            Assert.AreEqual(0.6f, q.HatchProgress01, 1e-4f);
+            Assert.IsTrue(q.TickHatch(5f), "Через HatchSeconds кладка вылупляется");
+            Assert.AreEqual(4, q.Hatch());
+            Assert.AreEqual(2, q.Generation);
+            Assert.AreEqual(QuestStage.Grow, q.Stage);
+            Assert.AreEqual(12f, q.TargetLength, 1e-4f, "Следующее поколение должно вырасти больше");
+            Assert.IsFalse(q.Update(11f, 2));
+            Assert.IsTrue(q.Update(12f, 2));
+        }
+
+        [Test]
+        public void LosingAllEggs_ReturnsToNest()
+        {
+            MainQuest q = Create();
+            q.Update(10f, 2);
+            q.TryLay(true, 1f);
+            Assert.IsFalse(q.LoseEgg());
+            Assert.IsFalse(q.LoseEgg());
+            Assert.IsFalse(q.LoseEgg());
+            Assert.IsTrue(q.LoseEgg(), "Последнее яйцо — кладка погибла");
+            Assert.AreEqual(QuestStage.Nest, q.Stage);
+            Assert.AreEqual(NestCheck.Ok, q.CanLay(true, 1f), "Можно отложить яйца снова");
+            Assert.IsFalse(q.TickHatch(100f), "Без яиц ничего не вылупляется");
+        }
+
+        [Test]
+        public void Restore_KeepsGenerationAndClutch()
+        {
+            MainQuest q = Create();
+            q.Restore(QuestStage.Guard, 3, 2, 4f);
+            Assert.AreEqual(3, q.Generation);
+            Assert.AreEqual(2, q.Eggs);
+            Assert.AreEqual(4f, q.HatchTime, 1e-4f);
+            Assert.AreEqual(14f, q.TargetLength, 1e-4f);
         }
 
         [Test]

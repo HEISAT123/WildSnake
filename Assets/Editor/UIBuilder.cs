@@ -33,6 +33,7 @@ internal static class UIBuilder
         public WeatherSystem Weather;
         public DayNightCycle DayNight;
         public ScentTracker Scent;
+        public BirdNests BirdNests;
         public Transform CameraTransform;
         public Camera MinimapCamera;
         public RenderTexture MinimapTexture;
@@ -151,7 +152,7 @@ internal static class UIBuilder
 
         var hints = canvasGo.AddComponent<ContextHints>();
         SnakeSceneBuilder.Wire(hints, ("_game", r.Game), ("_config", r.Config), ("_snake", r.Player), ("_wildlife", r.Wildlife),
-            ("_grid", r.Grid), ("_eagle", r.Eagle), ("_fox", r.Fox), ("_scent", r.Scent),
+            ("_grid", r.Grid), ("_eagle", r.Eagle), ("_fox", r.Fox), ("_scent", r.Scent), ("_birdNests", r.BirdNests),
             ("_group", hp.HintGroup), ("_keycap", hp.HintKeycap), ("_keyText", hp.HintKey), ("_label", hp.HintLabel));
 
         var threat = hud.AddComponent<ThreatIndicator>();
@@ -348,7 +349,7 @@ internal static class UIBuilder
         TopLeft(Label(screen, "DaysCaption", Spaced("СУТОК ПРОЖИТО"), 20, Smoke, TextAnchor.MiddleLeft, true), LEFT, -436f, 500f, 28f);
 
         TopLeft(Line(screen, Hair), LEFT, -486f, 880f, 1f);
-        string[] statNames = { "ДОБЫЧА", "ДЛИНА", "ЛИНЬКИ", "ХИЩНИКИ", "ВРЕМЯ" };
+        string[] statNames = { "ДОБЫЧА", "ПОКОЛЕНИЕ", "ЛИНЬКИ", "ХИЩНИКИ", "ВРЕМЯ" };
         for (int i = 0; i < statNames.Length; i++)
         {
             float x = LEFT + i * 176f;
@@ -548,14 +549,14 @@ internal static class UIBuilder
         RectTransform screen = Screen(root, "GuidePanel", shade, out _);
         Heading(screen, "КАК ВЫЖИТЬ", "СПРАВОЧНИК", 110);
 
-        string[] titles = { "ОХОТА", "ЗАСАДА", "ОПАСНОСТИ", "ВЫЖИВАНИЕ" };
+        string[] titles = { "ОХОТА", "ЗАСАДА", "ОПАСНОСТИ", "РОД" };
         Color[] accents = { Venom, Venom, Ember, Sky };
         string[] bodies =
         {
-            "WASD — ползти, мышь — камера. CTRL — красться, SHIFT — быстрее (тратит выносливость).\n\nЖука достаточно коснуться. Мышь, лягушку и птицу ловят броском: ЛКМ — укус, ПКМ — замах, и бросок летит дальше.\n\nКролика бросок только хватает — держите F, чтобы задушить, пока хватает сил.",
-            "Замрите на пару секунд — змея сольётся с местностью, а в высокой траве её почти не видно. Затаившаяся змея подманивает добычу кончиком хвоста: так ловят птиц.\n\nПромах броском на секунду выдаёт змею.",
-            "Днём — орёл: метка у края экрана и тень. Спасают трава или бросок в последний миг.\n\nНочью приходит лиса: идёт по следу, в пруд не заходит. Бросок в морду отпугнёт её, пока здоровья больше половины.",
-            "Змея холоднокровна: на солнечном камне греется, ночью и в воде мёрзнет — иней по краям экрана.\n\nE у норы — войти: прогресс сохраняется, ночь проходит быстрее.\n\nTAB — карта и цели дня. H — скрыть интерфейс."
+            "WASD — ползти, мышь — камера. CTRL — красться, SHIFT — быстрее.\n\nЖука хватит коснуться. Мышь, лягушку, птицу и рыбу ловят броском: ЛКМ — укус, ПКМ — замах.\n\nКролика бросок только хватает — держите F, чтобы задушить.\n\nВ птичьих гнёздах — яйца. Птица будет клевать; бросок её отгонит.",
+            "Замрите на пару секунд — змея сольётся с местностью, а в траве и камыше её почти не видно. Затаившаяся змея подманивает добычу кончиком хвоста.\n\nВ полом бревне змею не видят ни орёл, ни лиса.\n\nХолодно — грейтесь на солнечном камне.",
+            "Днём — орёл: метка у края экрана и тень. Спасают трава, кроны или бросок в последний миг.\n\nНочью приходит лиса: идёт по следу, в воду не заходит. Бросок в морду отпугнёт её, пока здоровья больше половины.\n\nЁж сворачивается в колючий шар — не кусайте.",
+            "Повзрослейте, затем ночью, сытой, отложите яйца в гнезде (E) и охраняйте кладку — лиса придёт за яйцами. Вылупятся змеёныши — играете следующим поколением.\n\nE у норы — сохраниться. TAB — карта и цели. H — скрыть интерфейс."
         };
         for (int i = 0; i < titles.Length; i++)
         {
@@ -563,7 +564,7 @@ internal static class UIBuilder
             TopLeft(Label(screen, "Index", (i + 1).ToString("00"), 20, accents[i], TextAnchor.MiddleLeft, true), x, -300f, 80f, 26f);
             TopLeft(Label(screen, "Title", titles[i], 40, Bone, TextAnchor.MiddleLeft, true), x - 2f, -326f, 380f, 52f);
             TopLeft(Line(screen, accents[i]), x, -390f, 380f, 2f);
-            Text body = Label(screen, "Body", bodies[i], 22, Ash, TextAnchor.UpperLeft, false);
+            Text body = Label(screen, "Body", bodies[i], 20, Ash, TextAnchor.UpperLeft, false);
             body.horizontalOverflow = HorizontalWrapMode.Wrap;
             body.lineSpacing = 1.15f;
             TopLeft(body, x, -414f, 370f, 470f);

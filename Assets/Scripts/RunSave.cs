@@ -24,6 +24,12 @@ namespace Snake3D
         public int FoxesScared;
         public int Burrow;
         public int Quest;
+        public int Generation = 1;
+        public int GenerationMolts;
+        public int ClutchEggs;
+        public float HatchTime;
+        public int Generations;
+        public int Hatchlings;
         public int[] Upgrades = new int[UpgradeSet.TYPE_COUNT];
     }
 }

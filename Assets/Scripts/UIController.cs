@@ -119,6 +119,10 @@ namespace Snake3D
             _game.HedgehogPricked += OnHedgehogPricked;
             _game.RainChanged += OnRainChanged;
             _game.NestBlocked += OnNestBlocked;
+            _game.ClutchRaided += OnClutchRaided;
+            _game.ClutchLost += OnClutchLost;
+            _game.GenerationStarted += OnGenerationStarted;
+            _game.BirdScared += OnBirdScared;
             _eagle.Missed += OnEagleMissed;
             _dayNight.DayStarted += OnDayStarted;
             _dayNight.NightStarted += OnNightStarted;
@@ -154,6 +158,10 @@ namespace Snake3D
             _game.HedgehogPricked -= OnHedgehogPricked;
             _game.RainChanged -= OnRainChanged;
             _game.NestBlocked -= OnNestBlocked;
+            _game.ClutchRaided -= OnClutchRaided;
+            _game.ClutchLost -= OnClutchLost;
+            _game.GenerationStarted -= OnGenerationStarted;
+            _game.BirdScared -= OnBirdScared;
             _eagle.Missed -= OnEagleMissed;
             _dayNight.DayStarted -= OnDayStarted;
             _dayNight.NightStarted -= OnNightStarted;
@@ -276,6 +284,7 @@ namespace Snake3D
             if (kind == PreyKind.Rabbit) ShowBanner("+ КРОЛИК");
             else if (kind == PreyKind.Hedgehog) ShowBanner("+ ЁЖ");
             else if (kind == PreyKind.Bird) ShowBanner("+ ПТИЦА");
+            else if (kind == PreyKind.Fish) ShowBanner("+ РЫБА");
         }
 
         private void OnMoltCompleted(UpgradeType type)
@@ -301,7 +310,33 @@ namespace Snake3D
 
         private void OnQuestAdvanced(QuestStage stage)
         {
-            if (stage == QuestStage.Nest) ShowBanner("ВЗРОСЛАЯ ЗМЕЯ · ГНЕЗДО ОТМЕЧЕНО НА КАРТЕ");
+            if (stage == QuestStage.Nest && _game.Quest.Eggs == 0 && _game.State == GameState.Playing && !_clutchJustLost)
+                ShowBanner("ВЗРОСЛАЯ ЗМЕЯ · ГНЕЗДО ОТМЕЧЕНО НА КАРТЕ");
+            else if (stage == QuestStage.Guard) ShowBanner("КЛАДКА · ОХРАНЯЙТЕ ЯЙЦА ОТ ЛИСЫ");
+            _clutchJustLost = false;
+        }
+
+        private bool _clutchJustLost;
+
+        private void OnClutchRaided(int left)
+        {
+            ShowBanner("ЛИСА УТАЩИЛА ЯЙЦО · ОСТАЛОСЬ " + left);
+        }
+
+        private void OnClutchLost()
+        {
+            _clutchJustLost = true;
+            ShowBanner("КЛАДКА ПОГИБЛА · ОТЛОЖИТЕ ЯЙЦА СНОВА");
+        }
+
+        private void OnGenerationStarted(int generation, int hatched)
+        {
+            ShowBanner("ПОКОЛЕНИЕ " + generation + " · ЗМЕЕНЫШЕЙ: " + hatched);
+        }
+
+        private void OnBirdScared()
+        {
+            ShowBanner("ПТИЦА ОТОГНАНА");
         }
 
         private void OnHedgehogPricked()
@@ -392,7 +427,7 @@ namespace Snake3D
         private void FillGameOver()
         {
             RunStats s = _game.Stats;
-            _gameOverTitle.text = s.Won ? "РОД ПРОДОЛЖЕН" : CauseTitle(s.Cause);
+            _gameOverTitle.text = CauseTitle(s.Cause);
             _daysText.text = TimeFormat.Days(s.Time, _game.DayLengthSeconds);
 
             int rank = _game.LastRank;
@@ -401,7 +436,7 @@ namespace Snake3D
                 : "РЕКОРД  " + TimeFormat.Days(_leaderboard.BestSeconds, _game.DayLengthSeconds) + " СУТ.";
 
             SetStat(0, s.Prey.ToString());
-            SetStat(1, s.Length.ToString("0.0"));
+            SetStat(1, (s.Generations + 1).ToString());
             SetStat(2, s.Molts.ToString());
             SetStat(3, (s.EaglesEvaded + s.FoxesScared).ToString());
             SetStat(4, TimeFormat.Clock(Mathf.FloorToInt(s.Time)));
@@ -416,6 +451,7 @@ namespace Snake3D
                 case DamageSource.Fox: return "ДОБЫЧА ЛИСЫ";
                 case DamageSource.Hedgehog: return "ИСКОЛОТА ЁЖИКОМ";
                 case DamageSource.Rival: return "ПОБЕЖДЕНА СОПЕРНИЦЕЙ";
+                case DamageSource.Bird: return "ЗАКЛЁВАНА ПТИЦЕЙ";
                 default: return "СМЕРТЕЛЬНАЯ РАНА";
             }
         }

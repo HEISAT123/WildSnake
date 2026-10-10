@@ -4,7 +4,8 @@ using UnityEngine.UI;
 namespace Snake3D
 {
     /// <summary>
-    /// Строка текущей главной цели слева сверху: что делать дальше и сколько осталось («Повзрослеть: длина 6,4 из 11…»).
+    /// Строка текущей главной цели слева сверху: что делать дальше и сколько осталось («Повзрослеть: длина 6,4 из 11…»,
+    /// «Охраняйте кладку: яиц 5 · вылупление через 2:10»). Со второго поколения — с номером поколения.
     /// Текст меняется, только когда меняется показываемое значение.
     /// </summary>
     public class HudObjective : MonoBehaviour
@@ -38,8 +39,9 @@ namespace Snake3D
         {
             MainQuest quest = _game.Quest;
             float length = _game.SnakeLength;
-            int molts = _game.Stats.Molts;
-            _progress.fillAmount = quest.Stage == QuestStage.Grow ? quest.GrowProgress01(length, molts) : 1f;
+            int molts = _game.GenerationMolts;
+            _progress.fillAmount = quest.Stage == QuestStage.Grow ? quest.GrowProgress01(length, molts)
+                : quest.Stage == QuestStage.Guard ? quest.HatchProgress01 : 1f;
 
             // До следующей линьки: сколько ещё съесть, видно сразу.
             float molt = _game.MoltProgress01;
@@ -52,16 +54,25 @@ namespace Snake3D
             }
 
             // Ключ показываемого состояния: этап, длина до десятых, линьки, ночь и сытость — текст пересобираем только при его смене.
+            int secondsLeft = Mathf.CeilToInt(quest.HatchSecondsLeft);
             int stateKey = quest.Stage == QuestStage.Grow
                 ? Mathf.RoundToInt(Mathf.Min(length, quest.TargetLength) * 10f) * 16 + Mathf.Min(molts, quest.TargetMolts)
+                : quest.Stage == QuestStage.Guard ? 200000 + quest.Eggs * 10000 + secondsLeft
                 : 100000 + (int)_game.NestStatus;
+            stateKey += quest.Generation * 1000000;
             if (stateKey == _shownKey) return;
             _shownKey = stateKey;
 
+            string generation = quest.Generation > 1 ? "Поколение " + quest.Generation + "  ·  " : "";
             if (quest.Stage == QuestStage.Grow)
             {
-                _text.text = "Повзрослеть:  длина " + Mathf.Min(length, quest.TargetLength).ToString("0.0") + " из " + quest.TargetLength.ToString("0")
+                _text.text = generation + "Повзрослеть:  длина " + Mathf.Min(length, quest.TargetLength).ToString("0.0") + " из " + quest.TargetLength.ToString("0.#")
                              + "  ·  линьки " + Mathf.Min(molts, quest.TargetMolts) + " из " + quest.TargetMolts;
+                return;
+            }
+            if (quest.Stage == QuestStage.Guard)
+            {
+                _text.text = generation + "Охраняйте кладку:  яиц " + quest.Eggs + "  ·  вылупление через " + TimeFormat.Clock(secondsLeft);
                 return;
             }
 

@@ -44,6 +44,21 @@ public static class EnvironmentBuilder
         public Material Litter;
         public Material Egg;
         public Material Beacon;
+        public Material RiverWater;
+        public Material SwampWater;
+        public Material BirchBark;
+        public Material BirchBarkFade;
+        public Material BirchLeaves;
+        public Material BirchLeavesFade;
+        public Material DeadBark;
+        public Material DeadBarkFade;
+        public Material Reed;
+        public Material Cattail;
+        public Material Fern;
+        public Material MushroomCap;
+        public Material MushroomStem;
+        public Material LilyPad;
+        public Material BirdEgg;
         public Mesh CrownMesh;
         public Mesh PineMesh;
         public Mesh RockMesh;
@@ -113,6 +128,39 @@ public static class EnvironmentBuilder
         m.Beacon = SnakeSceneBuilder.CreateLitMaterial("NestBeacon", new Color(0.8f, 1f, 0.3f, 0.22f), 0f);
         SnakeSceneBuilder.SetEmission(m.Beacon, new Color(0.55f, 0.85f, 0.12f));
         SnakeSceneBuilder.MakeTransparent(m.Beacon);
+        // Река — светлее и прозрачнее пруда; рябь бежит вдоль русла (UV по течению, сдвиг — WaterFlow).
+        m.RiverWater = SnakeSceneBuilder.CreateLitMaterial("RiverWater", new Color(0.24f, 0.5f, 0.58f, 0.68f), 0.95f);
+        Texture2D riverNormal = ProceduralTextures.WaterNormal(256);
+        riverNormal.name = "RiverWater_N";
+        SetNormalMap(m.RiverWater, Save(riverNormal), 0.7f);
+        SnakeSceneBuilder.MakeTransparent(m.RiverWater);
+        // Болотная вода — мутная, зеленовато-бурая, почти непрозрачная.
+        m.SwampWater = SnakeSceneBuilder.CreateLitMaterial("SwampWater", new Color(0.19f, 0.25f, 0.13f, 0.86f), 0.85f);
+        SetNormalMap(m.SwampWater, m.RiverWater.GetTexture("_BumpMap") as Texture2D, 0.25f);
+        SnakeSceneBuilder.MakeTransparent(m.SwampWater);
+
+        m.BirchBark = SnakeSceneBuilder.CreateLitMaterial("BirchBark", Color.white, 0.1f);
+        m.BirchBark.mainTexture = Save(ProceduralTextures.BirchBark(128));
+        m.BirchLeaves = FoliageMaterial("ArenaBirchLeaves", new Color(0.3f, 0.5f, 0.15f), new Color(0.68f, 0.82f, 0.32f));
+        m.DeadBark = SnakeSceneBuilder.CreateLitMaterial("DeadBark", new Color(0.82f, 0.8f, 0.76f), 0.05f);
+        m.DeadBark.mainTexture = m.Bark.mainTexture;
+        m.BirchBarkFade = FadeCopy("BirchBarkFade", m.BirchBark);
+        m.BirchLeavesFade = FadeCopy("ArenaBirchLeavesFade", m.BirchLeaves);
+        m.DeadBarkFade = FadeCopy("DeadBarkFade", m.DeadBark);
+
+        // Камыш и папоротник — те же вырезанные по альфе стебли, что у высокой травы, другого цвета.
+        m.Reed = SnakeSceneBuilder.CreateLitMaterial("Reed", new Color(0.66f, 0.7f, 0.38f), 0.05f);
+        m.Reed.mainTexture = m.TallGrass.mainTexture;
+        MakeCutout(m.Reed);
+        m.Fern = SnakeSceneBuilder.CreateLitMaterial("Fern", new Color(0.3f, 0.56f, 0.2f), 0.05f);
+        m.Fern.mainTexture = m.TallGrass.mainTexture;
+        MakeCutout(m.Fern);
+        m.Cattail = SnakeSceneBuilder.CreateLitMaterial("Cattail", new Color(0.33f, 0.2f, 0.11f), 0.1f);
+        m.MushroomCap = SnakeSceneBuilder.CreateLitMaterial("MushroomCap", new Color(0.78f, 0.2f, 0.12f), 0.45f);
+        m.MushroomStem = SnakeSceneBuilder.CreateLitMaterial("MushroomStem", new Color(0.93f, 0.9f, 0.82f), 0.2f);
+        m.LilyPad = SnakeSceneBuilder.CreateLitMaterial("LilyPad", new Color(0.22f, 0.46f, 0.18f), 0.55f);
+        m.BirdEgg = SnakeSceneBuilder.CreateLitMaterial("BirdEgg", new Color(0.72f, 0.86f, 0.9f), 0.4f);
+
         m.CrownMesh = SaveMesh(ProceduralMeshes.Blob("ArenaCrown", 2, 0.42f, 57), "ArenaCrown");
         m.PineMesh = SaveMesh(ProceduralMeshes.Cone("ArenaPineTier", 9), "ArenaPineTier");
         return m;
@@ -243,11 +291,29 @@ public static class EnvironmentBuilder
         return _grid.GroundHeight(new Vector3(x, 0f, z));
     }
 
+    /// <summary>Окраска земли по местности: болото — бурая трясина, гряда — камень и щебень, у воды — ил и галька.</summary>
+    private static Color TerrainTint(float x, float z, Color c)
+    {
+        var p = new Vector3(x, 0f, z);
+        float swamp = _grid.SwampWeight(p);
+        float ridge = _grid.RidgeWeight(p);
+        float shore = _grid.ShoreDistance(p);
+        var bog = new Color(0.25f, 0.29f, 0.13f);
+        var stone = new Color(0.46f, 0.44f, 0.4f);
+        var gravel = new Color(0.52f, 0.47f, 0.38f);
+        var mud = new Color(0.31f, 0.26f, 0.17f);
+        c = Color.Lerp(c, bog, swamp * 0.75f);
+        float n = ProceduralTextures.Fbm(x * 0.15f + 3f, z * 0.15f + 9f, 3, 2.1f);
+        c = Color.Lerp(c, Color.Lerp(stone, gravel, n), ridge * Mathf.Clamp01(0.45f + n * 0.7f));
+        if (shore < 2.5f) c = Color.Lerp(c, shore < 0.6f ? gravel : mud, (1f - shore / 2.5f) * 0.7f);
+        return c;
+    }
+
     /// <summary>Один рельеф на весь мир: по нему ходит змея, и он же поднимается в горы-границу.</summary>
     private static void BuildTerrain(Transform root)
     {
         Mesh mesh = SaveMesh(ProceduralMeshes.Terrain(TERRAIN_RESOLUTION, TERRAIN_SIZE, _center, TerrainHeight), "Terrain");
-        Texture2D color = Save(ProceduralTextures.Terrain(2048, TerrainHeight, TERRAIN_SIZE, _center));
+        Texture2D color = Save(ProceduralTextures.Terrain(2048, TerrainHeight, TERRAIN_SIZE, _center, TerrainTint));
         Texture2D detail = Save(ProceduralTextures.Detail(256));
 
         Material mat = SnakeSceneBuilder.CreateLitMaterial("Terrain", Color.white, 0.08f);
@@ -581,7 +647,10 @@ public static class EnvironmentBuilder
 
     private static Material FadeCopy(string name, Material source)
     {
-        Material mat = SnakeSceneBuilder.CreateLitMaterial(name, new Color(1f, 1f, 1f, 0.22f), 0.12f);
+        // Цвет — как у оригинала, чтобы полупрозрачная копия не меняла оттенок (серая кора, светлый спил).
+        Color tint = source.color;
+        tint.a = 0.22f;
+        Material mat = SnakeSceneBuilder.CreateLitMaterial(name, tint, 0.12f);
         mat.mainTexture = source.mainTexture;
         SnakeSceneBuilder.MakeTransparent(mat);
         return mat;

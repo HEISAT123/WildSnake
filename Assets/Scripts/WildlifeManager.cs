@@ -13,7 +13,7 @@ namespace Snake3D
     /// </summary>
     public class WildlifeManager : MonoBehaviour
     {
-        private const int KIND_COUNT = 6;
+        private const int KIND_COUNT = 7;
 
         [Header("Ссылки")]
         [Tooltip("Параметры баланса")]
@@ -183,7 +183,8 @@ namespace Snake3D
                 // Кролика ИИ не душит — не гоняется за ним зря.
                 if (!a.IsActive || a.IsFlying || a.IsHeld || a.IsCurled || _config.RequiresConstrict(a.Kind)) continue;
                 // Ёж колется — ИИ его обходит; до недоступной добычи (ignore) не тянется.
-                if (a == ignore || a.Kind == PreyKind.Hedgehog) continue;
+                // Рыба в воде — змее ИИ туда лезть долго и неудобно.
+                if (a == ignore || a.Kind == PreyKind.Hedgehog || a.Kind == PreyKind.Fish) continue;
                 Vector3 d = a.Position - from;
                 d.y = 0f;
                 float dist = d.magnitude / cs;
@@ -355,6 +356,7 @@ namespace Snake3D
                 case PreyKind.Beetle: return 0.5f;
                 case PreyKind.Mouse: return 0.6f;
                 case PreyKind.Rabbit: return 0.5f;
+                case PreyKind.Fish: return 1.2f;
                 default: return 0.8f;
             }
         }
@@ -401,8 +403,12 @@ namespace Snake3D
             float bestDist = -1f;
             for (int attempt = 0; attempt < 10; attempt++)
             {
-                // Лягушки живут у пруда.
-                bool found = kind == PreyKind.Frog ? _grid.TryGetRandomShoreCell(out Vector2Int cell) : _grid.TryGetRandomFreeCell(out cell);
+                // Лягушки живут у воды, рыба — в ней.
+                bool found;
+                Vector2Int cell;
+                if (kind == PreyKind.Fish) found = _grid.TryGetRandomWaterCell(out cell);
+                else if (kind == PreyKind.Frog) found = _grid.TryGetRandomShoreCell(out cell);
+                else found = _grid.TryGetRandomFreeCell(out cell);
                 if (!found) break;
                 Vector3 pos = _grid.CellToWorld(cell);
                 float dist = Mathf.Min(DistanceToSnake(_player, pos), DistanceToSnake(_rival, pos));

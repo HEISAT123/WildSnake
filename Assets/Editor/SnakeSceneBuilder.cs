@@ -140,7 +140,12 @@ public static class SnakeSceneBuilder
             ("_dirtMaterial", arena.Dirt), ("_holeMaterial", arena.Hole),
             ("_leavesMaterial", arena.Leaves), ("_pineMaterial", arena.Pine), ("_litterMaterial", arena.Litter),
             ("_crownMesh", arena.CrownMesh), ("_pineMesh", arena.PineMesh), ("_eggMaterial", arena.Egg), ("_beaconMaterial", arena.Beacon),
-            ("_rockMesh", arena.RockMesh), ("_grassTuftMesh", arena.TuftMesh));
+            ("_rockMesh", arena.RockMesh), ("_grassTuftMesh", arena.TuftMesh),
+            ("_riverWaterMaterial", arena.RiverWater), ("_swampWaterMaterial", arena.SwampWater),
+            ("_birchBarkMaterial", arena.BirchBark), ("_birchLeavesMaterial", arena.BirchLeaves), ("_deadBarkMaterial", arena.DeadBark),
+            ("_reedMaterial", arena.Reed), ("_cattailMaterial", arena.Cattail), ("_fernMaterial", arena.Fern),
+            ("_mushroomCapMaterial", arena.MushroomCap), ("_mushroomStemMaterial", arena.MushroomStem),
+            ("_lilyPadMaterial", arena.LilyPad), ("_birdEggMaterial", arena.BirdEgg));
         SetInt(board, "_canopyLayer", canopyLayer);
         board.Build();
         BuildBurrowMarkers(grid, minimapLayer);
@@ -182,6 +187,8 @@ public static class SnakeSceneBuilder
         // ================= Хищники =================
         EagleHunter eagle = BuildEagle(config, grid, player.Controller, minimapLayer);
         FoxHunter fox = BuildFox(config, grid, player.Controller, minimapLayer);
+        BirdNests birdNests = BuildBirdNests(config, grid, board, player.Controller);
+        Hatchlings hatchlings = BuildHatchlings(grid, skin);
 
         // ================= Нюх и линька =================
         var scent = new GameObject("Scent").AddComponent<ScentTracker>();
@@ -233,8 +240,10 @@ public static class SnakeSceneBuilder
         // Кроны, заслоняющие змею, становятся полупрозрачными.
         var fader = board.gameObject.AddComponent<CanopyFader>();
         Wire(fader, ("_board", board), ("_camera", camGo.transform), ("_snake", player.Controller));
-        WireArray(fader, "_opaque", new Object[] { arena.Leaves, arena.Pine, arena.Bark, arena.StumpTop, arena.Block });
-        WireArray(fader, "_faded", new Object[] { arena.LeavesFade, arena.PineFade, arena.BarkFade, arena.StumpTopFade, arena.BlockFade });
+        WireArray(fader, "_opaque", new Object[] { arena.Leaves, arena.Pine, arena.Bark, arena.StumpTop, arena.Block,
+            arena.BirchBark, arena.BirchLeaves, arena.DeadBark });
+        WireArray(fader, "_faded", new Object[] { arena.LeavesFade, arena.PineFade, arena.BarkFade, arena.StumpTopFade, arena.BlockFade,
+            arena.BirchBarkFade, arena.BirchLeavesFade, arena.DeadBarkFade });
 
         // Пыльца и светлячки — вокруг змеи.
         var pollenFollow = pollen.gameObject.AddComponent<FollowTarget>();
@@ -286,7 +295,7 @@ public static class SnakeSceneBuilder
             ("_config", config), ("_grid", grid),
             ("_snake", player.Controller), ("_headAnimator", player.Animator), ("_rival", rival.Controller), ("_playerAutopilot", playerAi), ("_playerInput", playerInput),
             ("_wildlife", wildlife), ("_eagle", eagle), ("_fox", fox), ("_dayNight", dayNight), ("_weather", weather), ("_scent", scent), ("_skinShed", shed),
-            ("_nestEggs", board.NestEggs), ("_nestBeacon", board.NestBeacon),
+            ("_nestEggs", board.NestEggs), ("_nestBeacon", board.NestBeacon), ("_birdNests", birdNests), ("_hatchlings", hatchlings),
             ("_leaderboard", leaderboard), ("_settings", settings), ("_audio", audio), ("_cameraRig", rig),
             ("_eatParticles", eatFx), ("_deathParticles", deathFx), ("_dustParticles", dustFx), ("_moltParticles", moltFx));
 
@@ -294,7 +303,7 @@ public static class SnakeSceneBuilder
         UIBuilder.Build(new UIBuilder.Refs
         {
             Game = game, Config = config, Player = player.Controller, Settings = settings, Audio = audio, Leaderboard = leaderboard,
-            Wildlife = wildlife, Eagle = eagle, Fox = fox, DayNight = dayNight, Scent = scent, Grid = grid, Weather = weather,
+            Wildlife = wildlife, Eagle = eagle, Fox = fox, DayNight = dayNight, Scent = scent, Grid = grid, Weather = weather, BirdNests = birdNests,
             CameraTransform = camGo.transform, MinimapCamera = miniCam, MinimapTexture = minimapTexture
         });
 
@@ -329,6 +338,8 @@ public static class SnakeSceneBuilder
         Material hedgehogBody = CreateLitMaterial("PreyHedgehog", new Color(0.5f, 0.42f, 0.33f), 0.2f);
         Material hedgehogSpikes = CreateLitMaterial("PreyHedgehogSpikes", new Color(0.24f, 0.18f, 0.13f), 0.3f);
         Material hedgehogFace = CreateLitMaterial("PreyHedgehogFace", new Color(0.82f, 0.72f, 0.58f), 0.2f);
+        Material fishScales = CreateLitMaterial("PreyFish", new Color(0.55f, 0.62f, 0.6f), 0.85f);
+        Material fishFin = CreateLitMaterial("PreyFishFin", new Color(0.78f, 0.42f, 0.25f), 0.5f);
         Material scent = CreateLitMaterial("ScentMark", new Color(0.8f, 1f, 0.3f, 0.35f), 0f);
         SetEmission(scent, new Color(0.6f, 0.9f, 0.15f));
         MakeTransparent(scent);
@@ -356,6 +367,7 @@ public static class SnakeSceneBuilder
                     case PreyKind.Frog: BuildFrog(body, frogSkin, frogBelly, dark); break;
                     case PreyKind.Rabbit: BuildRabbit(body, rabbitFur, rabbitWhite, pink, dark); break;
                     case PreyKind.Hedgehog: curlHide = BuildHedgehog(body, hedgehogBody, hedgehogSpikes, hedgehogFace, dark); break;
+                    case PreyKind.Fish: BuildFish(body, fishScales, fishFin, dark); break;
                     default: BuildBird(body, birdFeather, birdChest, beak, dark, out leftWing, out rightWing); break;
                 }
 
@@ -377,6 +389,7 @@ public static class SnakeSceneBuilder
                 if (curlHide != null) Wire(animal, ("_curlHide", curlHide));
                 if (kind == PreyKind.Frog) SetFloat(animal, "_reactionTime", 0.25f);
                 if (kind == PreyKind.Bird) SetFloat(animal, "_reactionTime", 0.2f);
+                if (kind == PreyKind.Fish) SetFloat(animal, "_reactionTime", 0.15f);
                 if (kind == PreyKind.Rabbit)
                 {
                     SetFloat(animal, "_hopHeight", 0.38f);
@@ -392,6 +405,22 @@ public static class SnakeSceneBuilder
         var result = new PreyAnimal[list.Count];
         for (int i = 0; i < result.Length; i++) result[i] = (PreyAnimal)list[i];
         return result;
+    }
+
+    /// <summary>Рыба: обтекаемое серебристое тело, хвост и спинной плавник цвета ржавчины, глаза по бокам.</summary>
+    private static void BuildFish(Transform body, Material scales, Material fin, Material dark)
+    {
+        Part(PrimitiveType.Sphere, "Torso", body, scales, Vector3.zero, new Vector3(0.18f, 0.2f, 0.5f));
+        GameObject tail = Part(PrimitiveType.Cube, "Tail", body, fin, new Vector3(0f, 0f, -0.29f), new Vector3(0.02f, 0.2f, 0.14f));
+        tail.transform.localRotation = Quaternion.Euler(0f, 0f, 0f);
+        GameObject dorsal = Part(PrimitiveType.Cube, "Dorsal", body, fin, new Vector3(0f, 0.1f, -0.02f), new Vector3(0.015f, 0.08f, 0.16f));
+        dorsal.transform.localRotation = Quaternion.Euler(-15f, 0f, 0f);
+        for (int side = -1; side <= 1; side += 2)
+        {
+            Part(PrimitiveType.Sphere, "Eye", body, dark, new Vector3(0.07f * side, 0.035f, 0.17f), Vector3.one * 0.035f);
+            GameObject pectoral = Part(PrimitiveType.Cube, "Fin", body, fin, new Vector3(0.09f * side, -0.04f, 0.06f), new Vector3(0.08f, 0.012f, 0.06f));
+            pectoral.transform.localRotation = Quaternion.Euler(0f, 30f * side, -20f * side);
+        }
     }
 
     private static void BuildBeetle(Transform body, Material shell, Material dark)
@@ -514,6 +543,79 @@ public static class SnakeSceneBuilder
         pivot.localPosition = new Vector3(0.13f * side, 0.36f, 0f);
         Part(PrimitiveType.Sphere, "Feathers", pivot, mat, new Vector3(0.17f * side, 0f, -0.04f), new Vector3(0.36f, 0.05f, 0.26f));
         return pivot;
+    }
+
+    /// <summary>
+    /// Птичьи гнёзда: по птице-родителю на гнездо (та же модель птицы, другое оперение — дрозд) и логика BirdNests.
+    /// </summary>
+    private static BirdNests BuildBirdNests(GameConfig config, GridManager grid, BoardView board, SnakeController snake)
+    {
+        Material feather = CreateLitMaterial("ThrushFeather", new Color(0.42f, 0.36f, 0.3f), 0.2f);
+        Material chest = CreateLitMaterial("ThrushChest", new Color(0.92f, 0.82f, 0.62f), 0.2f);
+        Material beak = CreateLitMaterial("ThrushBeak", new Color(0.95f, 0.75f, 0.2f), 0.5f);
+        Material dark = CreateLitMaterial("ThrushEye", new Color(0.04f, 0.04f, 0.04f), 0.8f);
+
+        var root = new GameObject("BirdNests");
+        int count = grid.BirdNestCount;
+        var parents = new Object[count];
+        var bodies = new Object[count];
+        var lefts = new Object[count];
+        var rights = new Object[count];
+        for (int i = 0; i < count; i++)
+        {
+            var bird = new GameObject("NestBird");
+            bird.transform.SetParent(root.transform, false);
+            bird.transform.localScale = Vector3.one * 0.85f;
+            var body = new GameObject("Body").transform;
+            body.SetParent(bird.transform, false);
+            BuildBird(body, feather, chest, beak, dark, out Transform left, out Transform right);
+            parents[i] = bird.transform;
+            bodies[i] = body;
+            lefts[i] = left;
+            rights[i] = right;
+        }
+        var nests = root.AddComponent<BirdNests>();
+        Wire(nests, ("_config", config), ("_grid", grid), ("_board", board), ("_snake", snake));
+        WireArray(nests, "_parents", parents);
+        WireArray(nests, "_bodies", bodies);
+        WireArray(nests, "_leftWings", lefts);
+        WireArray(nests, "_rightWings", rights);
+        return nests;
+    }
+
+    /// <summary>Змеёныши: шесть крошечных змеек из шариков (голова крупнее), скрыты до вылупления.</summary>
+    private static Hatchlings BuildHatchlings(GridManager grid, Texture2D skin)
+    {
+        Material body = CreateLitMaterial("Hatchling", new Color(0.6f, 0.85f, 0.4f), 0.45f);
+        body.mainTexture = skin;
+        Material eye = CreateLitMaterial("HatchlingEye", new Color(0.05f, 0.05f, 0.05f), 0.9f);
+        var root = new GameObject("Hatchlings");
+        var roots = new Object[6];
+        const int segments = 7;
+        for (int i = 0; i < roots.Length; i++)
+        {
+            var h = new GameObject("Hatchling");
+            h.transform.SetParent(root.transform, false);
+            for (int k = 0; k < segments; k++)
+            {
+                float size = k == 0 ? 0.13f : Mathf.Lerp(0.11f, 0.05f, (float)k / (segments - 1));
+                GameObject seg = CreatePrimitive(PrimitiveType.Sphere, k == 0 ? "Head" : "Segment", h.transform, body);
+                seg.transform.localScale = Vector3.one * size;
+                seg.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
+                if (k != 0) continue;
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    GameObject e = CreatePrimitive(PrimitiveType.Sphere, "Eye", seg.transform, eye);
+                    e.transform.localPosition = new Vector3(0.32f * side, 0.25f, 0.3f);
+                    e.transform.localScale = Vector3.one * 0.3f;
+                }
+            }
+            roots[i] = h.transform;
+        }
+        var hatchlings = root.AddComponent<Hatchlings>();
+        Wire(hatchlings, ("_grid", grid));
+        WireArray(hatchlings, "_roots", roots);
+        return hatchlings;
     }
 
     /// <summary>Орёл: модель (тело, белая голова, клюв, хвост, крылья на шарнирах), тень на земле и маркер мини-карты.</summary>
@@ -777,6 +879,15 @@ public static class SnakeSceneBuilder
             point.SetParent(root, false);
             point.position = grid.GetBurrow(i);
             CreateMarker(point, mat, markerLayer, 2f);
+        }
+        // Птичьи гнёзда — голубые точки: за яйцами туда стоит заглянуть.
+        Material birdNest = CreateUnlitMaterial("MarkerBirdNest", new Color(0.55f, 0.82f, 0.95f));
+        for (int i = 0; i < grid.BirdNestCount; i++)
+        {
+            var point = new GameObject("BirdNest" + i).transform;
+            point.SetParent(root, false);
+            point.position = grid.GetBirdNest(i);
+            CreateMarker(point, birdNest, markerLayer, 1.6f);
         }
     }
 

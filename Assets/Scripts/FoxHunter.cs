@@ -8,6 +8,8 @@ namespace Snake3D
     /// (запоминает, где змея проползала, и идёт по этим точкам с отставанием), а заметив её — бросается
     /// в погоню и кусает. Трава и засада прячут змею, в пруд лиса не заходит, в нору не пролезает.
     /// Бросок змеи в морду отпугивает лису, если змея ещё полна сил (решает GameManager через TryScare).
+    /// Пока змея охраняет кладку (Raiding), лиса приходит чаще и идёт прямо к гнезду таскать яйца.
+    /// В полом бревне змеи лиса не видит и не достаёт.
     /// Логика в данных, Transform только показывает результат.
     /// </summary>
     public class FoxHunter : MonoBehaviour
@@ -70,6 +72,9 @@ namespace Snake3D
         [Tooltip("Скорость поворота, град/с")]
         [SerializeField, Min(30f)] private float _turnSpeed = 360f;
 
+        [Tooltip("С какого расстояния до гнезда лиса достаёт яйца, клеток")]
+        [SerializeField, Min(0.3f)] private float _raidRange = 1.4f;
+
         /// <summary>Лиса пришла на поле.</summary>
         public event Action Appeared;
 
@@ -78,6 +83,18 @@ namespace Snake3D
 
         /// <summary>Змея отпугнула лису броском.</summary>
         public event Action Scared;
+
+        /// <summary>Лиса утащила яйцо из кладки змеи.</summary>
+        public event Action Raided;
+
+        /// <summary>Лиса идёт за яйцами к RaidPoint (змея охраняет кладку).</summary>
+        public bool Raiding { get; set; }
+
+        /// <summary>Где кладка змеи.</summary>
+        public Vector3 RaidPoint { get; set; }
+
+        /// <summary>Во сколько раз чаще приходит лиса.</summary>
+        public float Eagerness { get; set; } = 1f;
 
         /// <summary>Можно приходить на охоту (идёт партия).</summary>
         public bool HuntingAllowed { get; set; }
@@ -106,6 +123,7 @@ namespace Snake3D
         private float _yaw;
         private float _speed;
         private float _animTime;
+        private float _raidTimer;
 
         private void Awake()
         {
@@ -173,16 +191,17 @@ namespace Snake3D
 
         private void TickAway(float dt)
         {
-            if (!HuntingAllowed || !TargetPresent()) return;
-            _timer -= dt * (IsNight ? 1.6f : 1f);
+            if (!HuntingAllowed || (!TargetPresent() && !Raiding)) return;
+            _timer -= dt * (IsNight ? 1.6f : 1f) * Mathf.Max(0.1f, Eagerness);
             if (_timer > 0f) return;
 
-            // Приходит издалека — из свободной точки подальше от змеи.
-            _pos = FarCorner(_target.HeadPosition);
+            // Приходит издалека — из свободной точки подальше от змеи; за яйцами — с той же стороны воды, что и гнездо.
+            _pos = Raiding ? RaidSpawn() : FarCorner(_target.HeadPosition);
             _exit = _pos;
             _yaw = Mathf.Atan2(_grid.Center.x - _pos.x, _grid.Center.z - _pos.z) * Mathf.Rad2Deg;
             _stayLeft = _stayTime;
             _biteTimer = 0f;
+            _raidTimer = _config.FoxRaidInterval;
             _trailCursor = Mathf.Max(0, _trailCount - TRAIL_SIZE);
             _phase = Phase.Prowl;
             SetVisible(true);
@@ -192,7 +211,8 @@ namespace Snake3D
         /// <summary>Идёт по следу: от старых точек к свежим; увидела змею — погоня.</summary>
         private void TickProwl(float dt)
         {
-            _stayLeft -= dt;
+            // У кладки лиса не уходит сама — только пока не отгонят или не кончатся яйца.
+            if (!Raiding) _stayLeft -= dt;
             if (_stayLeft <= 0f || !HuntingAllowed)
             {
                 BeginRetreat();
@@ -205,8 +225,30 @@ namespace Snake3D
                 return;
             }
 
+            if (Raiding)
+            {
+                TickRaid(dt);
+                return;
+            }
             Vector3 goal = NextTrailPoint();
             MoveTowards(goal, _prowlSpeed, dt);
+        }
+
+        /// <summary>К гнезду и таскать яйца по одному.</summary>
+        private void TickRaid(float dt)
+        {
+            Vector3 d = RaidPoint - _pos;
+            d.y = 0f;
+            if (d.magnitude > _raidRange * _grid.CellSize)
+            {
+                MoveTowards(RaidPoint, _prowlSpeed * 1.3f, dt);
+                return;
+            }
+            _speed = 0f;
+            _raidTimer -= dt;
+            if (_raidTimer > 0f) return;
+            _raidTimer = _config.FoxRaidInterval;
+            Raided?.Invoke();
         }
 
         private void TickChase(float dt)
@@ -239,7 +281,7 @@ namespace Snake3D
             if (speed > 0f) MoveTowards(head, speed, dt);
             else MoveTowards(_pos - d.normalized, -speed, dt);
 
-            bool reachable = !_grid.IsWaterAt(head);
+            bool reachable = !_grid.IsWaterAt(head) && !_grid.IsHollowAt(head);
             if (reachable && _biteTimer <= 0f && d.magnitude <= _biteRange * cs && _target.HeightAboveGround < 0.6f * cs)
             {
                 _biteTimer = _biteCooldown;
@@ -274,7 +316,7 @@ namespace Snake3D
         /// <summary>Видит ли змею: трава и засада прячут, в воде змея видна, но недосягаема.</summary>
         private bool CanSeeTarget()
         {
-            if (!TargetPresent()) return false;
+            if (!TargetPresent() || _grid.IsHollowAt(_target.HeadPosition)) return false;
             float r = _sightRadius * _grid.CellSize;
             if (_target.IsHidden) r *= 0.45f;
             r *= _target.Ambush.AwarenessMultiplier(_target.IsHidden);
@@ -328,6 +370,36 @@ namespace Snake3D
                 best = p;
             }
             return best;
+        }
+
+        /// <summary>
+        /// Точка появления для набега: в 14–22 клетках от гнезда, откуда до него можно дойти по прямой посуху
+        /// (лиса не плавает и реку обходить не умеет). Не нашлась — как обычно, подальше от змеи.
+        /// </summary>
+        private Vector3 RaidSpawn()
+        {
+            float cs = _grid.CellSize;
+            for (int i = 0; i < 40; i++)
+            {
+                float a = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
+                float r = UnityEngine.Random.Range(14f, 22f) * cs;
+                Vector3 p = RaidPoint + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * r;
+                if (IsBlocked(p, false) || !DryLine(p, RaidPoint)) continue;
+                p.y = _grid.GroundHeight(p);
+                return p;
+            }
+            return FarCorner(_target != null ? _target.HeadPosition : _grid.Center);
+        }
+
+        private bool DryLine(Vector3 from, Vector3 to)
+        {
+            Vector3 d = to - from;
+            d.y = 0f;
+            float step = 0.5f * _grid.CellSize;
+            int steps = Mathf.CeilToInt(d.magnitude / step);
+            for (int k = 1; k < steps; k++)
+                if (_grid.IsWaterAt(from + d * ((float)k / steps))) return false;
+            return true;
         }
 
         // ---------------- Движение и вид ----------------

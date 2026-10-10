@@ -5,9 +5,11 @@ namespace Snake3D
 {
     /// <summary>
     /// Визуал мира поверх рельефа (сам рельеф с горами-границей строит EnvironmentBuilder) — «дикие» препятствия
-    /// из раскладки GridManager: низкие стенки — поваленные брёвна, колонны — сломанные пни и стоячие камни, блоки — валуны;
-    /// в рощах колонны — деревья с кронами и лесная подстилка; плюс заросли высокой травы, пруд, плоские солнечные камни,
-    /// норы и гнездо (кладка — главная цель; яйца и маяк над гнездом включает GameManager).
+    /// из раскладки GridManager: низкие стенки — поваленные брёвна, колонны — сломанные пни и стоячие камни (на гряде),
+    /// сухие деревья (в болоте), блоки — валуны; в рощах — деревья и берёзы с кронами, лесная подстилка, папоротники
+    /// и грибы; плюс высокая трава и камыш с рогозом, озеро и пруды, текущая река с брёвнами-мостами, болотные бочаги
+    /// с кувшинками, полые брёвна, галька на гряде, птичьи гнёзда с яйцами, солнечные камни, норы и гнездо
+    /// (кладка — главная цель; яйца и маяк над гнездом включает GameManager).
     /// Строится один раз (в редакторе SnakeSceneBuilder'ом или в Start, если раскладку поменяли в инспекторе).
     /// </summary>
     public class BoardView : MonoBehaviour
@@ -60,6 +62,43 @@ namespace Snake3D
         [Tooltip("Слой крон (камера карты их не рисует, иначе они закрыли бы метки)")]
         [SerializeField] private int _canopyLayer;
 
+        [Header("Река, болото, березняк")]
+        [Tooltip("Вода реки (рябь течёт — её гонит WaterFlow)")]
+        [SerializeField] private Material _riverWaterMaterial;
+
+        [Tooltip("Мутная вода болотных бочагов")]
+        [SerializeField] private Material _swampWaterMaterial;
+
+        [Tooltip("Кора берёзы")]
+        [SerializeField] private Material _birchBarkMaterial;
+
+        [Tooltip("Листва берёзы")]
+        [SerializeField] private Material _birchLeavesMaterial;
+
+        [Tooltip("Серая кора сухих деревьев болота")]
+        [SerializeField] private Material _deadBarkMaterial;
+
+        [Tooltip("Камыш")]
+        [SerializeField] private Material _reedMaterial;
+
+        [Tooltip("Початки рогоза")]
+        [SerializeField] private Material _cattailMaterial;
+
+        [Tooltip("Папоротник")]
+        [SerializeField] private Material _fernMaterial;
+
+        [Tooltip("Шляпки грибов")]
+        [SerializeField] private Material _mushroomCapMaterial;
+
+        [Tooltip("Ножки грибов")]
+        [SerializeField] private Material _mushroomStemMaterial;
+
+        [Tooltip("Листья кувшинок")]
+        [SerializeField] private Material _lilyPadMaterial;
+
+        [Tooltip("Яйца в птичьих гнёздах")]
+        [SerializeField] private Material _birdEggMaterial;
+
         [Header("Гнездо")]
         [Tooltip("Яйца в гнезде")]
         [SerializeField] private Material _eggMaterial;
@@ -93,6 +132,10 @@ namespace Snake3D
         [SerializeField, HideInInspector] private Renderer[] _occluders = new Renderer[0];
         [SerializeField, HideInInspector] private GameObject _nestEggs;
         [SerializeField, HideInInspector] private GameObject _nestBeacon;
+        [SerializeField, HideInInspector] private Renderer[] _birdEggs = new Renderer[0];
+
+        /// <summary>Яйца птичьих гнёзд: по три на гнездо, по порядку гнёзд GridManager.</summary>
+        public Renderer[] BirdEggs => _birdEggs;
 
         /// <summary>Кроны деревьев рощ — их прячет CanopyFader, когда они заслоняют змею.</summary>
         public Renderer[] Crowns => _crowns;
@@ -127,11 +170,17 @@ namespace Snake3D
             _crownList.Clear();
             _occluderList.Clear();
             BuildObstacles(cs);
+            BuildHollowLogs(cs);
+            BuildBridges(cs);
             _crowns = _crownList.ToArray();
             _occluders = _occluderList.ToArray();
             BuildForestFloor(cs);
             BuildNest(cs);
+            BuildBirdNests(cs);
             BuildPond(cs);
+            if (_riverWaterMaterial != null) BuildWaterSheet("RiverWater", true, _riverWaterMaterial, cs);
+            if (_swampWaterMaterial != null) BuildWaterSheet("SwampWater", false, _swampWaterMaterial, cs);
+            BuildDetails(cs);
             BuildSunStones(cs);
             BuildBurrows(cs);
             BuildTallGrass(cs);
@@ -152,7 +201,8 @@ namespace Snake3D
                     {
                         case ObstacleType.Pillar:
                             if (_grid.IsForest(cell) && _crownMesh != null) BuildTree(cell, cs);
-                            else if (Hash(x, y) < 0.55f) BuildStump(cell, cs);
+                            else if (_grid.IsSwamp(cell)) BuildDeadTree(cell, cs);
+                            else if (!_grid.IsRidge(cell) && Hash(x, y) < 0.55f) BuildStump(cell, cs);
                             else BuildStandingStone(cell, cs);
                             break;
                         case ObstacleType.Block:
@@ -205,6 +255,11 @@ namespace Snake3D
             float yaw = Hash(cell.x, cell.y) * 360f;
             Quaternion turn = Quaternion.Euler(0f, yaw, 0f);
             float d = _grid.GetObstacleHalfSize(cell) * 2f * 1.05f;
+            if (_grid.IsBirch(cell) && _birchBarkMaterial != null && _birchLeavesMaterial != null)
+            {
+                BuildBirch(basePos, s, yaw, d, cs);
+                return;
+            }
             bool pine = Hash(cell.x + 7, cell.y + 3) < 0.4f && _pineMesh != null;
 
             float trunk = (pine ? 3.2f : 3.6f) * cs * s;
@@ -489,7 +544,10 @@ namespace Snake3D
         private void BuildTallGrass(float cs)
         {
             if (_grassTuftMesh == null || _tallGrassMaterial == null) return;
-            int count = _grid.CoverCellCount * _tuftsPerCell;
+            int count = 0;
+            for (int y = 0; y < _grid.Height; y++)
+                for (int x = 0; x < _grid.Width; x++)
+                    if (_grid.IsCover(new Vector2Int(x, y)) && !_grid.IsReed(new Vector2Int(x, y)) && !_grid.IsHollow(new Vector2Int(x, y))) count += _tuftsPerCell;
             if (count == 0) return;
 
             var combine = new CombineInstance[count];
@@ -500,7 +558,7 @@ namespace Snake3D
                 for (int x = 0; x < _grid.Width; x++)
                 {
                     var cell = new Vector2Int(x, y);
-                    if (!_grid.IsCover(cell)) continue;
+                    if (!_grid.IsCover(cell) || _grid.IsReed(cell) || _grid.IsHollow(cell)) continue;
                     Vector3 c = _grid.CellToWorld(cell) - origin;
                     for (int t = 0; t < _tuftsPerCell; t++)
                     {
@@ -531,6 +589,396 @@ namespace Snake3D
             var r = go.AddComponent<MeshRenderer>();
             r.sharedMaterial = _tallGrassMaterial;
             r.shadowCastingMode = ShadowCastingMode.Off;
+        }
+
+        // ---------------- Река, болото, лес: подробности ----------------
+
+        /// <summary>Берёза: высокий белый ствол и несколько лёгких светлых комков листвы.</summary>
+        private void BuildBirch(Vector3 basePos, float s, float yaw, float d, float cs)
+        {
+            Quaternion turn = Quaternion.Euler(0f, yaw, 0f);
+            float trunk = 4.6f * cs * s;
+            Occlude(CreateShape(PrimitiveType.Cylinder, "BirchTrunk", basePos + Vector3.up * (trunk * 0.5f - 0.3f * cs),
+                new Vector3(d * 0.75f, trunk * 0.5f + 0.3f * cs, d * 0.75f), _birchBarkMaterial));
+            Vector3[] offsets = { new Vector3(0f, 4.4f, 0f), new Vector3(0.6f, 5.2f, 0.2f), new Vector3(-0.5f, 4.9f, -0.4f), new Vector3(0.1f, 5.9f, -0.1f) };
+            Vector3[] sizes = { new Vector3(2.5f, 2.6f, 2.5f), new Vector3(1.8f, 2f, 1.8f), new Vector3(1.9f, 2.1f, 1.9f), new Vector3(1.4f, 1.7f, 1.4f) };
+            for (int t = 0; t < offsets.Length; t++)
+                AddCrown(CreateMesh("BirchCrown", _crownMesh, _birchLeavesMaterial, basePos + turn * (offsets[t] * (cs * s)), sizes[t] * (cs * s), yaw + t * 50f));
+        }
+
+        /// <summary>Сухое дерево болота: серый ствол с обломанной верхушкой и голыми ветками.</summary>
+        private void BuildDeadTree(Vector2Int cell, float cs)
+        {
+            Material bark = _deadBarkMaterial != null ? _deadBarkMaterial : _barkMaterial;
+            Vector3 basePos = _grid.CellToWorld(cell);
+            float s = 0.8f + 0.5f * Hash(cell.y, cell.x);
+            float d = _grid.GetObstacleHalfSize(cell) * 1.6f;
+            float h = 2.8f * cs * s;
+            float yaw = Hash(cell.x, cell.y) * 360f;
+            Occlude(CreateShape(PrimitiveType.Cylinder, "DeadTrunk", basePos + Vector3.up * (h * 0.5f - 0.2f * cs),
+                new Vector3(d, h * 0.5f + 0.2f * cs, d), bark));
+            for (int k = 0; k < 3; k++)
+            {
+                Vector3 dir = Quaternion.Euler(0f, yaw + k * 120f + Hash(cell.x + k, cell.y) * 40f, 0f) * Vector3.forward;
+                Vector3 v = (dir * Mathf.Cos(40f * Mathf.Deg2Rad) + Vector3.up * Mathf.Sin(40f * Mathf.Deg2Rad)).normalized;
+                float len = (0.7f + 0.5f * Hash(k, cell.x)) * cs * s;
+                Vector3 start = basePos + Vector3.up * (h * (0.5f + 0.15f * k));
+                Renderer branch = Occlude(CreateShape(PrimitiveType.Cylinder, "DeadBranch", start + v * (len * 0.5f),
+                    new Vector3(0.09f * cs, len * 0.5f, 0.09f * cs), bark));
+                branch.transform.rotation = Quaternion.FromToRotation(Vector3.up, v);
+            }
+        }
+
+        /// <summary>Полое бревно-туннель: толстый ствол лёжа и тёмные дыры на торцах.</summary>
+        private void BuildHollowLogs(float cs)
+        {
+            float r = 0.52f * cs;
+            for (int i = 0; i < _grid.HollowLogCount; i++)
+            {
+                _grid.GetHollowLog(i, out Vector3 a, out Vector3 b);
+                Vector3 pa = a + Vector3.up * r;
+                Vector3 pb = b + Vector3.up * r;
+                Vector3 dir = (pb - pa).normalized;
+                float length = (pb - pa).magnitude + cs;
+                Vector3 center = (pa + pb) * 0.5f;
+                Quaternion lay = Quaternion.FromToRotation(Vector3.up, dir);
+                Renderer log = Occlude(CreateShape(PrimitiveType.Cylinder, "HollowLog", center, new Vector3(r * 2f, length * 0.5f, r * 2f), _barkMaterial));
+                log.transform.rotation = lay * Quaternion.Euler(0f, Hash(i, 7) * 360f, 0f);
+                if (_holeMaterial == null) continue;
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    Renderer hole = CreateShape(PrimitiveType.Cylinder, "HollowEnd", center + dir * (side * (length * 0.5f + 0.004f)),
+                        new Vector3(r * 1.6f, 0.006f, r * 1.6f), _holeMaterial);
+                    hole.transform.rotation = lay;
+                    hole.shadowCastingMode = ShadowCastingMode.Off;
+                }
+            }
+        }
+
+        /// <summary>Брёвна-мосты через реку: лежат концами на берегах.</summary>
+        private void BuildBridges(float cs)
+        {
+            float r = 0.25f * cs;
+            for (int i = 0; i < _grid.BridgeCount; i++)
+            {
+                _grid.GetBridge(i, out Vector3 a, out Vector3 b);
+                Vector3 pa = a + Vector3.down * r;
+                Vector3 pb = b + Vector3.down * r;
+                Vector3 dir = (pb - pa).normalized;
+                Renderer log = Occlude(CreateShape(PrimitiveType.Cylinder, "BridgeLog", (pa + pb) * 0.5f,
+                    new Vector3(r * 2f, ((pb - pa).magnitude + 0.6f * cs) * 0.5f, r * 2f), _barkMaterial));
+                log.transform.rotation = Quaternion.FromToRotation(Vector3.up, dir);
+            }
+        }
+
+        /// <summary>
+        /// Вода реки или болотных бочагов — «простыня» по клеткам с уровнем в углах (среднее соседей), с запасом
+        /// в клетку: кромку прячет берег. У реки UV идёт вдоль русла — WaterFlow гонит рябь вниз по течению.
+        /// </summary>
+        private void BuildWaterSheet(string objectName, bool river, Material mat, float cs)
+        {
+            int w = _grid.Width, h = _grid.Height;
+            var draw = new bool[w * h];
+            bool any = false;
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    if (!IsSheetWater(x, y, river)) continue;
+                    any = true;
+                    for (int dy = -1; dy <= 1; dy++)
+                    {
+                        for (int dx = -1; dx <= 1; dx++)
+                        {
+                            int nx = x + dx, ny = y + dy;
+                            if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+                            if (_grid.IsPondWater(new Vector2Int(nx, ny))) continue;
+                            draw[ny * w + nx] = true;
+                        }
+                    }
+                }
+            }
+            if (!any) return;
+
+            int stride = w + 1;
+            var level = new float[stride * (h + 1)];
+            var known = new bool[level.Length];
+            for (int cy = 0; cy <= h; cy++)
+            {
+                for (int cx = 0; cx <= w; cx++)
+                {
+                    float sum = 0f;
+                    int n = 0;
+                    for (int y = cy - 1; y <= cy; y++)
+                    {
+                        for (int x = cx - 1; x <= cx; x++)
+                        {
+                            if (x < 0 || y < 0 || x >= w || y >= h || !IsSheetWater(x, y, river)) continue;
+                            sum += _grid.WaterLevelAt(_grid.CellToWorld(new Vector2Int(x, y)));
+                            n++;
+                        }
+                    }
+                    if (n == 0) continue;
+                    level[cy * stride + cx] = sum / n;
+                    known[cy * stride + cx] = true;
+                }
+            }
+            // Углы кромки берут уровень соседних углов.
+            for (int pass = 0; pass < 3; pass++)
+            {
+                var next = (bool[])known.Clone();
+                for (int cy = 0; cy <= h; cy++)
+                {
+                    for (int cx = 0; cx <= w; cx++)
+                    {
+                        int i = cy * stride + cx;
+                        if (known[i]) continue;
+                        float sum = 0f;
+                        int n = 0;
+                        for (int dy = -1; dy <= 1; dy++)
+                        {
+                            for (int dx = -1; dx <= 1; dx++)
+                            {
+                                int nx = cx + dx, ny = cy + dy;
+                                if (nx < 0 || ny < 0 || nx > w || ny > h || !known[ny * stride + nx]) continue;
+                                sum += level[ny * stride + nx];
+                                n++;
+                            }
+                        }
+                        if (n == 0) continue;
+                        level[i] = sum / n;
+                        next[i] = true;
+                    }
+                }
+                known = next;
+            }
+
+            var index = new int[level.Length];
+            for (int i = 0; i < index.Length; i++) index[i] = -1;
+            var vertices = new System.Collections.Generic.List<Vector3>();
+            var uvs = new System.Collections.Generic.List<Vector2>();
+            var triangles = new System.Collections.Generic.List<int>();
+            Vector3 origin = _grid.CornerOrigin;
+            Vector3 local = transform.position;
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    if (!draw[y * w + x]) continue;
+                    int a = Corner(x, y), b = Corner(x + 1, y), c = Corner(x, y + 1), d = Corner(x + 1, y + 1);
+                    if (a < 0 || b < 0 || c < 0 || d < 0) continue;
+                    triangles.Add(a); triangles.Add(d); triangles.Add(b);
+                    triangles.Add(a); triangles.Add(c); triangles.Add(d);
+                }
+            }
+            if (triangles.Count == 0) return;
+
+            int Corner(int cx, int cy)
+            {
+                int i = cy * stride + cx;
+                if (!known[i]) return -1;
+                if (index[i] >= 0) return index[i];
+                var p = new Vector3(origin.x + cx * cs, level[i], origin.z + cy * cs);
+                index[i] = vertices.Count;
+                vertices.Add(p - local);
+                if (river)
+                {
+                    float along = _grid.RiverCoordinate(p, out float lateral);
+                    uvs.Add(new Vector2(along * 0.22f, lateral * 0.3f));
+                }
+                else
+                {
+                    uvs.Add(new Vector2(p.x * 0.25f, p.z * 0.25f));
+                }
+                return index[i];
+            }
+
+            var mesh = new Mesh { name = objectName };
+            if (vertices.Count > 65000) mesh.indexFormat = IndexFormat.UInt32;
+            mesh.SetVertices(vertices);
+            mesh.SetUVs(0, uvs);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateTangents();
+            mesh.RecalculateBounds();
+            var go = new GameObject(objectName);
+            go.transform.SetParent(transform, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = mat;
+            r.shadowCastingMode = ShadowCastingMode.Off;
+            if (river)
+            {
+                var flow = go.AddComponent<WaterFlow>();
+                flow.Target = r;
+            }
+        }
+
+        private bool IsSheetWater(int x, int y, bool river)
+        {
+            var cell = new Vector2Int(x, y);
+            if (!_grid.IsWater(cell) || _grid.IsPondWater(cell)) return false;
+            return _grid.IsRiver(cell) == river;
+        }
+
+        /// <summary>Камыш с початками рогоза по берегам и в болоте, папоротники и грибы в рощах, кувшинки, галька на гряде.</summary>
+        private void BuildDetails(float cs)
+        {
+            Mesh cylinder = PrimitiveMesh(PrimitiveType.Cylinder);
+            Mesh sphere = PrimitiveMesh(PrimitiveType.Sphere);
+            var reeds = new System.Collections.Generic.List<CombineInstance>();
+            var cattails = new System.Collections.Generic.List<CombineInstance>();
+            var ferns = new System.Collections.Generic.List<CombineInstance>();
+            var caps = new System.Collections.Generic.List<CombineInstance>();
+            var stems = new System.Collections.Generic.List<CombineInstance>();
+            var pads = new System.Collections.Generic.List<CombineInstance>();
+            var pebbles = new System.Collections.Generic.List<CombineInstance>();
+            Vector3 origin = transform.position;
+
+            for (int y = 0; y < _grid.Height; y++)
+            {
+                for (int x = 0; x < _grid.Width; x++)
+                {
+                    var cell = new Vector2Int(x, y);
+                    Vector3 c = _grid.CellToWorld(cell) - origin;
+                    bool free = _grid.GetObstacle(cell) == ObstacleType.None && !_grid.IsWater(cell);
+
+                    if (_grid.IsReed(cell) && _grassTuftMesh != null)
+                    {
+                        for (int t = 0; t < 2; t++)
+                        {
+                            float hs = Hash(x * 3 + t, y * 7 + 2);
+                            var pos = c + new Vector3((Hash(x + t * 5, y) - 0.5f) * 0.8f * cs, -0.02f, (Hash(x, y + t * 9) - 0.5f) * 0.8f * cs);
+                            reeds.Add(Instance(_grassTuftMesh, pos, hs * 360f, new Vector3(0.42f, 1.1f + 0.4f * hs, 0.42f) * cs));
+                        }
+                        if (Hash(x * 13, y * 3) < 0.55f)
+                        {
+                            float th = (1.15f + 0.35f * Hash(y, x * 2)) * cs;
+                            var pos = c + new Vector3((Hash(x, y * 2) - 0.5f) * 0.6f * cs, th, (Hash(x * 2, y) - 0.5f) * 0.6f * cs);
+                            cattails.Add(Instance(cylinder, pos, 0f, new Vector3(0.07f, 0.12f, 0.07f) * cs));
+                        }
+                    }
+
+                    if (_grid.IsForest(cell) && free && !_grid.IsCover(cell))
+                    {
+                        float hf = Hash(x * 5 + 1, y * 3 + 7);
+                        if (hf < 0.3f && _grassTuftMesh != null)
+                        {
+                            for (int t = 0; t < 2; t++)
+                                ferns.Add(Instance(_grassTuftMesh, c + new Vector3((Hash(x + t, y * 3) - 0.5f) * 0.6f * cs, -0.02f, (Hash(x * 3, y + t) - 0.5f) * 0.6f * cs),
+                                    Hash(x + t * 7, y) * 360f, new Vector3(1.1f, 0.45f, 1.1f) * cs));
+                        }
+                        else if (hf > 0.93f)
+                        {
+                            int count = 1 + (int)(Hash(y * 3, x) * 3f);
+                            for (int k = 0; k < count; k++)
+                            {
+                                float sz = (0.8f + 0.5f * Hash(x + k, y * 5)) * cs;
+                                var pos = c + new Vector3((Hash(x * 7 + k, y) - 0.5f) * 0.7f * cs, 0f, (Hash(x, y * 7 + k) - 0.5f) * 0.7f * cs);
+                                stems.Add(Instance(cylinder, pos + Vector3.up * (0.05f * sz), 0f, new Vector3(0.05f, 0.05f, 0.05f) * sz));
+                                caps.Add(Instance(sphere, pos + Vector3.up * (0.11f * sz), 0f, new Vector3(0.17f, 0.08f, 0.17f) * sz));
+                            }
+                        }
+                    }
+
+                    if (_grid.IsWater(cell) && !_grid.IsRiver(cell) && Hash(x * 11, y * 13) < (_grid.IsPondWater(cell) ? 0.08f : 0.35f))
+                    {
+                        // Кувшинки — только у берега, где вода тихая.
+                        if (_grid.IsPondWater(cell) && !NearLand(cell)) continue;
+                        float level = _grid.WaterLevelAt(_grid.CellToWorld(cell));
+                        var pos = new Vector3(c.x + (Hash(x, y * 5) - 0.5f) * 0.5f * cs, level - origin.y + 0.015f, c.z + (Hash(x * 5, y) - 0.5f) * 0.5f * cs);
+                        pads.Add(Instance(cylinder, pos, Hash(y, x) * 360f, new Vector3(0.42f, 0.004f, 0.42f) * cs));
+                    }
+
+                    if (_grid.IsRidge(cell) && free && !_grid.IsSunStone(cell) && _rockMesh != null && Hash(x * 3, y * 11) < 0.45f)
+                    {
+                        float sz = (0.18f + 0.3f * Hash(x, y * 3)) * cs;
+                        var pos = c + new Vector3((Hash(x * 9, y) - 0.5f) * 0.7f * cs, sz * 0.15f, (Hash(x, y * 9) - 0.5f) * 0.7f * cs);
+                        pebbles.Add(Instance(_rockMesh, pos, Hash(y * 3, x) * 360f, new Vector3(sz * 1.3f, sz * 0.7f, sz)));
+                    }
+                }
+            }
+
+            Combined("Reeds", reeds, _reedMaterial, false);
+            Combined("Cattails", cattails, _cattailMaterial, false);
+            Combined("Ferns", ferns, _fernMaterial, false);
+            Combined("MushroomStems", stems, _mushroomStemMaterial, false);
+            Combined("MushroomCaps", caps, _mushroomCapMaterial, false);
+            Combined("LilyPads", pads, _lilyPadMaterial, false);
+            Combined("Pebbles", pebbles, _blockMaterial, true);
+        }
+
+        private bool NearLand(Vector2Int cell)
+        {
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    var n = new Vector2Int(cell.x + dx, cell.y + dy);
+                    if (_grid.IsInside(n) && !_grid.IsWater(n)) return true;
+                }
+            return false;
+        }
+
+        /// <summary>Птичьи гнёзда: чашка из веточек и три яйца (их прячет BirdNests, когда змея их съест).</summary>
+        private void BuildBirdNests(float cs)
+        {
+            var eggs = new System.Collections.Generic.List<Renderer>();
+            for (int i = 0; i < _grid.BirdNestCount; i++)
+            {
+                Vector3 pos = _grid.GetBirdNest(i);
+                var root = new GameObject("BirdNest");
+                root.transform.SetParent(transform, false);
+                root.transform.position = pos;
+                if (_dirtMaterial != null)
+                    Parent(CreateShape(PrimitiveType.Sphere, "BirdNestBowl", pos + Vector3.up * (0.02f * cs), new Vector3(0.75f, 0.12f, 0.75f) * cs, _dirtMaterial), root);
+                for (int k = 0; k < 10; k++)
+                {
+                    float a = k * Mathf.PI * 2f / 10f;
+                    var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                    Renderer twig = CreateShape(PrimitiveType.Cylinder, "Twig", pos + dir * (0.32f * cs) + Vector3.up * (0.08f * cs),
+                        new Vector3(0.04f, 0.2f, 0.04f) * cs, _barkMaterial);
+                    twig.transform.rotation = Quaternion.LookRotation(dir) * Quaternion.Euler(90f, 0f, 70f + 30f * Hash(k, i));
+                    Parent(twig, root);
+                }
+                if (_birdEggMaterial == null) continue;
+                for (int k = 0; k < 3; k++)
+                {
+                    float a = k * 2.1f + i;
+                    Vector3 p = pos + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * (0.1f * cs) + Vector3.up * (0.1f * cs);
+                    Renderer egg = CreateShape(PrimitiveType.Sphere, "BirdEgg", p, new Vector3(0.12f, 0.16f, 0.12f) * cs, _birdEggMaterial);
+                    egg.transform.rotation = Quaternion.Euler(65f, a * Mathf.Rad2Deg, 0f);
+                    Parent(egg, root);
+                    eggs.Add(egg);
+                }
+            }
+            _birdEggs = eggs.ToArray();
+        }
+
+        private static CombineInstance Instance(Mesh mesh, Vector3 localPos, float yaw, Vector3 scale)
+        {
+            return new CombineInstance { mesh = mesh, transform = Matrix4x4.TRS(localPos, Quaternion.Euler(0f, yaw, 0f), scale) };
+        }
+
+        private void Combined(string objectName, System.Collections.Generic.List<CombineInstance> parts, Material mat, bool shadows)
+        {
+            if (parts.Count == 0 || mat == null) return;
+            var mesh = new Mesh { name = objectName, indexFormat = IndexFormat.UInt32 };
+            mesh.CombineMeshes(parts.ToArray(), true, true);
+            mesh.RecalculateBounds();
+            var go = new GameObject(objectName);
+            go.transform.SetParent(transform, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = mat;
+            r.shadowCastingMode = shadows ? ShadowCastingMode.On : ShadowCastingMode.Off;
+        }
+
+        private static Mesh PrimitiveMesh(PrimitiveType type)
+        {
+            GameObject temp = GameObject.CreatePrimitive(type);
+            Mesh mesh = temp.GetComponent<MeshFilter>().sharedMesh;
+            DestroySafe(temp);
+            return mesh;
         }
 
         private bool IsType(int x, int y, ObstacleType type)
