@@ -27,7 +27,9 @@ internal static class UIBuilder
         public AudioService Audio;
         public LeaderboardService Leaderboard;
         public WildlifeManager Wildlife;
-        public EagleHunter Eagle;
+        public EagleHunter Eagle;
+        public FoxHunter Fox;
+        public GridManager Grid;
         public DayNightCycle DayNight;
         public ScentTracker Scent;
         public Transform CameraTransform;

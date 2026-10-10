@@ -156,6 +156,9 @@ namespace Snake3D
             }
         }
 
+        /// <summary>Последний бросок начат из полной засады (для целей суток).</summary>
+        public bool LastStrikeFromAmbush { get; private set; }
+
         /// <summary>После промаха змея на секунду медленнее и заметнее.</summary>
         public bool IsExposed => _exposedTimer > 0f;
 
@@ -453,6 +456,7 @@ namespace Snake3D
             _strikeCooldownTimer = _config.StrikeCooldown;
             _strikeHit = false;
             _exposedTimer = 0f;
+            LastStrikeFromAmbush = _ambush.IsLuring;
             _ambush.Break();
             _squashTimer = 0f;
             StrikeStarted?.Invoke(charge);

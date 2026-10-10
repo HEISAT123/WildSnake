@@ -180,6 +180,20 @@ namespace Snake3D.Tests
             RunSaveStore.Clear();
         }
 
+        [UnityTest]
+        public IEnumerator Fox_ComesAndHunts_WithoutErrors()
+        {
+            _game.StartGame();
+            var fox = Object.FindAnyObjectByType<FoxHunter>();
+            Assert.IsNotNull(fox, "В сцене нет лисы");
+            fox.ResetHunter(0.05f);
+            yield return new WaitForSeconds(0.5f);
+            Assert.IsTrue(fox.IsActive, "Лиса не пришла");
+            yield return new WaitForSeconds(2.5f);
+            Assert.That(_game.State, Is.EqualTo(GameState.Playing).Or.EqualTo(GameState.GameOver).Or.EqualTo(GameState.Molting));
+            Assert.Greater(_game.Goals.Count, 0, "У партии должны быть цели суток");
+        }
+
         private static SnakeController FindPlayer()
         {
             foreach (SnakeController s in Object.FindObjectsByType<SnakeController>(FindObjectsSortMode.None))

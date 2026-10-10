@@ -174,8 +174,9 @@ public static class SnakeSceneBuilder
         SetBool(playerAi, "_canJump", false);
         playerAi.enabled = false;
 
-        // ================= Орёл =================
+        // ================= Хищники =================
         EagleHunter eagle = BuildEagle(config, grid, player.Controller, minimapLayer);
+        FoxHunter fox = BuildFox(config, grid, player.Controller, minimapLayer);
 
         // ================= Нюх и линька =================
         var scent = new GameObject("Scent").AddComponent<ScentTracker>();
@@ -250,7 +251,7 @@ public static class SnakeSceneBuilder
         Wire(game,
             ("_config", config), ("_grid", grid),
             ("_snake", player.Controller), ("_headAnimator", player.Animator), ("_rival", rival.Controller), ("_playerAutopilot", playerAi), ("_playerInput", playerInput),
-            ("_wildlife", wildlife), ("_eagle", eagle), ("_dayNight", dayNight), ("_scent", scent), ("_skinShed", shed),
+            ("_wildlife", wildlife), ("_eagle", eagle), ("_fox", fox), ("_dayNight", dayNight), ("_scent", scent), ("_skinShed", shed),
             ("_leaderboard", leaderboard), ("_settings", settings), ("_audio", audio), ("_cameraRig", rig),
             ("_eatParticles", eatFx), ("_deathParticles", deathFx), ("_dustParticles", dustFx), ("_moltParticles", moltFx));
 
@@ -258,7 +259,7 @@ public static class SnakeSceneBuilder
         UIBuilder.Build(new UIBuilder.Refs
         {
             Game = game, Config = config, Player = player.Controller, Settings = settings, Audio = audio, Leaderboard = leaderboard,
-            Wildlife = wildlife, Eagle = eagle, DayNight = dayNight, Scent = scent,
+            Wildlife = wildlife, Eagle = eagle, Fox = fox, DayNight = dayNight, Scent = scent, Grid = grid,
             CameraTransform = camGo.transform, MinimapCamera = miniCam, MinimapTexture = minimapTexture
         });
 
@@ -487,6 +488,60 @@ public static class SnakeSceneBuilder
         Wire(eagle, ("_config", config), ("_grid", grid), ("_target", target), ("_model", model),
             ("_leftWing", wings[0]), ("_rightWing", wings[1]), ("_shadow", shadowRenderer));
         return eagle;
+    }
+
+    /// <summary>Лиса: рыжее тело, белая грудь и кончик хвоста, тёмные лапы и уши, вытянутая морда.</summary>
+    private static FoxHunter BuildFox(GameConfig config, GridManager grid, SnakeController target, int markerLayer)
+    {
+        Material fur = CreateLitMaterial("FoxFur", new Color(0.86f, 0.42f, 0.14f), 0.12f);
+        Material white = CreateLitMaterial("FoxWhite", new Color(0.95f, 0.92f, 0.86f), 0.1f);
+        Material dark = CreateLitMaterial("FoxDark", new Color(0.12f, 0.08f, 0.06f), 0.2f);
+        Material eye = CreateLitMaterial("SnakePupil", new Color(0.02f, 0.02f, 0.02f), 0.9f);
+
+        var root = new GameObject("Fox");
+        var model = new GameObject("FoxModel").transform;
+        model.SetParent(root.transform, false);
+        var body = new GameObject("Body").transform;
+        body.SetParent(model, false);
+
+        Part(PrimitiveType.Sphere, "Torso", body, fur, new Vector3(0f, 0.5f, 0f), new Vector3(0.48f, 0.46f, 1.05f));
+        Part(PrimitiveType.Sphere, "Chest", body, white, new Vector3(0f, 0.45f, 0.36f), new Vector3(0.36f, 0.38f, 0.36f));
+        Part(PrimitiveType.Sphere, "Head", body, fur, new Vector3(0f, 0.74f, 0.62f), new Vector3(0.4f, 0.36f, 0.42f));
+        GameObject snout = Part(PrimitiveType.Sphere, "Snout", body, white, new Vector3(0f, 0.68f, 0.88f), new Vector3(0.2f, 0.17f, 0.36f));
+        snout.transform.localRotation = Quaternion.Euler(8f, 0f, 0f);
+        Part(PrimitiveType.Sphere, "Nose", body, dark, new Vector3(0f, 0.7f, 1.05f), Vector3.one * 0.07f);
+        for (int side = -1; side <= 1; side += 2)
+        {
+            GameObject ear = Part(PrimitiveType.Cube, "Ear", body, dark, new Vector3(0.12f * side, 0.97f, 0.56f), new Vector3(0.12f, 0.2f, 0.05f));
+            ear.transform.localRotation = Quaternion.Euler(-10f, 0f, -14f * side);
+            Part(PrimitiveType.Sphere, "Eye", body, eye, new Vector3(0.11f * side, 0.8f, 0.8f), Vector3.one * 0.055f);
+        }
+
+        var legs = new Object[4];
+        Vector3[] legPos = { new Vector3(-0.14f, 0.36f, 0.32f), new Vector3(0.14f, 0.36f, 0.32f), new Vector3(-0.14f, 0.36f, -0.32f), new Vector3(0.14f, 0.36f, -0.32f) };
+        for (int i = 0; i < 4; i++)
+        {
+            var pivot = new GameObject("Leg" + i).transform;
+            pivot.SetParent(model, false);
+            pivot.localPosition = legPos[i];
+            Part(PrimitiveType.Cylinder, "Shin", pivot, dark, new Vector3(0f, -0.18f, 0f), new Vector3(0.09f, 0.18f, 0.09f));
+            legs[i] = pivot;
+        }
+
+        var tail = new GameObject("Tail").transform;
+        tail.SetParent(body, false);
+        tail.localPosition = new Vector3(0f, 0.56f, -0.5f);
+        Part(PrimitiveType.Sphere, "Brush", tail, fur, new Vector3(0f, 0f, -0.36f), new Vector3(0.26f, 0.26f, 0.8f));
+        Part(PrimitiveType.Sphere, "Tip", tail, white, new Vector3(0f, 0f, -0.74f), new Vector3(0.18f, 0.18f, 0.26f));
+
+        Material marker = CreateUnlitMaterial("MarkerFox", new Color(1f, 0.5f, 0.1f));
+        CreateMarker(model, marker, markerLayer, 2.4f);
+        model.gameObject.SetActive(false);
+
+        var fox = root.AddComponent<FoxHunter>();
+        Wire(fox, ("_config", config), ("_grid", grid), ("_target", target), ("_model", model), ("_body", body), ("_tail", tail));
+        WireArray(fox, "_legs", legs);
+        return fox;
     }
 
     /// <summary>Мягкое белое пятно с плавным краем (тень орла).</summary>

@@ -10,7 +10,7 @@ namespace Snake3D
     /// </summary>
     public static class SfxSynth
     {
-        public const int SOUND_COUNT = 14;
+        public const int SOUND_COUNT = 16;
         private const int SR = SynthDsp.SAMPLE_RATE;
 
         /// <summary>Все звуки по индексу SoundId; каждый — чередующиеся стерео-сэмплы.</summary>
@@ -141,6 +141,24 @@ namespace Snake3D
                     t.Sub(0.0, 2.0, 55, 45, 0.35f);
                     t.Pluck(0.4, 76, 1.2, 0.25f, 0.3f, 0.7f, 3.5, 2.0);
                     return t.Finish(0.55f, 0.6f);
+
+                case SoundId.FoxYip:
+                    // Лисий лай «вяу-вяу»: два хриплых тявка с подъёмом и спадом тона.
+                    t = new Track(1.2f, 25);
+                    for (int i = 0; i < 2; i++)
+                    {
+                        double at = i * 0.26;
+                        t.SuperSaw(at, 0.16, 74 - i * 2, 66 - i * 2, 3, 20, 2600, 900, 0.01, 0.08, 0.2f, 0.4f);
+                        t.Noise(at, 0.14, 3500, 1500, 900, -0.2f, 0.2f, 0.005, 0.2f, 0.4f);
+                    }
+                    return t.Finish(0.4f, 0.55f);
+
+                case SoundId.Goal:
+                    // Цель суток: короткая восходящая квинта колокольчиков.
+                    t = new Track(1.4f, 26);
+                    int[] goal = { 76, 83, 88 };
+                    for (int i = 0; i < goal.Length; i++) t.Pluck(i * 0.09, goal[i], 0.7, 0.4f, i == 1 ? 0.3f : -0.3f, 0.6f, 3.0, 1.8);
+                    return t.Finish(0.45f, 0.6f);
 
                 default:
                     return new float[2];

@@ -10,6 +10,8 @@ namespace Snake3D
         /// <summary>Удар орла.</summary>
         Eagle,
         /// <summary>Голод.</summary>
-        Starvation
+        Starvation,
+        /// <summary>Укус лисы.</summary>
+        Fox
     }
 }

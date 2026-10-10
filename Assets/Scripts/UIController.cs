@@ -167,6 +167,8 @@ namespace Snake3D
             _game.ConstrictionStarted += OnConstrictionStarted;
             _game.ConstrictionEnded += OnConstrictionEnded;
             _game.BurrowChanged += OnBurrowChanged;
+            _game.GoalCompleted += OnGoalCompleted;
+            _game.FoxScared += OnFoxScared;
             _wildlife.Startled += OnPreyStartled;
             _eagle.Missed += OnEagleMissed;
             _dayNight.DayStarted += OnDayStarted;
@@ -199,6 +201,8 @@ namespace Snake3D
             _game.ConstrictionStarted -= OnConstrictionStarted;
             _game.ConstrictionEnded -= OnConstrictionEnded;
             _game.BurrowChanged -= OnBurrowChanged;
+            _game.GoalCompleted -= OnGoalCompleted;
+            _game.FoxScared -= OnFoxScared;
             _wildlife.Startled -= OnPreyStartled;
             _eagle.Missed -= OnEagleMissed;
             _dayNight.DayStarted -= OnDayStarted;
@@ -431,6 +435,16 @@ namespace Snake3D
             ShowBanner("ДЕРЖИТЕ F — ОБВИТЬ");
         }
 
+        private void OnGoalCompleted(int index)
+        {
+            ShowBanner("ЦЕЛЬ ДНЯ ВЫПОЛНЕНА");
+        }
+
+        private void OnFoxScared()
+        {
+            ShowBanner("ЛИСА УБЕЖАЛА");
+        }
+
         private void OnBurrowChanged(bool entered)
         {
             if (_game.State != GameState.Playing) return;
@@ -551,6 +565,7 @@ namespace Snake3D
                 case DamageSource.Starvation: return "ГОЛОД ВЗЯЛ СВОЁ";
                 case DamageSource.Eagle: return "ДОБЫЧА ОРЛА";
                 case DamageSource.Rival: return "ПОБЕЖДЕНА СОПЕРНИЦЕЙ";
+                case DamageSource.Fox: return "ДОБЫЧА ЛИСЫ";
                 default: return "СМЕРТЕЛЬНАЯ РАНА";
             }
         }

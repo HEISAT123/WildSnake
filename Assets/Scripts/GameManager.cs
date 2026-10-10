@@ -43,6 +43,9 @@ namespace Snake3D
         [Tooltip("Орёл")]
         [SerializeField] private EagleHunter _eagle;
 
+        [Tooltip("Лиса — наземный хищник")]
+        [SerializeField] private FoxHunter _fox;
+
         [Tooltip("Смена дня и ночи")]
         [SerializeField] private DayNightCycle _dayNight;
 
@@ -127,12 +130,24 @@ namespace Snake3D
         /// <summary>Змея вошла в нору (true, прогресс сохранён) или вышла из неё (false).</summary>
         public event Action<bool> BurrowChanged;
 
+        /// <summary>На рассвете выбраны новые цели суток.</summary>
+        public event Action GoalsRolled;
+
+        /// <summary>Выполнена цель суток (индекс в Goals).</summary>
+        public event Action<int> GoalCompleted;
+
+        /// <summary>Лиса отпугнута броском.</summary>
+        public event Action FoxScared;
+
         public GameState State { get; private set; } = GameState.Menu;
         public RunStats Stats => _stats;
         public SurvivalStats Survival => _survival;
 
         /// <summary>Шкала борьбы при обвивании.</summary>
         public Constriction Constriction => _constriction;
+
+        /// <summary>Цели текущих суток.</summary>
+        public DailyGoals Goals => _goals;
         public UpgradeSet Upgrades => _upgrades;
 
         /// <summary>Место последней жизни в таблице (0 — первое, -1 — не попала).</summary>
@@ -168,6 +183,8 @@ namespace Snake3D
         private SurvivalStats _survival;
         private readonly UpgradeSet _upgrades = new UpgradeSet();
         private readonly Constriction _constriction = new Constriction();
+        private readonly DailyGoals _goals = new DailyGoals();
+        private bool _nightOutside;
         private PreyAnimal _heldPrey;
         private int _burrowIndex;
         private RunStats _stats;
@@ -208,6 +225,8 @@ namespace Snake3D
             _eagle.DiveStarted += OnEagleDive;
             _eagle.Struck += OnEagleStruck;
             _eagle.Missed += OnEagleMissed;
+            _fox.Appeared += OnFoxAppeared;
+            _fox.Bit += OnFoxBit;
             _dayNight.DayStarted += OnDayStarted;
             _dayNight.NightStarted += OnNightStarted;
             _settings.Changed += ApplySettings;
@@ -231,6 +250,8 @@ namespace Snake3D
             _eagle.DiveStarted -= OnEagleDive;
             _eagle.Struck -= OnEagleStruck;
             _eagle.Missed -= OnEagleMissed;
+            _fox.Appeared -= OnFoxAppeared;
+            _fox.Bit -= OnFoxBit;
             _dayNight.DayStarted -= OnDayStarted;
             _dayNight.NightStarted -= OnNightStarted;
             _settings.Changed -= ApplySettings;
@@ -293,7 +314,11 @@ namespace Snake3D
             else _dayNight.ResetCycle(_config.StartPhase);
             _eagle.Ambient = false;
             _eagle.ResetHunter(_config.EagleFirstDelay);
+            _fox.ResetHunter(_config.FoxFirstDelay);
             PrepareRound(!fromMenu);
+            _goals.Roll(_dayNight.Day, _rng);
+            _nightOutside = false;
+            GoalsRolled?.Invoke();
             if (save != null) ApplySave(save);
             SetState(GameState.Playing);
             if (save != null) EnterBurrow(Mathf.Clamp(save.Burrow, 0, Mathf.Max(0, _grid.BurrowCount - 1)), false);
@@ -315,6 +340,8 @@ namespace Snake3D
             _dayNight.SetPhase(_menuPhase);
             _eagle.Ambient = true;
             _eagle.ResetHunter(_menuEagleDelay);
+            _fox.ResetHunter(_config.FoxFirstDelay);
+            _goals.Clear();
             PrepareRound(true);
             SetState(GameState.Menu);
         }
@@ -387,6 +414,7 @@ namespace Snake3D
             _wildlife.IsRunning = running || menu;
             _dayNight.Running = running;
             _eagle.HuntingAllowed = running && !_dayNight.IsNight;
+            _fox.HuntingAllowed = running;
             Time.timeScale = frozen ? 0f : 1f;
             _audio.SetPaused(frozen);
             StateChanged?.Invoke(state);
@@ -401,6 +429,7 @@ namespace Snake3D
             _stats.Days = _stats.Time / DayLengthSeconds;
             _wildlife.IsNight = _dayNight.IsNight;
             _eagle.HuntingAllowed = !_dayNight.IsNight;
+            _fox.IsNight = _dayNight.IsNight;
 
             TickHunger(dt);
             if (State != GameState.Playing) return;
@@ -408,6 +437,9 @@ namespace Snake3D
             // Голодная и замёрзшая змея медленнее восстанавливает силы.
             _snake.Stamina.RegenMultiplier = Mathf.Lerp(_config.HungryStaminaRegen, 1f, Mathf.Clamp01(_survival.Satiety01 * 2f))
                                              * _snake.Temperature.RegenMultiplier;
+            TickFoxScare();
+            if (_snake.Spot == TemperatureSpot.SunStone && _snake.Temperature.Warm01 >= 0.75f) ReportGoal(GoalType.BaskStone);
+
             // Ночь в норе пролетает быстрее (голод при этом идёт).
             float timeScale = _snake.InBurrow && _dayNight.IsNight ? _config.BurrowNightTimeScale : 1f;
             if (!Mathf.Approximately(Time.timeScale, timeScale)) Time.timeScale = timeScale;
@@ -645,6 +677,9 @@ namespace Snake3D
             _moltProgress += prey.Growth;
             if (_moltProgress >= _config.MoltGrowth) _moltPending = true;
             _stats.Prey++;
+            if (kind == PreyKind.Mouse) ReportGoal(GoalType.CatchMice);
+            if (kind == PreyKind.Rabbit) ReportGoal(GoalType.ConstrictRabbit);
+            if (kind == PreyKind.Bird && _snake.LastStrikeFromAmbush) ReportGoal(GoalType.AmbushBird);
 
             Emit(_eatParticles, position, big ? _eatParticleCount : _eatParticleCount / 2);
             _audio.Play(big ? SoundId.Feast : SoundId.Catch);
@@ -680,6 +715,8 @@ namespace Snake3D
         private void EnterBurrow(int index, bool save)
         {
             _burrowIndex = index;
+            // Ночь, пережитая в норе, не засчитывается в цель «ночь вне норы».
+            if (_dayNight.IsNight) _nightOutside = false;
             _snake.EnterBurrow(_grid.GetBurrow(index));
             _playerInput.MovementLocked = true;
             _scent.ResetScent();
@@ -823,20 +860,82 @@ namespace Snake3D
 
         private void OnEagleMissed()
         {
-            if (State == GameState.Playing) _stats.EaglesEvaded++;
+            if (State != GameState.Playing) return;
+            _stats.EaglesEvaded++;
+            ReportGoal(GoalType.EvadeEagle);
+        }
+
+        // ---------------- Лиса ----------------
+
+        private void OnFoxAppeared()
+        {
+            if (State == GameState.Playing) _audio.Play(SoundId.FoxYip);
+        }
+
+        private void OnFoxBit(Vector3 position)
+        {
+            if (State != GameState.Playing) return;
+            _cameraRig.Shake(0.3f, 0.4f);
+            _snake.TakeHit(_config.FoxDamage, DamageSource.Fox, _snake.HeadPosition - _fox.Position);
+        }
+
+        /// <summary>Бросок в лису: при здоровье выше половины она убегает, иначе бросок лишь сбит.</summary>
+        private void TickFoxScare()
+        {
+            if (!_snake.IsStriking || !_fox.IsActive) return;
+            bool canScare = _survival.Health01 > _config.FoxScareHealth;
+            Vector3 d = _fox.Position - _snake.HeadPosition;
+            d.y = 0f;
+            if (d.magnitude > 1.3f * _grid.CellSize) return;
+            _snake.NotifyStrikeHit();
+            _snake.CancelStrike();
+            if (!_fox.TryScare(_snake.HeadPosition, canScare)) return;
+            _stats.FoxesScared++;
+            _audio.Play(SoundId.FoxYip);
+            ReportGoal(GoalType.ScareFox);
+            FoxScared?.Invoke();
+        }
+
+        // ---------------- Цели суток ----------------
+
+        private void ReportGoal(GoalType type)
+        {
+            if (State != GameState.Playing) return;
+            int index = _goals.Report(type);
+            if (index < 0) return;
+            if (_goals.Get(index).MoltReward)
+            {
+                _moltProgress += _config.MoltGrowth * _config.GoalMoltReward;
+                if (_moltProgress >= _config.MoltGrowth) _moltPending = true;
+            }
+            else
+            {
+                _survival.HealFull();
+                _snake.Stamina.Reset(_config.MaxStamina);
+            }
+            _audio.Play(SoundId.Goal);
+            GoalCompleted?.Invoke(index);
         }
 
         // ---------------- День и ночь ----------------
 
         private void OnDayStarted(int day)
         {
-            if (State == GameState.Playing) _audio.Play(SoundId.Dawn);
+            if (State == GameState.Playing)
+            {
+                _audio.Play(SoundId.Dawn);
+                // Сначала засчитываем пережитую ночь, потом выдаём цели нового дня.
+                if (_nightOutside) ReportGoal(GoalType.NightOutside);
+                _goals.Roll(day, _rng);
+                GoalsRolled?.Invoke();
+            }
             _audio.SetMusicPitch(1f);
         }
 
         private void OnNightStarted()
         {
             if (State == GameState.Playing) _audio.Play(SoundId.Dusk);
+            _nightOutside = !_snake.InBurrow;
             // Ночью музыка чуть ниже и тягучее.
             _audio.SetMusicPitch(0.94f);
         }

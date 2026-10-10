@@ -16,6 +16,8 @@ namespace Snake3D
         Click = 10,
         Sniff = 11,
         Dawn = 12,
-        Dusk = 13
+        Dusk = 13,
+        FoxYip = 14,
+        Goal = 15
     }
 }

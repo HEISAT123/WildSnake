@@ -252,6 +252,29 @@ namespace Snake3D
         [Tooltip("Урон от удара орла")]
         [SerializeField, Min(0f)] private float _eagleDamage = 35f;
 
+        [Header("Лиса")]
+        [Tooltip("Через сколько секунд после старта может прийти лиса")]
+        [SerializeField, Min(0f)] private float _foxFirstDelay = 75f;
+
+        [Tooltip("Пауза между визитами лисы, сек (мин)")]
+        [SerializeField, Min(1f)] private float _foxIntervalMin = 50f;
+
+        [Tooltip("Пауза между визитами лисы, сек (макс)")]
+        [SerializeField, Min(1f)] private float _foxIntervalMax = 90f;
+
+        [Tooltip("Скорость лисы в погоне, клеток в секунду (быстрее шага змеи, медленнее быстрого ползания)")]
+        [SerializeField, Min(0.5f)] private float _foxSpeed = 4.4f;
+
+        [Tooltip("Урон от укуса лисы")]
+        [SerializeField, Min(0f)] private float _foxDamage = 22f;
+
+        [Tooltip("Отпугнуть лису броском можно, только если здоровья больше этой доли")]
+        [SerializeField, Range(0f, 1f)] private float _foxScareHealth = 0.5f;
+
+        [Header("Цели суток")]
+        [Tooltip("Какую долю роста до линьки даёт выполненная охотничья цель")]
+        [SerializeField, Range(0f, 1f)] private float _goalMoltReward = 0.5f;
+
         [Header("Соперница")]
         [Tooltip("Задержка возрождения змеи-соперницы, сек")]
         [SerializeField, Min(0f)] private float _rivalRespawnDelay = 6f;
@@ -354,6 +377,14 @@ namespace Snake3D
         public float EagleIntervalMin => _eagleIntervalMin;
         public float EagleIntervalMax => Mathf.Max(_eagleIntervalMin, _eagleIntervalMax);
         public float EagleDamage => _eagleDamage;
+
+        public float FoxFirstDelay => _foxFirstDelay;
+        public float FoxIntervalMin => _foxIntervalMin;
+        public float FoxIntervalMax => Mathf.Max(_foxIntervalMin, _foxIntervalMax);
+        public float FoxSpeed => _foxSpeed;
+        public float FoxDamage => _foxDamage;
+        public float FoxScareHealth => _foxScareHealth;
+        public float GoalMoltReward => _goalMoltReward;
 
         public float RivalRespawnDelay => _rivalRespawnDelay;
         public float RivalMaxHealth => _rivalMaxHealth;
