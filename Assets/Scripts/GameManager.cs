@@ -153,9 +153,6 @@ namespace Snake3D
         {
             switch (State)
             {
-                case GameState.Menu:
-                    if (GameInput.Confirm) StartGame(Mode);
-                    break;
                 case GameState.Playing:
                     if (GameInput.Pause) SetState(GameState.Paused);
                     else TickPlaying(Time.deltaTime);

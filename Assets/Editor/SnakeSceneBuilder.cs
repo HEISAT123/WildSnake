@@ -528,18 +528,9 @@ public static class SnakeSceneBuilder
         bannerGroup.interactable = false;
         Text bannerText = CreateFillText(banner, "BannerText", "", 72, TextAnchor.MiddleCenter, AccentGold, 0f);
 
-        // ---------- Меню ----------
-        RectTransform menu = CreateOverlay(root, "MenuPanel", out RectTransform menuCard, new Vector2(860f, 780f));
-        CreateCardText(menuCard, "Title", "ЗМЕЙКА 3D", 100, new Vector2(0f, 310f), new Vector2(820f, 120f), AccentGreen);
-        CreateCardText(menuCard, "Controls",
-            "A D / ← → — руль    Space — прыжок    Shift — рывок\nСобирайте яблоки и бонусы, избегайте стен, колонн и балок",
-            26, new Vector2(0f, 200f), new Vector2(820f, 90f), MutedText);
-        Button classicButton = CreateButton(menuCard, "ClassicButton", "Классика", new Vector2(0f, 70f), new Vector2(480f, 84f), 40, AccentGreen);
-        Button timeButton = CreateButton(menuCard, "TimeAttackButton", "На время (2 мин)", new Vector2(0f, -30f), new Vector2(480f, 84f), 40, AccentBlue);
-        Button survivalButton = CreateButton(menuCard, "SurvivalButton", "Выживание", new Vector2(0f, -130f), new Vector2(480f, 84f), 40, AccentRed);
-        Button menuLeaderboardButton = CreateButton(menuCard, "LeaderboardButton", "Рекорды", new Vector2(-125f, -245f), new Vector2(230f, 70f), 32, ButtonGrey);
-        Button menuSettingsButton = CreateButton(menuCard, "SettingsButton", "Настройки", new Vector2(125f, -245f), new Vector2(230f, 70f), 32, ButtonGrey);
-        CreateCardText(menuCard, "StartHint", "Enter — начать последний режим", 24, new Vector2(0f, -340f), new Vector2(820f, 40f), MutedText);
+        // ---------- Меню: «Неоновый закат» ----------
+        RectTransform menu = NeonMenuBuilder.Build(root, out Button classicButton, out Button timeButton, out Button survivalButton,
+            out Button menuLeaderboardButton, out Button menuSettingsButton, out Button quitButton, out NeonMenu neonMenu);
 
         // ---------- Пауза ----------
         RectTransform pause = CreateOverlay(root, "PausePanel", out RectTransform pauseCard, new Vector2(720f, 640f));
@@ -601,6 +592,9 @@ public static class SnakeSceneBuilder
             ("_fullscreenToggle", fullscreenToggle), ("_minimapToggle", minimapToggle), ("_rivalToggle", rivalToggle),
             ("_qualityButton", qualityButton), ("_qualityLabel", qualityLabel), ("_tutorialButton", tutorialButton), ("_backButton", settingsBack));
 
+        Wire(neonMenu, ("_leaderboard", leaderboard), ("_audio", audio));
+        WireArray(neonMenu, "_overlays", new Object[] { settingsPanel.gameObject, leaderboardPanel.gameObject });
+
         var lbComp = leaderboardPanel.gameObject.AddComponent<LeaderboardPanel>();
         Wire(lbComp, ("_leaderboard", leaderboard), ("_audio", audio), ("_backButton", lbBack));
         WireArray(lbComp, "_columns", columns);
@@ -617,7 +611,7 @@ public static class SnakeSceneBuilder
             ("_settingsPanel", settingsPanel.gameObject), ("_leaderboardPanel", leaderboardPanel.gameObject),
             ("_gameOverTitle", overTitle), ("_finalScoreText", finalScore), ("_rankText", rankText), ("_statsText", statsText),
             ("_classicButton", classicButton), ("_timeAttackButton", timeButton), ("_survivalButton", survivalButton),
-            ("_menuLeaderboardButton", menuLeaderboardButton), ("_menuSettingsButton", menuSettingsButton),
+            ("_menuLeaderboardButton", menuLeaderboardButton), ("_menuSettingsButton", menuSettingsButton), ("_quitButton", quitButton),
             ("_resumeButton", resumeButton), ("_pauseRestartButton", pauseRestartButton),
             ("_pauseSettingsButton", pauseSettingsButton), ("_pauseMenuButton", pauseMenuButton),
             ("_restartButton", restartButton), ("_gameOverMenuButton", overMenuButton));
@@ -625,7 +619,7 @@ public static class SnakeSceneBuilder
         WireArray(ui, "_powerUpFills", fills);
     }
 
-    private static RectTransform CreateRect(string name, Transform parent)
+    internal static RectTransform CreateRect(string name, Transform parent)
     {
         var go = new GameObject(name, typeof(RectTransform));
         go.layer = LayerMask.NameToLayer("UI");
@@ -634,7 +628,7 @@ public static class SnakeSceneBuilder
         return rt;
     }
 
-    private static void Stretch(RectTransform rt)
+    internal static void Stretch(RectTransform rt)
     {
         rt.anchorMin = Vector2.zero;
         rt.anchorMax = Vector2.one;
@@ -687,7 +681,7 @@ public static class SnakeSceneBuilder
         return panel;
     }
 
-    private static Text CreateText(Transform parent, string name, string value, int size, TextAnchor alignment,
+    internal static Text CreateText(Transform parent, string name, string value, int size, TextAnchor alignment,
         Vector2 anchor, Vector2 position, Vector2 sizeDelta)
     {
         RectTransform rt = CreateRect(name, parent);
@@ -1151,7 +1145,7 @@ public static class SnakeSceneBuilder
     // ===================== Утилиты =====================
 
     /// <summary>Записываем приватные [SerializeField] поля через SerializedObject.</summary>
-    private static void Wire(Object target, params (string field, Object value)[] links)
+    internal static void Wire(Object target, params (string field, Object value)[] links)
     {
         var so = new SerializedObject(target);
         foreach (var (field, value) in links)
@@ -1167,7 +1161,7 @@ public static class SnakeSceneBuilder
         so.ApplyModifiedPropertiesWithoutUndo();
     }
 
-    private static void WireArray(Object target, string field, Object[] values)
+    internal static void WireArray(Object target, string field, Object[] values)
     {
         var so = new SerializedObject(target);
         SerializedProperty prop = so.FindProperty(field);
@@ -1189,7 +1183,7 @@ public static class SnakeSceneBuilder
         so.ApplyModifiedPropertiesWithoutUndo();
     }
 
-    private static void SetFloat(Object target, string field, float value)
+    internal static void SetFloat(Object target, string field, float value)
     {
         SerializedObject so = FindForWrite(target, field, out SerializedProperty prop);
         if (prop == null) return;

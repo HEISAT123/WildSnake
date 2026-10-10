@@ -37,6 +37,8 @@ Assets/
   Синтез идёт в фоновом потоке — в этих классах только System.Math, никакого Unity API.
 - Окружение (Editor): `EnvironmentBuilder` (небо, рельеф, лес, камни, трава, озеро, облака), `ProceduralTextures`, `ProceduralMeshes`; рантайм — `CloudDrift`.
 - Отображение: `CameraRig` (третье лицо, крен, тряска), `UIController`, `SettingsPanel`, `LeaderboardPanel`, `TutorialController`.
+- Главное меню «Неоновый закат»: `NeonMenu` (выбор стрелками/мышью, рекорд режима, бегущая сетка) + `MenuItemHover`; строит `NeonMenuBuilder` (Editor), текстуры в `Assets/Materials/UI`.
+- Курсор скрыт и заблокирован только в состоянии Playing (`UIController.ApplyCursor`); «Выйти» — `Application.Quit`, в редакторе останавливает Play Mode.
 - Управление: A/D или ←/→ — руль (держать), Space — прыжок, Shift — рывок, Esc — пауза, R — заново, F11 — полный экран.
 
 Правила:

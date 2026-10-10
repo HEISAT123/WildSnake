@@ -56,5 +56,5 @@
         "temp/": true,
         "Temp/": true
     },
-    "dotnet.defaultSolution": "Snake3D_Ilnur.sln"
+    "dotnet.defaultSolution": "Snake3D.sln"
 }

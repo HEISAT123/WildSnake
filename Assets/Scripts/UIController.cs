@@ -81,6 +81,7 @@ namespace Snake3D
         [SerializeField] private Button _survivalButton;
         [SerializeField] private Button _menuLeaderboardButton;
         [SerializeField] private Button _menuSettingsButton;
+        [SerializeField] private Button _quitButton;
 
         [Header("Кнопки паузы")]
         [SerializeField] private Button _resumeButton;
@@ -110,6 +111,7 @@ namespace Snake3D
             _survivalButton.onClick.AddListener(OnSurvivalClicked);
             _menuLeaderboardButton.onClick.AddListener(OnLeaderboardClicked);
             _menuSettingsButton.onClick.AddListener(OnSettingsClicked);
+            _quitButton.onClick.AddListener(OnQuitClicked);
             _resumeButton.onClick.AddListener(OnResumeClicked);
             _pauseRestartButton.onClick.AddListener(OnRestartClicked);
             _pauseSettingsButton.onClick.AddListener(OnSettingsClicked);
@@ -133,6 +135,11 @@ namespace Snake3D
             _survivalButton.onClick.RemoveListener(OnSurvivalClicked);
             _menuLeaderboardButton.onClick.RemoveListener(OnLeaderboardClicked);
             _menuSettingsButton.onClick.RemoveListener(OnSettingsClicked);
+            _quitButton.onClick.RemoveListener(OnQuitClicked);
+
+            // Возвращаем курсор, если UI выключили посреди партии (например, выход из Play Mode).
+            Cursor.visible = true;
+            Cursor.lockState = CursorLockMode.None;
             _resumeButton.onClick.RemoveListener(OnResumeClicked);
             _pauseRestartButton.onClick.RemoveListener(OnRestartClicked);
             _pauseSettingsButton.onClick.RemoveListener(OnSettingsClicked);
@@ -265,6 +272,8 @@ namespace Snake3D
                 _leaderboardPanel.SetActive(false);
             }
 
+            ApplyCursor(state);
+
             // Снимаем выделение с кнопок: иначе Enter/Space сработает и как Submit, и как клавиша игры.
             if (EventSystem.current != null) EventSystem.current.SetSelectedGameObject(null);
             _shownSecond = -1;
@@ -307,6 +316,31 @@ namespace Snake3D
         private void OnMenuClicked() { Click(); _game.OpenMenu(); }
         private void OnSettingsClicked() { Click(); _settingsPanel.SetActive(true); }
         private void OnLeaderboardClicked() { Click(); _leaderboardPanel.SetActive(true); }
+
+        private void OnQuitClicked()
+        {
+            Click();
+#if UNITY_EDITOR
+            // В редакторе Application.Quit ничего не делает — останавливаем Play Mode.
+            UnityEditor.EditorApplication.isPlaying = false;
+#else
+            Application.Quit();
+#endif
+        }
+
+        /// <summary>Во время партии курсор скрыт и зафиксирован в центре окна, в меню и на паузе — виден.</summary>
+        private static void ApplyCursor(GameState state)
+        {
+            bool playing = state == GameState.Playing;
+            Cursor.visible = !playing;
+            Cursor.lockState = playing ? CursorLockMode.Locked : CursorLockMode.None;
+        }
+
+        // После Alt+Tab Windows возвращает курсор — снова прячем, если идёт игра.
+        private void OnApplicationFocus(bool hasFocus)
+        {
+            if (hasFocus) ApplyCursor(_game.State);
+        }
 
         private void Click()
         {

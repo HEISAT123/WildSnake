@@ -20,6 +20,8 @@ namespace Snake3D
         public static bool Restart => Input.GetKeyDown(KeyCode.R);
         public static bool ToggleFullscreen => Input.GetKeyDown(KeyCode.F11);
         public static bool Confirm => Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter);
+        public static bool MenuUp => Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W);
+        public static bool MenuDown => Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S);
 #elif ENABLE_INPUT_SYSTEM
         private static Keyboard K => Keyboard.current;
         public static bool LeftHeld => K != null && (K.aKey.isPressed || K.leftArrowKey.isPressed);
@@ -30,6 +32,8 @@ namespace Snake3D
         public static bool Restart => K != null && K.rKey.wasPressedThisFrame;
         public static bool ToggleFullscreen => K != null && K.f11Key.wasPressedThisFrame;
         public static bool Confirm => K != null && (K.spaceKey.wasPressedThisFrame || K.enterKey.wasPressedThisFrame || K.numpadEnterKey.wasPressedThisFrame);
+        public static bool MenuUp => K != null && (K.upArrowKey.wasPressedThisFrame || K.wKey.wasPressedThisFrame);
+        public static bool MenuDown => K != null && (K.downArrowKey.wasPressedThisFrame || K.sKey.wasPressedThisFrame);
 #else
         public static bool LeftHeld => false;
         public static bool RightHeld => false;
@@ -39,6 +43,8 @@ namespace Snake3D
         public static bool Restart => false;
         public static bool ToggleFullscreen => false;
         public static bool Confirm => false;
+        public static bool MenuUp => false;
+        public static bool MenuDown => false;
 #endif
     }
 }
