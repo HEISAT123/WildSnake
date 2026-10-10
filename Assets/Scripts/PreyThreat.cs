@@ -11,11 +11,15 @@ namespace Snake3D
         /// <summary>Множитель радиуса, с которого добыча замечает змею (трава — меньше, бросок — больше).</summary>
         public float AwarenessMultiplier;
 
-        public PreyThreat(bool active, Vector3 position, float awarenessMultiplier)
+        /// <summary>Змея затаилась и подманивает кончиком хвоста: ничего не подозревающая добыча бредёт к ней.</summary>
+        public bool Lure;
+
+        public PreyThreat(bool active, Vector3 position, float awarenessMultiplier, bool lure)
         {
             Active = active;
             Position = position;
             AwarenessMultiplier = awarenessMultiplier;
+            Lure = lure;
         }
     }
 }

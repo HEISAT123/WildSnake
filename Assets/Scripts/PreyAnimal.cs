@@ -96,6 +96,9 @@ namespace Snake3D
         private float _hopPhase;
         private float _speedBoost;
         private float _animTime;
+        private float _lureRadius;
+        private bool _lured;
+        private Vector3 _lurePos;
 
         /// <summary>Однократная настройка из WildlifeManager.</summary>
         public void Initialize(GridManager grid, GameConfig config)
@@ -103,6 +106,7 @@ namespace Snake3D
             _grid = grid;
             _stats = config.GetPrey(_kind);
             _sleepAwareness = config.SleepAwareness;
+            _lureRadius = config.LureRadius;
             _baseScale = transform.localScale;
             IsActive = false;
             if (_scentMark != null) _scentMark.SetActive(false);
@@ -158,6 +162,7 @@ namespace Snake3D
             _stateTimer -= dt;
             if (_speedBoost > 0f) _speedBoost -= dt;
             bool sleeping = night && _kind == PreyKind.Bird;
+            UpdateLure(a, b);
 
             if (CanNotice())
             {
@@ -227,6 +232,25 @@ namespace Snake3D
             return true;
         }
 
+        /// <summary>Затаившаяся змея рядом подманивает: подрагивающий кончик хвоста похож на червяка.</summary>
+        private void UpdateLure(in PreyThreat a, in PreyThreat b)
+        {
+            _lured = false;
+            if (_kind == PreyKind.Beetle) return;
+            float r = _lureRadius * _grid.CellSize;
+            if (TryLure(a, r) || TryLure(b, r)) _lured = true;
+        }
+
+        private bool TryLure(in PreyThreat t, float radius)
+        {
+            if (!t.Active || !t.Lure) return false;
+            Vector3 d = t.Position - _pos;
+            d.y = 0f;
+            if (d.sqrMagnitude > radius * radius) return false;
+            _lurePos = t.Position;
+            return true;
+        }
+
         private void StartWander()
         {
             // Случайное направление, но с уклоном к центру арены — чтобы не толпились у стен.
@@ -234,6 +258,12 @@ namespace Snake3D
             toCenter.y = 0f;
             Vector3 random = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f) * Vector3.forward;
             Vector3 dir = random + toCenter.normalized * 0.4f;
+            if (_lured)
+            {
+                Vector3 toLure = _lurePos - _pos;
+                toLure.y = 0f;
+                dir = random * 0.35f + toLure.normalized;
+            }
             _moveDir = dir.normalized;
             float duration = _kind == PreyKind.Frog ? _hopDuration + _hopPause : Random.Range(0.8f, 2.4f);
             _hopPhase = 0f;

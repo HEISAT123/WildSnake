@@ -55,6 +55,9 @@ namespace Snake3D
         [Tooltip("Изгиб шеи в «S» при замахе, клеток")]
         [SerializeField, Min(0f)] private float _coilCurl = 0.32f;
 
+        [Tooltip("Размах подрагивания кончика хвоста в засаде, клеток")]
+        [SerializeField, Min(0f)] private float _lureAmplitude = 0.14f;
+
         private Mesh _mesh;
         private MeshRenderer _renderer;
         private Vector3[] _vertices;
@@ -185,6 +188,9 @@ namespace Snake3D
             float neck = _waveNeck * cs;
             float amp = _waveAmp * cs;
             float curl = _coilBlend * _coilCurl * cs;
+            // Затаившаяся змея подрагивает кончиком хвоста — приманка для добычи.
+            float lure = _snake.Ambush.Concealment01 * _lureAmplitude * cs;
+            float lurePhase = Time.time * 9f;
 
             // Вершины в мировых координатах, а объект может стоять где угодно — переводим один раз матрицей.
             Matrix4x4 toLocal = transform.worldToLocalMatrix;
@@ -208,6 +214,7 @@ namespace Snake3D
                 float lateral = amp * taper * Mathf.Sin((odometer - d) * waveK);
                 float neckCells = d / cs;
                 if (curl > 0f && neckCells < 2.2f) lateral += curl * Mathf.Sin(neckCells * Mathf.PI / 1.1f) * (1f - neckCells / 2.2f);
+                if (lure > 0f && t > 0.8f) lateral += lure * Mathf.Sin(lurePhase - t * 6f) * ((t - 0.8f) * 5f);
                 center += right * lateral;
 
                 float radius = baseRadius * _radiusProfile.Evaluate(t);

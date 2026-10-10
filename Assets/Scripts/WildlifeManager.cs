@@ -178,15 +178,21 @@ namespace Snake3D
             MaintainPopulation(dt);
         }
 
+        /// <summary>
+        /// Насколько заметна змея: трава и засада прячут, крадущийся шаг тише, быстрое ползание и бросок
+        /// выдают, а после промаха змея на секунду «открыта».
+        /// </summary>
         private PreyThreat MakeThreat(SnakeController snake, float multiplier)
         {
             if (!IsHunting(snake)) return default;
             float m = multiplier;
             if (snake.IsHidden) m *= _config.CoverAwareness;
             if (snake.IsStriking) m *= _config.DashAwareness;
-            else if (snake.Pace == SnakePace.Sneak) m *= _config.SneakAwareness;
-            else if (snake.Pace == SnakePace.Sprint && snake.IsMoving) m *= _config.SprintAwareness;
-            return new PreyThreat(true, snake.HeadPosition, m);
+            else if (snake.IsMoving && snake.Pace == SnakePace.Sneak) m *= _config.SneakAwareness;
+            else if (snake.IsMoving && snake.Pace == SnakePace.Sprint) m *= _config.SprintAwareness;
+            m *= snake.Ambush.AwarenessMultiplier(snake.IsHidden);
+            if (snake.IsExposed) m *= _config.MissAwareness;
+            return new PreyThreat(true, snake.HeadPosition, m, snake.Ambush.IsLuring);
         }
 
         private static bool IsHunting(SnakeController snake)

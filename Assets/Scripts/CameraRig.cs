@@ -62,6 +62,12 @@ namespace Snake3D
         [Tooltip("Высота стен арены для камеры")]
         [SerializeField, Min(0f)] private float _wallHeight = 1.1f;
 
+        [Tooltip("Насколько камера может сама подняться над препятствием позади, град")]
+        [SerializeField, Range(0f, 60f)] private float _maxAutoPitch = 40f;
+
+        [Tooltip("Скорость автоподъёма камеры, град/с")]
+        [SerializeField, Min(1f)] private float _autoPitchSpeed = 70f;
+
         [Header("Эффекты")]
         [Tooltip("Частота тряски, Гц")]
         [SerializeField, Min(1f)] private float _shakeFrequency = 25f;
@@ -132,6 +138,7 @@ namespace Snake3D
         private float _zoomDistance;
         private float _coilBlend;
         private float _collisionDistance = float.MaxValue;
+        private float _autoPitch;
 
         private void Awake()
         {
@@ -147,6 +154,7 @@ namespace Snake3D
             _pivot = PivotTarget();
             _pivotVelocity = Vector3.zero;
             _collisionDistance = float.MaxValue;
+            _autoPitch = 0f;
             GetTargetPose(out _smoothPosition, out _smoothRotation);
             _velocity = Vector3.zero;
             _shakeTime = _shakeDuration;
@@ -237,16 +245,37 @@ namespace Snake3D
                 return;
             }
 
-            rotation = Quaternion.Euler(_orbitPitch, _orbitYaw, 0f);
-            Vector3 right = rotation * Vector3.right;
+            Vector3 right = Quaternion.Euler(0f, _orbitYaw, 0f) * Vector3.right;
             Vector3 pivot = _pivot + right * (_coilShoulder * _coilBlend);
             float wanted = _zoomDistance * Mathf.Lerp(1f, _coilZoom, _coilBlend);
+            UpdateAutoPitch(pivot, wanted);
+
+            rotation = Quaternion.Euler(Mathf.Min(_pitchRange.y, _orbitPitch + _autoPitch), _orbitYaw, 0f);
             Vector3 back = rotation * Vector3.back;
 
             // К препятствию камера придвигается сразу, а отходит плавно — без рывков на краю камня.
             float free = FreeDistance(pivot, back, wanted);
             _collisionDistance = free < _collisionDistance ? free : Mathf.MoveTowards(_collisionDistance, free, Time.unscaledDeltaTime * 6f);
             position = pivot + back * Mathf.Min(wanted, _collisionDistance);
+        }
+
+        /// <summary>
+        /// Камни и пни позади змеи не должны прижимать камеру к её затылку: если луч упирается в препятствие,
+        /// ищем наклон круче, при котором камера проходит над ним, и плавно поднимаемся туда.
+        /// </summary>
+        private void UpdateAutoPitch(Vector3 pivot, float wanted)
+        {
+            float target = 0f;
+            float best = FreeDistance(pivot, Quaternion.Euler(_orbitPitch, _orbitYaw, 0f) * Vector3.back, wanted);
+            for (float extra = 10f; best < wanted * 0.8f && extra <= _maxAutoPitch; extra += 10f)
+            {
+                float pitch = Mathf.Min(_pitchRange.y, _orbitPitch + extra);
+                float free = FreeDistance(pivot, Quaternion.Euler(pitch, _orbitYaw, 0f) * Vector3.back, wanted);
+                if (free <= best + 0.2f) continue;
+                best = free;
+                target = extra;
+            }
+            _autoPitch = Mathf.MoveTowards(_autoPitch, target, _autoPitchSpeed * Time.unscaledDeltaTime);
         }
 
         /// <summary>
@@ -268,7 +297,7 @@ namespace Snake3D
                     Vector2Int cell = _grid.WorldToCell(p);
                     hit = _grid.IsInside(cell) && _grid.GetObstacleHeight(cell) + 0.15f > above;
                 }
-                if (hit) return Mathf.Max(_distanceRange.x * 0.4f, t - _collisionMargin);
+                if (hit) return Mathf.Max(_distanceRange.x * 0.6f, t - _collisionMargin);
             }
             return maxDistance;
         }

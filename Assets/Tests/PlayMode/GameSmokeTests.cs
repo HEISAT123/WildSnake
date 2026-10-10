@@ -121,6 +121,10 @@ namespace Snake3D.Tests
             d.y = 0f;
             Assert.Less(d.magnitude, 0.05f, "Без ввода змея должна стоять на месте");
             Assert.IsFalse(snake.IsMoving);
+
+            // Неподвижная змея уходит в засаду.
+            yield return new WaitForSeconds(1.6f);
+            Assert.IsTrue(snake.Ambush.IsLuring, "Змея, стоящая больше трёх секунд, должна затаиться");
         }
 
         [UnityTest]
@@ -137,8 +141,10 @@ namespace Snake3D.Tests
             Assert.Greater((snake.HeadPosition - start).magnitude, 0.5f, "Змея не поползла по намерению");
 
             yield return new WaitForSeconds(0.1f);
+            float stamina = snake.Stamina.Value;
             Assert.IsTrue(snake.TryStrike(snake.Forward), "Бросок не начался");
             Assert.IsTrue(snake.IsStriking);
+            Assert.Less(snake.Stamina.Value, stamina, "Бросок должен тратить выносливость");
             yield return new WaitForSeconds(0.6f);
             Assert.IsFalse(snake.IsStriking, "Бросок не закончился");
         }

@@ -355,6 +355,8 @@ namespace Snake3D
 
             TickHunger(dt);
             if (State != GameState.Playing) return;
+            // Голодная змея медленнее восстанавливает силы.
+            _snake.Stamina.RegenMultiplier = Mathf.Lerp(_config.HungryStaminaRegen, 1f, Mathf.Clamp01(_survival.Satiety01 * 2f));
 
             if (RivalActive)
             {
@@ -416,6 +418,7 @@ namespace Snake3D
         {
             _snake.ExternalSpeedMultiplier = _upgrades.SpeedMultiplier;
             _snake.StrikeDistanceScale = _upgrades.StrikeDistanceMultiplier;
+            _snake.StrikeCostScale = _upgrades.StrikeCostMultiplier;
             _scent.RadiusMultiplier = _upgrades.SmellRadiusMultiplier;
             _scent.CooldownMultiplier = _upgrades.SmellCooldownMultiplier;
             _wildlife.PlayerAwarenessMultiplier = _upgrades.AwarenessMultiplier;
@@ -455,6 +458,7 @@ namespace Snake3D
         {
             if (attacker.IsStriking)
             {
+                attacker.NotifyStrikeHit();
                 attacker.CancelStrike();
                 victim.TakeHit(_config.BodyDamage, DamageSource.Rival, -away);
             }
@@ -557,6 +561,7 @@ namespace Snake3D
 
         private void OnPreyCaught(SnakeController hunter, PreyKind kind, Vector3 position)
         {
+            hunter.NotifyStrikeHit();
             PreyStats prey = _config.GetPrey(kind);
             bool big = kind != PreyKind.Beetle;
 

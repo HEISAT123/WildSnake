@@ -11,6 +11,8 @@ namespace Snake3D
     /// Голова пишет траекторию в кольцевой буфер точек с равным шагом; тело (меш и точки позвоночника
     /// для столкновений) строится по этой траектории. Удары не убивают сразу: змея сообщает об уроне
     /// (событие Hurt), а жива ли она — решает GameManager.
+    /// Выносливость (Stamina) тратят быстрое ползание и бросок; неподвижная змея уходит в засаду (AmbushTracker);
+    /// промах броском на секунду делает змею «открытой» — медленнее и заметнее.
     /// </summary>
     public class SnakeController : MonoBehaviour
     {
@@ -93,6 +95,12 @@ namespace Snake3D
 
         /// <summary>Бросок закончился (долетел или упёрся в препятствие).</summary>
         public event Action StrikeEnded;
+
+        /// <summary>Бросок никого не задел — змея на время «открыта».</summary>
+        public event Action StrikeMissed;
+
+        /// <summary>Хотела броситься, но не хватило выносливости.</summary>
+        public event Action OutOfStamina;
         public event Action Respawned;
 
         public bool IsRunning
@@ -113,6 +121,15 @@ namespace Snake3D
 
         /// <summary>Змея свернулась для броска (замах).</summary>
         public bool IsCoiled => _coiled;
+
+        /// <summary>Выносливость: быстрое ползание, бросок, обвивание.</summary>
+        public Stamina Stamina => _stamina;
+
+        /// <summary>Засада: неподвижная змея сливается с местностью.</summary>
+        public AmbushTracker Ambush => _ambush;
+
+        /// <summary>После промаха змея на секунду медленнее и заметнее.</summary>
+        public bool IsExposed => _exposedTimer > 0f;
 
         /// <summary>Сила замаха 0..1 (растёт, пока змея свёрнута).</summary>
         public float Coil01 => _coiled ? Mathf.Clamp01(_coilTime / _config.CoilChargeTime) : 0f;
@@ -159,6 +176,9 @@ namespace Snake3D
         /// <summary>Множитель дальности броска от улучшений.</summary>
         public float StrikeDistanceScale { get; set; } = 1f;
 
+        /// <summary>Множитель цены броска в выносливости от улучшений.</summary>
+        public float StrikeCostScale { get; set; } = 1f;
+
         /// <summary>Автопилот: змея игрока управляется ИИ (живой фон главного меню).</summary>
         public bool AutoPilot { get; set; }
 
@@ -202,6 +222,10 @@ namespace Snake3D
         private float _verticalSpeed;
         private bool _grounded;
 
+        private readonly Stamina _stamina = new Stamina();
+        private readonly AmbushTracker _ambush = new AmbushTracker();
+        private float _exposedTimer;
+        private bool _strikeHit;
         private float _strikeTimer;
         private float _strikeSpeed;
         private float _strikeCooldownTimer;
@@ -224,6 +248,13 @@ namespace Snake3D
             int pathCapacity = Mathf.CeilToInt((_config.MaxLength + 2f) / _pathSampleDistance) + 8;
             _path = new Vector3[pathCapacity];
             _spine = new Vector3[Mathf.CeilToInt(_config.MaxLength / _spineSpacing) + 2];
+
+            _stamina.RegenPerSecond = _config.StaminaRegen;
+            _stamina.RegenDelay = _config.StaminaRegenDelay;
+            _ambush.Delay = _config.AmbushDelay;
+            _ambush.Ramp = _config.AmbushRamp;
+            _ambush.OpenAwareness = _config.AmbushAwareness;
+            _ambush.CoverAwareness = _config.AmbushCoverAwareness;
         }
 
         /// <summary>Поставить змейку в точку с заданным курсом (град, 0 — вдоль +Z).</summary>
@@ -253,6 +284,10 @@ namespace Snake3D
             _coiled = false;
             _coilTime = 0f;
             _coilBlend = 0f;
+            _exposedTimer = 0f;
+            _strikeHit = false;
+            _stamina.Reset(_config.MaxStamina);
+            _ambush.Break();
             IsAlive = true;
             IsRunning = false;
 
@@ -308,6 +343,12 @@ namespace Snake3D
             if (Time.frameCount - _runStartFrame < 2) return false;
 
             float charge = Coil01;
+            if (!_stamina.TrySpend(_config.StrikeStaminaCost(charge) * StrikeCostScale))
+            {
+                OutOfStamina?.Invoke();
+                return false;
+            }
+
             float limit = _coiled ? _config.CoilAimLimit : _config.BiteAimLimit;
             float baseYaw = _coiled ? _coilBaseYaw : _yaw;
             aim.y = 0f;
@@ -322,9 +363,18 @@ namespace Snake3D
             _strikeSpeed = _config.StrikeSpeed(charge) * StrikeDistanceScale;
             _strikeTimer = _config.StrikeDuration;
             _strikeCooldownTimer = _config.StrikeCooldown;
+            _strikeHit = false;
+            _exposedTimer = 0f;
+            _ambush.Break();
             _squashTimer = 0f;
             StrikeStarted?.Invoke(charge);
             return true;
+        }
+
+        /// <summary>Бросок кого-то задел (поймала добычу, укусила соперницу) — промаха не будет.</summary>
+        public void NotifyStrikeHit()
+        {
+            if (IsStriking) _strikeHit = true;
         }
 
         public void RequestJump()
@@ -353,6 +403,7 @@ namespace Snake3D
         {
             if (!IsAlive || _invulnerableTimer > 0f) return false;
             _invulnerableTimer = _invulnerabilityTime;
+            _ambush.Break();
             PushAway(awayDirection, 0.35f * _cellSize);
             CancelStrike();
             _squashTimer = 0f;
@@ -373,8 +424,18 @@ namespace Snake3D
         public void CancelStrike()
         {
             if (_strikeTimer <= 0f) return;
-            _strikeTimer = 0f;
+            EndStrike();
             _speed = Mathf.Min(_speed, _config.WalkSpeed * 0.5f);
+        }
+
+        private void EndStrike()
+        {
+            _strikeTimer = 0f;
+            if (!_strikeHit)
+            {
+                _exposedTimer = _config.MissExposure;
+                StrikeMissed?.Invoke();
+            }
             StrikeEnded?.Invoke();
         }
 
@@ -468,6 +529,7 @@ namespace Snake3D
 
             if (_strikeCooldownTimer > 0f) _strikeCooldownTimer -= dt;
             if (_invulnerableTimer > 0f) _invulnerableTimer -= dt;
+            if (_exposedTimer > 0f) _exposedTimer -= dt;
             UpdateJump(dt);
 
             float previousYaw = _yaw;
@@ -475,6 +537,7 @@ namespace Snake3D
             else if (_coiled) UpdateCoil(dt);
             else UpdateCrawl(dt);
             _turn01 = Mathf.Clamp(Mathf.DeltaAngle(previousYaw, _yaw) / (dt * _config.TurnRate), -1f, 1f);
+            UpdateStaminaAndAmbush(dt);
             _coilBlend = Mathf.MoveTowards(_coilBlend, _coiled ? 1f : 0f, dt * 5f);
 
             float step = _speed * _cellSize * dt;
@@ -522,7 +585,8 @@ namespace Snake3D
                 float turnRate = _config.TurnRate * Mathf.Clamp01(0.2f + _speed / (walk * 0.6f));
                 _yaw = Mathf.MoveTowardsAngle(_yaw, desiredYaw, turnRate * dt);
 
-                target = _config.PaceSpeed(_pace) * _moveAmount * _speedScale * ExternalSpeedMultiplier;
+                target = _config.PaceSpeed(EffectivePace) * _moveAmount * _speedScale * ExternalSpeedMultiplier;
+                if (IsExposed) target *= _config.MissSlowdown;
                 // Крутой разворот — сбавляем ход, иначе дуга вышла бы слишком широкой.
                 float turnAbs = Mathf.Abs(delta);
                 if (turnAbs > 90f) target *= Mathf.Lerp(1f, 0.55f, Mathf.InverseLerp(90f, 170f, turnAbs));
@@ -530,6 +594,19 @@ namespace Snake3D
 
             float rate = target > _speed ? _config.Acceleration : _config.Deceleration;
             _speed = Mathf.MoveTowards(_speed, target, rate * dt);
+        }
+
+        /// <summary>Выдохшаяся змея быстро ползти не может — переходит на шаг.</summary>
+        private SnakePace EffectivePace => _pace == SnakePace.Sprint && _stamina.IsExhausted ? SnakePace.Walk : _pace;
+
+        /// <summary>Быстрое ползание тратит выносливость, покой её возвращает; неподвижность на земле — засада.</summary>
+        private void UpdateStaminaAndAmbush(float dt)
+        {
+            bool sprinting = !IsStriking && EffectivePace == SnakePace.Sprint && _moveAmount > 0.1f
+                             && _speed > _config.WalkSpeed * 0.9f;
+            if (sprinting) _stamina.Drain(_config.SprintStaminaDrain * dt);
+            _stamina.Tick(dt, !IsMoving);
+            _ambush.Tick(dt, !IsMoving && _grounded && !IsStriking);
         }
 
         /// <summary>Замах: змея быстро гасит ход, приподнимает голову и поворачивает её к прицелу в пределах угла.</summary>
@@ -548,10 +625,9 @@ namespace Snake3D
             _speed = _strikeSpeed;
             _strikeTimer -= dt;
             if (_strikeTimer > 0f) return;
-            _strikeTimer = 0f;
             // После броска змея не стоит как вкопанная, а дотягивается по инерции.
             _speed = _config.WalkSpeed * 0.5f;
-            StrikeEnded?.Invoke();
+            EndStrike();
         }
 
         private void UpdateJump(float dt)
@@ -563,6 +639,7 @@ namespace Snake3D
             {
                 _verticalSpeed = Mathf.Sqrt(2f * _config.Gravity * _config.JumpHeight) * _cellSize;
                 _grounded = false;
+                _ambush.Break();
                 Jumped?.Invoke();
             }
 

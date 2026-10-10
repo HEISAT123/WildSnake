@@ -312,7 +312,9 @@ namespace Snake3D
 
         private void UpdateAbilities()
         {
-            _dashFill.fillAmount = _snake.StrikeReady01;
+            Stamina stamina = _snake.Stamina;
+            _dashFill.fillAmount = stamina.Value01;
+            _dashFill.color = stamina.IsExhausted ? _emberColor : _venomColor;
             _smellFill.fillAmount = _scent.Charge01;
             bool hidden = _snake.IsHidden;
             if (_hiddenBadge.activeSelf != hidden) _hiddenBadge.SetActive(hidden);

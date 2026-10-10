@@ -56,6 +56,53 @@ namespace Snake3D
         [Tooltip("Насколько быстрый укус может отклониться от курса к прицелу, град")]
         [SerializeField, Range(0f, 90f)] private float _biteAimLimit = 50f;
 
+        [Header("Выносливость")]
+        [Tooltip("Запас выносливости")]
+        [SerializeField, Min(1f)] private float _maxStamina = 100f;
+
+        [Tooltip("Восстановление выносливости в секунду")]
+        [SerializeField, Min(0f)] private float _staminaRegen = 18f;
+
+        [Tooltip("Пауза после траты, прежде чем выносливость начнёт восстанавливаться, сек")]
+        [SerializeField, Min(0f)] private float _staminaRegenDelay = 0.6f;
+
+        [Tooltip("Расход выносливости на быстрое ползание в секунду")]
+        [SerializeField, Min(0f)] private float _sprintStaminaDrain = 16f;
+
+        [Tooltip("Цена быстрого укуса в выносливости")]
+        [SerializeField, Min(0f)] private float _strikeStaminaCost = 14f;
+
+        [Tooltip("Цена броска после полного замаха в выносливости")]
+        [SerializeField, Min(0f)] private float _chargedStrikeStaminaCost = 34f;
+
+        [Tooltip("Восстановление выносливости у голодной змеи (доля от обычного при пустой сытости)")]
+        [SerializeField, Range(0f, 1f)] private float _hungryStaminaRegen = 0.4f;
+
+        [Header("Засада и промах")]
+        [Tooltip("Сколько секунд нужно не двигаться, чтобы змея начала сливаться с местностью")]
+        [SerializeField, Min(0f)] private float _ambushDelay = 2f;
+
+        [Tooltip("За сколько секунд маскировка становится полной")]
+        [SerializeField, Min(0f)] private float _ambushRamp = 1f;
+
+        [Tooltip("Множитель заметности затаившейся змеи на открытом месте")]
+        [SerializeField, Range(0.05f, 1f)] private float _ambushAwareness = 0.35f;
+
+        [Tooltip("Множитель заметности затаившейся змеи в траве")]
+        [SerializeField, Range(0.05f, 1f)] private float _ambushCoverAwareness = 0.2f;
+
+        [Tooltip("Радиус, с которого затаившаяся змея подманивает добычу кончиком хвоста, клеток")]
+        [SerializeField, Min(0f)] private float _lureRadius = 8f;
+
+        [Tooltip("Сколько секунд змея «открыта» после промаха броском")]
+        [SerializeField, Min(0f)] private float _missExposure = 1f;
+
+        [Tooltip("Скорость «открытой» змеи после промаха (множитель)")]
+        [SerializeField, Range(0.1f, 1f)] private float _missSlowdown = 0.55f;
+
+        [Tooltip("Насколько заметнее «открытая» змея после промаха (множитель радиуса)")]
+        [SerializeField, Min(1f)] private float _missAwareness = 1.6f;
+
         [Header("Змейка: длина")]
         [Tooltip("Начальная (и минимальная) длина тела, клеток")]
         [SerializeField, Min(1f)] private float _startLength = 3f;
@@ -194,6 +241,26 @@ namespace Snake3D
         public float CoilChargeTime => _coilChargeTime;
         public float CoilAimLimit => _coilAimLimit;
         public float BiteAimLimit => _biteAimLimit;
+        public float MaxStamina => _maxStamina;
+        public float StaminaRegen => _staminaRegen;
+        public float StaminaRegenDelay => _staminaRegenDelay;
+        public float SprintStaminaDrain => _sprintStaminaDrain;
+        public float HungryStaminaRegen => _hungryStaminaRegen;
+        public float AmbushDelay => _ambushDelay;
+        public float AmbushRamp => _ambushRamp;
+        public float AmbushAwareness => _ambushAwareness;
+        public float AmbushCoverAwareness => _ambushCoverAwareness;
+        public float LureRadius => _lureRadius;
+        public float MissExposure => _missExposure;
+        public float MissSlowdown => _missSlowdown;
+        public float MissAwareness => _missAwareness;
+
+        /// <summary>Цена броска в выносливости: чем сильнее замах, тем дороже.</summary>
+        public float StrikeStaminaCost(float charge01)
+        {
+            return Mathf.Lerp(_strikeStaminaCost, _chargedStrikeStaminaCost, Mathf.Clamp01(charge01));
+        }
+
         public float StartLength => _startLength;
         public float MaxLength => _maxLength;
 

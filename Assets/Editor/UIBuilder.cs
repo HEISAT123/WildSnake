@@ -615,7 +615,7 @@ internal static class UIBuilder
         Anchor(p.ThreatHint.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -58f), new Vector2(1000f, 30f));
 
         // Бросок и нюх — слева снизу: подпись, клавиша и полоса готовности.
-        p.DashFill = Ability(hud, "Dash", "БРОСОК", "ЛКМ", 44f);
+        p.DashFill = Ability(hud, "Dash", "СИЛЫ", "SHIFT", 44f);
         p.SmellFill = Ability(hud, "Smell", "НЮХ", "E", 324f);
 
         // Метка укрытия — лаймовая плашка над способностями.
