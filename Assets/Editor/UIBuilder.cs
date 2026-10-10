@@ -427,6 +427,14 @@ internal static class UIBuilder
         Anchor(rt, new Vector2(0f, 1f), new Vector2(1f, 0.5f), new Vector2(right, y), new Vector2(320f, 24f));
         var slider = rt.gameObject.AddComponent<Slider>();
 
+        // Невидимая область нажатия на всю дорожку с запасом по высоте: клик в любом месте сразу ставит значение,
+        // тащить квадратную ручку не обязательно (нажатие «всплывает» к Slider).
+        RectTransform hitArea = Rect("HitArea", rt);
+        Stretch(hitArea);
+        hitArea.offsetMin = new Vector2(-10f, -12f);
+        hitArea.offsetMax = new Vector2(10f, 12f);
+        Img(hitArea, new Color(0f, 0f, 0f, 0f), null).raycastTarget = true;
+
         RectTransform track = Rect("Background", rt);
         track.anchorMin = new Vector2(0f, 0.5f);
         track.anchorMax = new Vector2(1f, 0.5f);
