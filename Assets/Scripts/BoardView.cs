@@ -6,7 +6,8 @@ namespace Snake3D
     /// <summary>
     /// Визуал поля: пол одним объектом, стены по периметру и «дикие» препятствия из раскладки GridManager:
     /// низкие стенки — поваленные брёвна, колонны — сломанные пни и стоячие камни, блоки — валуны;
-    /// плюс заросли высокой травы, пруд, плоские солнечные камни и норы.
+    /// в рощах колонны — деревья с кронами и лесная подстилка; плюс заросли высокой травы, пруд, плоские солнечные камни,
+    /// норы и гнездо (кладка — главная цель; яйца и маяк над гнездом включает GameManager).
     /// Строится один раз (в редакторе SnakeSceneBuilder'ом или в Start, если раскладку поменяли в инспекторе).
     /// </summary>
     public class BoardView : MonoBehaviour
@@ -55,6 +56,32 @@ namespace Snake3D
         [Tooltip("Тёмный вход в нору")]
         [SerializeField] private Material _holeMaterial;
 
+        [Header("Роща")]
+        [Tooltip("Листва лиственных деревьев")]
+        [SerializeField] private Material _leavesMaterial;
+
+        [Tooltip("Хвоя")]
+        [SerializeField] private Material _pineMaterial;
+
+        [Tooltip("Лесная подстилка (полупрозрачная россыпь листьев)")]
+        [SerializeField] private Material _litterMaterial;
+
+        [Tooltip("Меш кроны лиственного дерева")]
+        [SerializeField] private Mesh _crownMesh;
+
+        [Tooltip("Меш яруса ели")]
+        [SerializeField] private Mesh _pineMesh;
+
+        [Tooltip("Слой крон (камера карты их не рисует, иначе они закрыли бы метки)")]
+        [SerializeField] private int _canopyLayer;
+
+        [Header("Гнездо")]
+        [Tooltip("Яйца в гнезде")]
+        [SerializeField] private Material _eggMaterial;
+
+        [Tooltip("Светящийся столб над гнездом")]
+        [SerializeField] private Material _beaconMaterial;
+
         [Header("Меши")]
         [Tooltip("Меш валуна")]
         [SerializeField] private Mesh _rockMesh;
@@ -90,6 +117,20 @@ namespace Snake3D
         [SerializeField, HideInInspector] private int _builtLayoutVersion;
         [SerializeField, HideInInspector] private bool _isBuilt;
         [SerializeField, HideInInspector] private Renderer _floorRenderer;
+        [SerializeField, HideInInspector] private Renderer[] _crowns = new Renderer[0];
+        [SerializeField, HideInInspector] private GameObject _nestEggs;
+        [SerializeField, HideInInspector] private GameObject _nestBeacon;
+
+        /// <summary>Кроны деревьев рощ — их прячет CanopyFader, когда они заслоняют змею.</summary>
+        public Renderer[] Crowns => _crowns;
+
+        /// <summary>Яйца в гнезде (скрыты, пока змея их не отложит).</summary>
+        public GameObject NestEggs => _nestEggs;
+
+        /// <summary>Светящийся столб над гнездом (виден, когда змея готова к кладке).</summary>
+        public GameObject NestBeacon => _nestBeacon;
+
+        private readonly System.Collections.Generic.List<Renderer> _crownList = new System.Collections.Generic.List<Renderer>();
 
         private static readonly int MainTexStId = Shader.PropertyToID("_MainTex_ST");
         private static readonly int BaseMapStId = Shader.PropertyToID("_BaseMap_ST");
@@ -111,9 +152,13 @@ namespace Snake3D
                 DestroySafe(transform.GetChild(i).gameObject);
 
             float cs = _grid.CellSize;
+            _crownList.Clear();
             BuildFloor(cs);
             BuildWalls(cs);
             BuildObstacles(cs);
+            _crowns = _crownList.ToArray();
+            BuildForestFloor(cs);
+            BuildNest(cs);
             BuildPond(cs);
             BuildSunStones(cs);
             BuildBurrows(cs);
@@ -187,7 +232,8 @@ namespace Snake3D
                     switch (type)
                     {
                         case ObstacleType.Pillar:
-                            if (Hash(x, y) < 0.55f) BuildStump(cell, cs);
+                            if (_grid.IsForest(cell) && _crownMesh != null) BuildTree(cell, cs);
+                            else if (Hash(x, y) < 0.55f) BuildStump(cell, cs);
                             else BuildStandingStone(cell, cs);
                             break;
                         case ObstacleType.Block:
@@ -227,6 +273,141 @@ namespace Snake3D
                     new Vector3(d * 0.32f, 0.22f * cs, d * 0.6f), _barkMaterial);
                 root.transform.rotation = around * Quaternion.Euler(18f, 0f, 0f);
             }
+        }
+
+        /// <summary>
+        /// Дерево рощи: лиственное (ствол и три кома листвы) или ель (ствол и три яруса). Кроны высоко,
+        /// чтобы камера чаще шла под ними; заслоняющие змею кроны делает прозрачными CanopyFader.
+        /// </summary>
+        private void BuildTree(Vector2Int cell, float cs)
+        {
+            Vector3 basePos = _grid.CellToWorld(cell);
+            float s = 0.85f + 0.45f * Hash(cell.y, cell.x);
+            float yaw = Hash(cell.x, cell.y) * 360f;
+            Quaternion turn = Quaternion.Euler(0f, yaw, 0f);
+            float d = _grid.GetObstacleHalfSize(cell) * 2f * 1.05f;
+            bool pine = Hash(cell.x + 7, cell.y + 3) < 0.4f && _pineMesh != null;
+
+            float trunk = (pine ? 3.2f : 3.6f) * cs * s;
+            CreateShape(PrimitiveType.Cylinder, "Trunk", basePos + Vector3.up * (trunk * 0.5f), new Vector3(d, trunk * 0.5f, d), _barkMaterial);
+            for (int i = 0; i < 4; i++)
+            {
+                Quaternion around = turn * Quaternion.Euler(0f, i * 90f + 20f * Hash(cell.x + i, cell.y), 0f);
+                Renderer root = CreateShape(PrimitiveType.Sphere, "Root", basePos + around * new Vector3(0f, 0.05f * cs, d * 0.5f),
+                    new Vector3(d * 0.3f, 0.2f * cs, d * 0.55f), _barkMaterial);
+                root.transform.rotation = around * Quaternion.Euler(18f, 0f, 0f);
+            }
+
+            if (pine)
+            {
+                float[] heights = { 3f, 4f, 4.9f };
+                float[] widths = { 3.2f, 2.5f, 1.7f };
+                float[] tall = { 2.4f, 2.2f, 2f };
+                for (int t = 0; t < 3; t++)
+                    AddCrown(CreateMesh("PineTier", _pineMesh, _pineMaterial, basePos + Vector3.up * (heights[t] * cs * s),
+                        new Vector3(widths[t], tall[t], widths[t]) * (cs * s), yaw + t * 25f));
+                return;
+            }
+
+            Vector3[] offsets = { new Vector3(0f, 4.3f, 0f), new Vector3(0.8f, 4.9f, 0.4f), new Vector3(-0.7f, 4.7f, -0.5f) };
+            Vector3[] sizes = { new Vector3(3.6f, 2.7f, 3.6f), new Vector3(2.5f, 2f, 2.5f), new Vector3(2.3f, 1.9f, 2.3f) };
+            for (int t = 0; t < 3; t++)
+                AddCrown(CreateMesh("Crown", _crownMesh, _leavesMaterial, basePos + turn * (offsets[t] * (cs * s)), sizes[t] * (cs * s), yaw + t * 60f));
+        }
+
+        private void AddCrown(Renderer crown)
+        {
+            if (_canopyLayer > 0) crown.gameObject.layer = _canopyLayer;
+            _crownList.Add(crown);
+        }
+
+        /// <summary>Лесная подстилка: пятна опавших листьев на клетках рощ, одним мешем.</summary>
+        private void BuildForestFloor(float cs)
+        {
+            if (_litterMaterial == null) return;
+            var quads = new System.Collections.Generic.List<CombineInstance>();
+            GameObject temp = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            Mesh quad = temp.GetComponent<MeshFilter>().sharedMesh;
+            DestroySafe(temp);
+            Vector3 origin = transform.position;
+            for (int y = 0; y < _grid.Height; y++)
+            {
+                for (int x = 0; x < _grid.Width; x++)
+                {
+                    var cell = new Vector2Int(x, y);
+                    if (!_grid.IsForest(cell) || _grid.IsWater(cell) || Hash(x * 3, y * 5) > 0.8f) continue;
+                    Vector3 c = _grid.CellToWorld(cell) - origin + new Vector3(0f, 0.012f + Hash(x, y) * 0.004f, 0f);
+                    float size = (1.7f + 0.6f * Hash(y, x)) * cs;
+                    Quaternion rot = Quaternion.Euler(90f, Hash(x + 11, y) * 360f, 0f);
+                    quads.Add(new CombineInstance { mesh = quad, transform = Matrix4x4.TRS(c, rot, new Vector3(size, size, 1f)) });
+                }
+            }
+            if (quads.Count == 0) return;
+            var mesh = new Mesh { name = "ForestFloor" };
+            if (quads.Count * 4 > 65000) mesh.indexFormat = IndexFormat.UInt32;
+            mesh.CombineMeshes(quads.ToArray(), true, true);
+            mesh.RecalculateBounds();
+            var go = new GameObject("ForestFloor");
+            go.transform.SetParent(transform, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = _litterMaterial;
+            r.shadowCastingMode = ShadowCastingMode.Off;
+        }
+
+        /// <summary>Гнездо: кольцо веток вокруг ямки с листьями; яйца и маяк созданы скрытыми.</summary>
+        private void BuildNest(float cs)
+        {
+            _nestEggs = null;
+            _nestBeacon = null;
+            if (!_grid.HasNest || _barkMaterial == null) return;
+            Vector3 pos = _grid.NestPosition;
+            var root = new GameObject("Nest");
+            root.transform.SetParent(transform, false);
+            root.transform.position = pos;
+
+            if (_dirtMaterial != null)
+                Parent(CreateShape(PrimitiveType.Sphere, "NestBowl", pos + Vector3.down * (0.02f * cs), new Vector3(1.5f * cs, 0.16f * cs, 1.5f * cs), _dirtMaterial), root);
+            for (int i = 0; i < 16; i++)
+            {
+                float a = i * Mathf.PI * 2f / 16f;
+                var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                Renderer twig = CreateShape(PrimitiveType.Cylinder, "Twig", pos + dir * (0.68f * cs) + Vector3.up * (0.1f * cs),
+                    new Vector3(0.07f * cs, 0.42f * cs, 0.07f * cs), _barkMaterial);
+                twig.transform.rotation = Quaternion.LookRotation(dir) * Quaternion.Euler(90f, 0f, 70f + 30f * Hash(i, 3));
+                Parent(twig, root);
+            }
+
+            if (_eggMaterial != null)
+            {
+                _nestEggs = new GameObject("NestEggs");
+                _nestEggs.transform.SetParent(root.transform, false);
+                _nestEggs.transform.position = pos;
+                for (int i = 0; i < 5; i++)
+                {
+                    float a = i * 1.3f;
+                    Vector3 p = pos + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * (0.22f * cs) + Vector3.up * (0.12f * cs);
+                    Renderer egg = CreateShape(PrimitiveType.Sphere, "Egg", p, new Vector3(0.22f, 0.3f, 0.22f) * cs, _eggMaterial);
+                    egg.transform.rotation = Quaternion.Euler(70f, a * Mathf.Rad2Deg, 0f);
+                    egg.transform.SetParent(_nestEggs.transform, true);
+                }
+                _nestEggs.SetActive(false);
+            }
+
+            if (_beaconMaterial != null)
+            {
+                Renderer beacon = CreateShape(PrimitiveType.Cylinder, "NestBeacon", pos + Vector3.up * (5f * cs), new Vector3(0.9f * cs, 5f * cs, 0.9f * cs), _beaconMaterial);
+                beacon.shadowCastingMode = ShadowCastingMode.Off;
+                beacon.receiveShadows = false;
+                Parent(beacon, root);
+                _nestBeacon = beacon.gameObject;
+                _nestBeacon.SetActive(false);
+            }
+        }
+
+        private static void Parent(Renderer r, GameObject root)
+        {
+            r.transform.SetParent(root.transform, true);
         }
 
         /// <summary>Стоячий камень — вытянутый вверх валун.</summary>

@@ -20,5 +20,8 @@ namespace Snake3D
 
         public float Length;
         public DamageSource Cause;
+
+        /// <summary>Жизнь закончилась победой: яйца отложены, род продолжен.</summary>
+        public bool Won;
     }
 }

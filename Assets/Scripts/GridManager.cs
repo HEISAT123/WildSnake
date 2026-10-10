@@ -3,18 +3,19 @@ using UnityEngine;
 namespace Snake3D
 {
     /// <summary>
-    /// Логика поля: размеры, препятствия, заросли высокой травы (укрытия), пруд, солнечные камни, норы,
-    /// границы арены, клетки для появления добычи и перевод клетка &lt;-&gt; мир. Раскладка детерминирована сидом.
+    /// Логика поля: размеры, препятствия, рощи (деревья с кронами — тень и укрытие от орла), заросли высокой
+    /// травы (укрытия), пруд, солнечные камни, норы, гнездо (главная цель), границы арены, клетки для появления
+    /// добычи и перевод клетка &lt;-&gt; мир. Раскладка детерминирована сидом.
     /// Визуал поля строит BoardView.
     /// </summary>
     public class GridManager : MonoBehaviour
     {
         [Header("Размер поля")]
         [Tooltip("Количество клеток по оси X")]
-        [SerializeField, Min(10)] private int _width = 44;
+        [SerializeField, Min(10)] private int _width = 72;
 
         [Tooltip("Количество клеток по оси Z")]
-        [SerializeField, Min(10)] private int _height = 44;
+        [SerializeField, Min(10)] private int _height = 72;
 
         [Tooltip("Размер одной клетки в мировых единицах")]
         [SerializeField, Min(0.1f)] private float _cellSize = 1f;
@@ -24,13 +25,13 @@ namespace Snake3D
         [SerializeField] private int _obstacleSeed = 2024;
 
         [Tooltip("Количество низких стенок (их можно перепрыгнуть)")]
-        [SerializeField, Min(0)] private int _lowWallCount = 18;
+        [SerializeField, Min(0)] private int _lowWallCount = 44;
 
-        [Tooltip("Количество колонн")]
-        [SerializeField, Min(0)] private int _pillarCount = 18;
+        [Tooltip("Количество одиночных пней и стоячих камней вне рощ")]
+        [SerializeField, Min(0)] private int _pillarCount = 30;
 
         [Tooltip("Количество больших блоков 2x2")]
-        [SerializeField, Min(0)] private int _blockCount = 9;
+        [SerializeField, Min(0)] private int _blockCount = 20;
 
         [Tooltip("Высота низкой стенки, клеток. Должна быть меньше высоты прыжка змейки")]
         [SerializeField, Min(0.1f)] private float _lowWallHeight = 0.45f;
@@ -46,25 +47,38 @@ namespace Snake3D
 
         [Header("Высокая трава")]
         [Tooltip("Количество зарослей высокой травы (укрытий)")]
-        [SerializeField, Min(0)] private int _coverPatchCount = 16;
+        [SerializeField, Min(0)] private int _coverPatchCount = 38;
 
         [Tooltip("Средний радиус зарослей, клеток")]
         [SerializeField, Min(0.5f)] private float _coverPatchRadius = 2.6f;
 
+        [Header("Рощи")]
+        [Tooltip("Сколько рощ на поле")]
+        [SerializeField, Range(0, 6)] private int _groveCount = 4;
+
+        [Tooltip("Средний радиус рощи, клеток")]
+        [SerializeField, Min(2f)] private float _groveRadius = 10f;
+
+        [Tooltip("Доля клеток рощи, на которых растёт дерево")]
+        [SerializeField, Range(0f, 0.5f)] private float _treeDensity = 0.19f;
+
+        [Tooltip("Насколько далеко от ствола тянется крона (тень, укрытие от орла), клеток")]
+        [SerializeField, Min(0)] private int _canopyRadius = 2;
+
         [Header("Пруд")]
         [Tooltip("Средний радиус пруда, клеток (0 — без пруда)")]
-        [SerializeField, Min(0f)] private float _pondRadius = 3.2f;
+        [SerializeField, Min(0f)] private float _pondRadius = 4.4f;
 
         [Header("Солнечные камни")]
         [Tooltip("Сколько плоских камней, на которых змея греется")]
-        [SerializeField, Min(0)] private int _sunStoneCount = 5;
+        [SerializeField, Min(0)] private int _sunStoneCount = 10;
 
         [Header("Норы")]
         [Tooltip("Сколько нор на поле")]
-        [SerializeField, Range(0, 6)] private int _burrowCount = 3;
+        [SerializeField, Range(0, 6)] private int _burrowCount = 5;
 
         [Tooltip("Минимальное расстояние между норами, клеток")]
-        [SerializeField, Min(2f)] private float _burrowSpacing = 12f;
+        [SerializeField, Min(2f)] private float _burrowSpacing = 16f;
 
         [Header("Предметы")]
         [Tooltip("Минимальный отступ еды и бонусов от границы арены, клеток (чтобы не появлялись в углах)")]
@@ -80,6 +94,10 @@ namespace Snake3D
         private bool[] _water;
         private bool[] _sunStone;
         private bool[] _burrowCell;
+        private bool[] _forest;
+        private bool[] _canopy;
+        private Vector2Int _nest;
+        private bool _hasNest;
         private readonly Vector2Int[] _burrows = new Vector2Int[MAX_BURROWS];
         private readonly Vector2Int[] _sunStones = new Vector2Int[16];
         private int _placedBurrows;
@@ -125,6 +143,10 @@ namespace Snake3D
                     h = h * 31 + _sunStoneCount;
                     h = h * 31 + _burrowCount;
                     h = h * 31 + _burrowSpacing.GetHashCode();
+                    h = h * 31 + _groveCount;
+                    h = h * 31 + _groveRadius.GetHashCode();
+                    h = h * 31 + _treeDensity.GetHashCode();
+                    h = h * 31 + _canopyRadius;
                     return h;
                 }
             }
@@ -146,6 +168,8 @@ namespace Snake3D
             _water = new bool[n];
             _sunStone = new bool[n];
             _burrowCell = new bool[n];
+            _forest = new bool[n];
+            _canopy = new bool[n];
 
             // System.Random, а не UnityEngine.Random: свой генератор с сидом не сбивает глобальный.
             // Пруд — первым, чтобы препятствия обходили воду.
@@ -154,9 +178,11 @@ namespace Snake3D
             PlaceObstacles(rng, ObstacleType.Block, _blockCount);
             PlaceObstacles(rng, ObstacleType.Pillar, _pillarCount);
             PlaceObstacles(rng, ObstacleType.LowWall, _lowWallCount);
+            PlaceGroves(new System.Random(_obstacleSeed * 23 + 11));
             var features = new System.Random(_obstacleSeed * 17 + 3);
             PlaceBurrows(features);
             PlaceSunStones(features);
+            PlaceNest(features);
             // Траву раскладываем отдельным генератором: изменение зарослей не сдвигает препятствия.
             PlaceCover(new System.Random(_obstacleSeed * 7 + 13));
 
@@ -219,6 +245,31 @@ namespace Snake3D
         {
             return IsSunStone(WorldToCell(world));
         }
+
+        /// <summary>Клетка рощи (деревья ставятся здесь; BoardView рисует на ней лесную подстилку).</summary>
+        public bool IsForest(Vector2Int cell)
+        {
+            return IsInside(cell) && _forest[ToIndex(cell)];
+        }
+
+        /// <summary>Под кронами: тень (прохладнее) и укрытие от орла.</summary>
+        public bool IsCanopy(Vector2Int cell)
+        {
+            return IsInside(cell) && _canopy[ToIndex(cell)];
+        }
+
+        public bool IsCanopyAt(Vector3 world)
+        {
+            return IsCanopy(WorldToCell(world));
+        }
+
+        /// <summary>Есть ли на поле гнездо (место для кладки — главная цель).</summary>
+        public bool HasNest => _hasNest;
+
+        public Vector2Int NestCell => _nest;
+
+        /// <summary>Центр гнезда в мире.</summary>
+        public Vector3 NestPosition => CellToWorld(_nest);
 
         public bool IsBurrowCell(Vector2Int cell)
         {
@@ -385,6 +436,7 @@ namespace Snake3D
         private bool IsSpawnable(int index)
         {
             if (_occupied[index] || _nearObstacle[index] || _water[index] || _burrowCell[index]) return false;
+            if (_hasNest && index == _nest.y * _width + _nest.x) return false;
             return IsCellInArena(new Vector2Int(index % _width, index / _width), _itemBorderMargin);
         }
 
@@ -422,6 +474,89 @@ namespace Snake3D
                     float edge = PondEdge(Mathf.Atan2(dy, dx));
                     if (dx * dx + dy * dy <= edge * edge) _water[y * _width + x] = true;
                 }
+            }
+        }
+
+        /// <summary>
+        /// Рощи: несколько «клякс» подальше от старта. Внутри — деревья (препятствие-колонна) с зазором в клетку,
+        /// а вокруг каждого ствола — крона: тень и укрытие от орла.
+        /// </summary>
+        private void PlaceGroves(System.Random rng)
+        {
+            float cx = (_width - 1) * 0.5f;
+            float cy = (_height - 1) * 0.5f;
+            float clear = _startClearRadius + _groveRadius * 0.6f;
+            for (int g = 0; g < _groveCount; g++)
+            {
+                float px = 0f, py = 0f;
+                for (int attempt = 0; attempt < 40; attempt++)
+                {
+                    px = 4f + (float)rng.NextDouble() * (_width - 9f);
+                    py = 4f + (float)rng.NextDouble() * (_height - 9f);
+                    float dx = px - cx, dy = py - cy;
+                    if (dx * dx + dy * dy >= clear * clear) break;
+                }
+                float radius = _groveRadius * (0.8f + (float)rng.NextDouble() * 0.4f);
+                float phase = (float)rng.NextDouble() * 6.283f;
+                int r = Mathf.CeilToInt(radius * 1.35f);
+                for (int y = Mathf.FloorToInt(py) - r; y <= Mathf.CeilToInt(py) + r; y++)
+                {
+                    for (int x = Mathf.FloorToInt(px) - r; x <= Mathf.CeilToInt(px) + r; x++)
+                    {
+                        if (x < 2 || y < 2 || x >= _width - 2 || y >= _height - 2) continue;
+                        int i = y * _width + x;
+                        if (_water[i]) continue;
+                        float dx = x - px, dy = y - py;
+                        float edge = radius * (1f + 0.25f * Mathf.Sin(Mathf.Atan2(dy, dx) * 3f + phase));
+                        if (dx * dx + dy * dy <= edge * edge) _forest[i] = true;
+                    }
+                }
+            }
+
+            // Деревья: случайные клетки рощи с зазором от других препятствий.
+            for (int y = 2; y < _height - 2; y++)
+            {
+                for (int x = 2; x < _width - 2; x++)
+                {
+                    int i = y * _width + x;
+                    if (!_forest[i] || _obstacles[i] != ObstacleType.None) continue;
+                    if (rng.NextDouble() > _treeDensity) continue;
+                    if (!CanPlace(x, y, 1, 1)) continue;
+                    _obstacles[i] = ObstacleType.Pillar;
+                    for (int dy = -_canopyRadius; dy <= _canopyRadius; dy++)
+                    {
+                        for (int dx = -_canopyRadius; dx <= _canopyRadius; dx++)
+                        {
+                            int nx = x + dx, ny = y + dy;
+                            if (nx < 0 || ny < 0 || nx >= _width || ny >= _height) continue;
+                            if (dx * dx + dy * dy > _canopyRadius * _canopyRadius + 1) continue;
+                            _canopy[ny * _width + nx] = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>Гнездо — открытое место в глубине поля, подальше от старта: туда змея придёт отложить яйца.</summary>
+        private void PlaceNest(System.Random rng)
+        {
+            _hasNest = false;
+            float cx = (_width - 1) * 0.5f;
+            float cy = (_height - 1) * 0.5f;
+            float best = -1f;
+            for (int attempt = 0; attempt < 300; attempt++)
+            {
+                int x = rng.Next(4, _width - 4);
+                int y = rng.Next(4, _height - 4);
+                if (!IsOpenArea(x, y, 1, 2)) continue;
+                float dx = x - cx, dy = y - cy;
+                float d = dx * dx + dy * dy;
+                if (d <= best) continue;
+                best = d;
+                _nest = new Vector2Int(x, y);
+                _hasNest = true;
+                // Достаточно далеко от старта — дальше не ищем, чтобы гнездо не всегда оказывалось в углу.
+                if (d > (_width * 0.3f) * (_width * 0.3f)) break;
             }
         }
 
@@ -540,6 +675,7 @@ namespace Snake3D
                         if (x < 1 || x >= _width - 1 || y < 1 || y >= _height - 1) continue;
                         int i = y * _width + x;
                         if (_obstacles[i] != ObstacleType.None || _water[i] || _sunStone[i] || _burrowCell[i]) continue;
+                        if (_hasNest && x == _nest.x && y == _nest.y) continue;
                         float dx = x - px;
                         float dy = y - py;
                         float angle = Mathf.Atan2(dy, dx);

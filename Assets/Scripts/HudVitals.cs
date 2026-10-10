@@ -29,6 +29,12 @@ namespace Snake3D
         [Tooltip("Прозрачность каждой дуги вместе с её дорожкой")]
         [SerializeField] private CanvasGroup[] _arcs = new CanvasGroup[COUNT];
 
+        [Tooltip("Подписи дуг («ЗДОРОВЬЕ 75»): появляются вместе с дугой")]
+        [SerializeField] private CanvasGroup[] _labels = new CanvasGroup[COUNT];
+
+        [Tooltip("Числа в подписях, проценты")]
+        [SerializeField] private Text[] _values = new Text[COUNT];
+
         [Header("Поведение")]
         [Tooltip("Ниже этой доли дуга видна всегда")]
         [SerializeField, Range(0f, 1f)] private float _lowThreshold = 0.4f;
@@ -55,6 +61,7 @@ namespace Snake3D
         private readonly float[] _rate = new float[COUNT];
         private readonly float[] _timer = new float[COUNT];
         private readonly float[] _shown = new float[COUNT];
+        private readonly int[] _shownPercent = { -1, -1, -1 };
         private bool _primed;
 
         private void OnEnable()
@@ -90,7 +97,17 @@ namespace Snake3D
 
                 _shown[i] = Mathf.Lerp(_shown[i], v, 1f - Mathf.Exp(-10f * dt));
                 _fills[i].fillAmount = _shown[i] * _arcSpan;
-                _fills[i].color = low ? _lowColor : BaseColor(i);
+                Color color = low ? _lowColor : BaseColor(i);
+                _fills[i].color = color;
+
+                _labels[i].alpha = _arcs[i].alpha;
+                int percent = Mathf.RoundToInt(v * 100f);
+                if (percent != _shownPercent[i])
+                {
+                    _shownPercent[i] = percent;
+                    _values[i].text = percent.ToString();
+                }
+                _values[i].color = color;
             }
             _primed = true;
             _group.alpha = Mathf.MoveTowards(_group.alpha, any ? 1f : 0f, dt * 4f);

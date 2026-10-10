@@ -262,6 +262,52 @@ public static class ProceduralTextures
         return Create(size, pixels, name, false);
     }
 
+    /// <summary>Лесная подстилка: россыпь опавших листьев на прозрачном фоне, к краям реже (пятна под деревьями).</summary>
+    public static Texture2D LeafLitter(int size)
+    {
+        var pixels = new Color[size * size];
+        for (int i = 0; i < pixels.Length; i++) pixels[i] = new Color(0.3f, 0.22f, 0.12f, 0f);
+        var rng = new System.Random(31);
+        Color[] palette =
+        {
+            new Color(0.45f, 0.3f, 0.14f), new Color(0.6f, 0.42f, 0.16f), new Color(0.36f, 0.24f, 0.12f),
+            new Color(0.5f, 0.48f, 0.2f), new Color(0.68f, 0.36f, 0.12f)
+        };
+        float half = size * 0.5f;
+        for (int k = 0; k < 420; k++)
+        {
+            float cx = (float)rng.NextDouble() * size;
+            float cy = (float)rng.NextDouble() * size;
+            float edge = Mathf.Sqrt((cx - half) * (cx - half) + (cy - half) * (cy - half)) / half;
+            if (rng.NextDouble() < edge * edge) continue;
+            float angle = (float)rng.NextDouble() * Mathf.PI;
+            float len = size * (0.025f + 0.025f * (float)rng.NextDouble());
+            float wid = len * 0.45f;
+            Color col = palette[rng.Next(palette.Length)] * (0.8f + 0.3f * (float)rng.NextDouble());
+            float ca = Mathf.Cos(angle), sa = Mathf.Sin(angle);
+            int r = Mathf.CeilToInt(len);
+            for (int y = Mathf.FloorToInt(cy) - r; y <= Mathf.CeilToInt(cy) + r; y++)
+            {
+                for (int x = Mathf.FloorToInt(cx) - r; x <= Mathf.CeilToInt(cx) + r; x++)
+                {
+                    if (x < 0 || y < 0 || x >= size || y >= size) continue;
+                    float dx = x - cx, dy = y - cy;
+                    float u = (dx * ca + dy * sa) / len;
+                    float v = (-dx * sa + dy * ca) / wid;
+                    float d = u * u + v * v;
+                    if (d > 1f) continue;
+                    // Жилка посередине листа чуть темнее.
+                    Color c = Mathf.Abs(v) < 0.12f ? col * 0.75f : col;
+                    c.a = Mathf.Clamp01((1f - d) * 4f) * (1f - edge * 0.5f);
+                    pixels[y * size + x] = c;
+                }
+            }
+        }
+        Texture2D tex = Create(size, pixels, "LeafLitter", false);
+        tex.wrapMode = TextureWrapMode.Clamp;
+        return tex;
+    }
+
     /// <summary>Травинки с прозрачностью для пучков травы (шейдер Cutout).</summary>
     public static Texture2D GrassBlades(int size)
     {

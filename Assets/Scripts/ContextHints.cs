@@ -28,6 +28,9 @@ namespace Snake3D
             Cold,
             Smell,
             Ambush,
+            NestLay,
+            NestNight,
+            NestFood,
             Count
         }
 
@@ -35,7 +38,7 @@ namespace Snake3D
 
         private static readonly string[] Keys =
         {
-            "F", "E", "ЛКМ", "ЛКМ", "ПКМ", "ЛКМ", "E", "", "SPACE", "CTRL", "WASD", "", "E", ""
+            "F", "E", "ЛКМ", "ЛКМ", "ПКМ", "ЛКМ", "E", "", "SPACE", "CTRL", "WASD", "", "E", "", "E", "", ""
         };
 
         private static readonly string[] Texts =
@@ -53,11 +56,14 @@ namespace Snake3D
             "ползти · мышь — камера",
             "холодно — погрейтесь на солнечном камне",
             "нюх — найти добычу",
-            "замрите — добыча подойдёт сама"
+            "замрите — добыча подойдёт сама",
+            "отложить яйца",
+            "гнездо — вернитесь ночью",
+            "гнездо — сначала наешьтесь"
         };
 
         // Сколько раз показывать каждую подсказку.
-        private static readonly int[] Limits = { 6, 4, 4, 4, 4, 3, 4, 3, 3, 3, 3, 3, 3, 3 };
+        private static readonly int[] Limits = { 6, 4, 4, 4, 4, 3, 4, 3, 3, 3, 3, 3, 3, 3, 99, 99, 99 };
 
         [Header("Источники")]
         [SerializeField] private GameManager _game;
@@ -165,6 +171,15 @@ namespace Snake3D
             if (!_snake.IsAlive) return Hint.None;
             if (_game.Constriction.IsActive) return Allow(Hint.Constrict);
             if (_snake.InBurrow) return Allow(Hint.BurrowExit);
+            if (_game.NearNest && _game.Quest.Stage == QuestStage.Nest)
+            {
+                switch (_game.NestStatus)
+                {
+                    case NestCheck.Ok: return Allow(Hint.NestLay);
+                    case NestCheck.NeedNight: return Allow(Hint.NestNight);
+                    case NestCheck.NeedFood: return Allow(Hint.NestFood);
+                }
+            }
             return Pick();
         }
 

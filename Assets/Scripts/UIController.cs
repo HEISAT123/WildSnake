@@ -115,6 +115,8 @@ namespace Snake3D
             _game.BurrowChanged += OnBurrowChanged;
             _game.GoalCompleted += OnGoalCompleted;
             _game.FoxScared += OnFoxScared;
+            _game.QuestAdvanced += OnQuestAdvanced;
+            _game.NestBlocked += OnNestBlocked;
             _eagle.Missed += OnEagleMissed;
             _dayNight.DayStarted += OnDayStarted;
             _dayNight.NightStarted += OnNightStarted;
@@ -146,6 +148,8 @@ namespace Snake3D
             _game.BurrowChanged -= OnBurrowChanged;
             _game.GoalCompleted -= OnGoalCompleted;
             _game.FoxScared -= OnFoxScared;
+            _game.QuestAdvanced -= OnQuestAdvanced;
+            _game.NestBlocked -= OnNestBlocked;
             _eagle.Missed -= OnEagleMissed;
             _dayNight.DayStarted -= OnDayStarted;
             _dayNight.NightStarted -= OnNightStarted;
@@ -290,6 +294,17 @@ namespace Snake3D
             ShowBanner("ЦЕЛЬ ДНЯ · " + MapJournal.GoalName(_game.Goals.Get(index).Type).ToUpperInvariant());
         }
 
+        private void OnQuestAdvanced(QuestStage stage)
+        {
+            if (stage == QuestStage.Nest) ShowBanner("ВЗРОСЛАЯ ЗМЕЯ · ГНЕЗДО ОТМЕЧЕНО НА КАРТЕ");
+        }
+
+        private void OnNestBlocked(NestCheck check)
+        {
+            if (check == NestCheck.NeedNight) ShowBanner("ЯЙЦА — ТОЛЬКО НОЧЬЮ");
+            else if (check == NestCheck.NeedFood) ShowBanner("СНАЧАЛА НАЕШЬТЕСЬ");
+        }
+
         private void OnFoxScared()
         {
             ShowBanner("ЛИСА УБЕЖАЛА");
@@ -362,7 +377,7 @@ namespace Snake3D
         private void FillGameOver()
         {
             RunStats s = _game.Stats;
-            _gameOverTitle.text = CauseTitle(s.Cause);
+            _gameOverTitle.text = s.Won ? "РОД ПРОДОЛЖЕН" : CauseTitle(s.Cause);
             _daysText.text = TimeFormat.Days(s.Time, _game.DayLengthSeconds);
 
             int rank = _game.LastRank;

@@ -137,6 +137,9 @@ namespace Snake3D
         /// <summary>Освещённость 0..1 для температуры (ставит GameManager из смены дня и ночи).</summary>
         public float Daylight01 { get; set; } = 1f;
 
+        /// <summary>Под кронами рощи: тень и укрытие от орла.</summary>
+        public bool UnderCanopy => !InBurrow && _grounded && _grid.IsCanopyAt(_headPos);
+
         /// <summary>Голова в пруду: змея плывёт медленнее.</summary>
         public bool IsInWater => _inWater;
 
@@ -151,7 +154,7 @@ namespace Snake3D
                 if (InBurrow) return TemperatureSpot.Burrow;
                 if (_inWater) return TemperatureSpot.Water;
                 if (_grid.IsSunStoneAt(_headPos)) return TemperatureSpot.SunStone;
-                if (_hidden) return TemperatureSpot.Shade;
+                if (_hidden || _grid.IsCanopyAt(_headPos)) return TemperatureSpot.Shade;
                 return TemperatureSpot.Open;
             }
         }

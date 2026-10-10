@@ -73,7 +73,9 @@ namespace Snake3D.Tests
         {
             GridManager grid = CreateGrid();
             Assert.Greater(grid.WaterCellCount, 10, "На поле должен быть пруд");
-            Assert.AreEqual(3, grid.BurrowCount, "По умолчанию на поле три норы");
+            Assert.AreEqual(5, grid.BurrowCount, "По умолчанию на поле пять нор");
+            Assert.IsTrue(grid.HasNest, "На поле должно быть гнездо");
+            Assert.AreEqual(ObstacleType.None, grid.GetObstacle(grid.NestCell));
             Assert.Greater(grid.SunStoneCount, 0, "Нет солнечных камней");
             foreach (Vector2Int c in AllCells(grid))
             {
@@ -91,6 +93,22 @@ namespace Snake3D.Tests
         }
 
         [Test]
+        public void Groves_HaveTrees_AndCanopy()
+        {
+            GridManager grid = CreateGrid();
+            int forest = 0, trees = 0, canopy = 0;
+            foreach (Vector2Int c in AllCells(grid))
+            {
+                if (grid.IsForest(c)) forest++;
+                if (grid.IsForest(c) && grid.GetObstacle(c) == ObstacleType.Pillar) trees++;
+                if (grid.IsCanopy(c)) canopy++;
+            }
+            Assert.Greater(forest, 200, "Рощи слишком маленькие");
+            Assert.Greater(trees, 30, "В рощах мало деревьев");
+            Assert.Greater(canopy, trees * 4, "Под кронами должно быть много тени");
+        }
+
+        [Test]
         public void SpawnCells_AreNeverInWater()
         {
             GridManager grid = CreateGrid();
@@ -104,12 +122,12 @@ namespace Snake3D.Tests
         }
 
         [Test]
-        public void Defaults_Are44x44()
+        public void Defaults_Are72x72()
         {
             GridManager grid = CreateGrid();
-            Assert.AreEqual(44, grid.Width);
-            Assert.AreEqual(44, grid.Height);
-            Assert.AreEqual(44 * 44, grid.CellCount);
+            Assert.AreEqual(72, grid.Width);
+            Assert.AreEqual(72, grid.Height);
+            Assert.AreEqual(72 * 72, grid.CellCount);
         }
 
         [Test]
@@ -306,11 +324,11 @@ namespace Snake3D.Tests
         {
             GridManager grid = CreateGrid();
             grid.ArenaInset = 0f;
-            Assert.AreEqual(22f, grid.ArenaHalfExtents.x, 1e-4f);
-            Assert.AreEqual(22f, grid.ArenaHalfExtents.y, 1e-4f);
+            Assert.AreEqual(grid.Width * 0.5f, grid.ArenaHalfExtents.x, 1e-4f);
+            Assert.AreEqual(grid.Width * 0.5f, grid.ArenaHalfExtents.y, 1e-4f);
             grid.ArenaInset = 5f;
-            Assert.AreEqual(17f, grid.ArenaHalfExtents.x, 1e-4f);
-            Assert.AreEqual(17f, grid.ArenaHalfExtents.y, 1e-4f);
+            Assert.AreEqual(grid.Width * 0.5f - 5f, grid.ArenaHalfExtents.x, 1e-4f);
+            Assert.AreEqual(grid.Width * 0.5f - 5f, grid.ArenaHalfExtents.y, 1e-4f);
         }
 
         // ---------------- Свободная клетка для еды ----------------

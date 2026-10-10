@@ -194,6 +194,36 @@ namespace Snake3D.Tests
             Assert.Greater(_game.Goals.Count, 0, "У партии должны быть цели суток");
         }
 
+        [UnityTest]
+        public IEnumerator Nest_LayingEggsAtNight_WinsTheGame()
+        {
+            _game.StartGame();
+            SnakeController snake = FindPlayer();
+            var grid = Object.FindAnyObjectByType<GridManager>();
+            var dayNight = Object.FindAnyObjectByType<DayNightCycle>();
+            Assert.IsTrue(grid.HasNest, "На поле нет гнезда");
+            yield return null;
+
+            var interact = typeof(GameManager).GetMethod("Interact", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            snake.ExitBurrow(grid.NestPosition, 0f);
+            _game.Quest.Restore(QuestStage.Nest);
+            yield return null;
+            Assert.IsTrue(_game.NearNest);
+
+            // Днём нельзя — игра продолжается.
+            dayNight.SetPhase(0.5f);
+            interact.Invoke(_game, null);
+            Assert.AreEqual(GameState.Playing, _game.State, "Днём яйца откладывать нельзя");
+
+            dayNight.SetPhase(0.9f);
+            _game.Survival.Feed(100f);
+            yield return null;
+            interact.Invoke(_game, null);
+            Assert.AreEqual(GameState.GameOver, _game.State);
+            Assert.IsTrue(_game.Stats.Won, "Кладка ночью и сытой должна давать победу");
+            Assert.AreEqual(QuestStage.Done, _game.Quest.Stage);
+        }
+
         private static SnakeController FindPlayer()
         {
             foreach (SnakeController s in Object.FindObjectsByType<SnakeController>(FindObjectsSortMode.None))

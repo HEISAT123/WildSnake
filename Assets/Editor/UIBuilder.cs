@@ -97,8 +97,11 @@ internal static class UIBuilder
         eventSystem.AddComponent<StandaloneInputModule>();
 #endif
 
-        GameObject stateLayer = BuildOverlays(root, r, edge, deepShade, out OverlayParts op2, out GameObject mapRoot);
-        GameObject hud = BuildHud(root, out HudParts hp);
+        // Градиенты краёв создаём один раз: повторное сохранение ассета обнулило бы уже выданные ссылки.
+        Texture2D edgeH = UISpriteFactory.EdgeGradient(false);
+        Texture2D edgeV = UISpriteFactory.EdgeGradient(true);
+        GameObject stateLayer = BuildOverlays(root, r, edge, edgeH, edgeV, deepShade, out OverlayParts op2, out GameObject mapRoot);
+        GameObject hud = BuildHud(root, edgeV, out HudParts hp);
         GameObject menu = BuildMainMenu(root, menuShade, out Row[] menuRows, out CanvasGroup menuGroup);
         GameObject pause = BuildPause(root, pauseShade, out Row[] pauseRows, out CanvasGroup pauseGroup);
         GameObject molt = BuildMolt(root, pauseShade, out Row[] moltRows, out CanvasGroup moltGroup);
@@ -130,9 +133,19 @@ internal static class UIBuilder
         SnakeSceneBuilder.Wire(vitals, ("_game", r.Game), ("_snake", r.Player), ("_group", hp.VitalsGroup));
         SnakeSceneBuilder.WireArray(vitals, "_fills", hp.VitalFills);
         SnakeSceneBuilder.WireArray(vitals, "_arcs", hp.VitalArcs);
+        SnakeSceneBuilder.WireArray(vitals, "_labels", hp.VitalLabels);
+        SnakeSceneBuilder.WireArray(vitals, "_values", hp.VitalValues);
+
+        var objective = hud.AddComponent<HudObjective>();
+        SnakeSceneBuilder.Wire(objective, ("_game", r.Game), ("_dayNight", r.DayNight), ("_text", hp.ObjectiveText), ("_progress", hp.ObjectiveFill));
+
+        var status = hud.AddComponent<HudStatus>();
+        SnakeSceneBuilder.Wire(status, ("_game", r.Game), ("_snake", r.Player));
+        SnakeSceneBuilder.WireArray(status, "_lines", hp.StatusLines);
 
         var dial = hud.AddComponent<SunDial>();
-        SnakeSceneBuilder.Wire(dial, ("_dayNight", r.DayNight), ("_body", hp.SunBody), ("_bodyImage", hp.SunBodyImage), ("_progress", hp.SunProgress));
+        SnakeSceneBuilder.Wire(dial, ("_dayNight", r.DayNight), ("_body", hp.SunBody), ("_bodyImage", hp.SunBodyImage), ("_progress", hp.SunProgress),
+            ("_label", hp.DayLabel));
 
         var hints = canvasGo.AddComponent<ContextHints>();
         SnakeSceneBuilder.Wire(hints, ("_game", r.Game), ("_config", r.Config), ("_snake", r.Player), ("_wildlife", r.Wildlife),
@@ -155,7 +168,8 @@ internal static class UIBuilder
 
         var journal = mapRoot.AddComponent<MapJournal>();
         SnakeSceneBuilder.Wire(journal, ("_game", r.Game), ("_dayNight", r.DayNight), ("_mapCamera", r.MinimapCamera),
-            ("_group", op2.MapGroup), ("_dayText", op2.MapDay), ("_summaryText", op2.Summary));
+            ("_group", op2.MapGroup), ("_dayText", op2.MapDay), ("_summaryText", op2.Summary),
+            ("_questText", op2.QuestText), ("_questNote", op2.QuestNote));
         SnakeSceneBuilder.WireArray(journal, "_goalLabels", op2.GoalLabels);
         SnakeSceneBuilder.WireArray(journal, "_goalNotes", op2.GoalNotes);
         SnakeSceneBuilder.WireArray(journal, "_goalChecks", op2.GoalChecks);
@@ -586,6 +600,11 @@ internal static class UIBuilder
         public Text AlertText;
         public CanvasGroup BannerGroup;
         public Text BannerText;
+        public Text ObjectiveText, DayLabel;
+        public Image ObjectiveFill;
+        public Object[] StatusLines = new Object[3];
+        public Object[] VitalLabels = new Object[3];
+        public Object[] VitalValues = new Object[3];
     }
 
     /// <summary>Виньетки состояния и оверлей карты: живут вне HUD, чтобы работать и в режиме «без интерфейса».</summary>
@@ -594,7 +613,7 @@ internal static class UIBuilder
         public Object[] DamageEdges = new Object[4];
         public CanvasGroup LowHealth, Frost, Warmth, Ambush;
         public CanvasGroup MapGroup;
-        public Text MapDay, Summary;
+        public Text MapDay, Summary, QuestText, QuestNote;
         public Object[] GoalLabels = new Object[DailyGoals.MAX_GOALS];
         public Object[] GoalNotes = new Object[DailyGoals.MAX_GOALS];
         public Object[] GoalChecks = new Object[DailyGoals.MAX_GOALS];
@@ -605,11 +624,27 @@ internal static class UIBuilder
     /// контекстная подсказка у центра, прицел и кольцо борьбы, метки угроз у краёв, баннер.
     /// Всё, кроме дуги солнца, появляется только когда нужно.
     /// </summary>
-    private static GameObject BuildHud(Transform root, out HudParts p)
+    private static GameObject BuildHud(Transform root, Texture2D edgeV, out HudParts p)
     {
         p = new HudParts();
         RectTransform hud = Rect("HUD", root);
         Stretch(hud);
+
+        // Мягкая чернильная тень в левом верхнем углу: строка цели читается и над светлыми кронами.
+        RectTransform objShade = Rect("ObjectiveShade", hud);
+        TopLeft(objShade, 0f, 0f, 1250f, 200f);
+        RawImage shadeImg = Raw(objShade, edgeV);
+        shadeImg.color = new Color(Ink.r, Ink.g, Ink.b, 0.78f);
+        // Такая же тень справа — под дугой солнца и подписью дня.
+        RectTransform dayShade = Rect("DayShade", hud);
+        Anchor(dayShade, new Vector2(1f, 1f), new Vector2(1f, 1f), Vector2.zero, new Vector2(420f, 190f));
+        Raw(dayShade, edgeV).color = new Color(Ink.r, Ink.g, Ink.b, 0.7f);
+        // И снизу слева — под дугами показателей, подписями и состояниями (градиент перевёрнут: плотнее у нижнего края).
+        RectTransform vitalShade = Rect("VitalsShade", hud);
+        Anchor(vitalShade, new Vector2(0f, 0f), new Vector2(0f, 0f), Vector2.zero, new Vector2(760f, 360f));
+        RawImage vitalShadeImg = Raw(vitalShade, edgeV);
+        vitalShadeImg.color = new Color(Ink.r, Ink.g, Ink.b, 0.6f);
+        vitalShadeImg.uvRect = new Rect(0f, 1f, 1f, -1f);
 
         // ---------- Показатели: три тонкие дуги вокруг значка змеи ----------
         RectTransform vitals = Rect("Vitals", hud);
@@ -635,25 +670,68 @@ internal static class UIBuilder
             p.VitalArcs[i] = arcGroup;
         }
 
+        // Подписи дуг справа от блока: появляются вместе со своей дугой.
+        string[] vitalNames = { "ЗДОРОВЬЕ", "СЫТОСТЬ", "СИЛЫ" };
+        for (int i = 0; i < 3; i++)
+        {
+            RectTransform row = Rect("VitalLabel_" + names[i], hud);
+            Anchor(row, new Vector2(0f, 0f), new Vector2(0f, 0.5f), new Vector2(232f, 168f - i * 34f), new Vector2(240f, 30f));
+            CanvasGroup rowGroup = Group(row);
+            rowGroup.alpha = 0f;
+            Text caption = Label(row, "Caption", Spaced(vitalNames[i]), 15, HudCaption, TextAnchor.MiddleLeft, true);
+            Anchor(caption.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), Vector2.zero, new Vector2(150f, 30f));
+            Text value = Label(row, "Value", "100", 22, Bone, TextAnchor.MiddleLeft, false);
+            Anchor(value.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(150f, 0f), new Vector2(80f, 30f));
+            p.VitalLabels[i] = rowGroup;
+            p.VitalValues[i] = value;
+        }
+
+        // Состояния над показателями: «В ТРАВЕ», «ХОЛОДНО»…
+        for (int i = 0; i < 3; i++)
+        {
+            Text line = Label(hud, "Status_" + i, "", 17, Venom, TextAnchor.MiddleLeft, true);
+            Anchor(line.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 0.5f), new Vector2(46f, 244f + i * 30f), new Vector2(520f, 28f));
+            line.gameObject.SetActive(false);
+            p.StatusLines[i] = line;
+        }
+
+        // ---------- Главная цель: строка слева сверху ----------
+        TopLeft(Label(hud, "ObjectiveKicker", Spaced("ЦЕЛЬ"), 17, Venom, TextAnchor.MiddleLeft, true), 46f, -34f, 300f, 24f);
+        p.ObjectiveText = Label(hud, "Objective", "Повзрослеть", 22, Bone, TextAnchor.MiddleLeft, false);
+        TopLeft(p.ObjectiveText, 46f, -60f, 1100f, 30f);
+        RectTransform objTrack = Rect("ObjectiveTrack", hud);
+        TopLeft(objTrack, 46f, -98f, 380f, 2f);
+        Img(objTrack, Hair, null);
+        RectTransform objFill = Rect("ObjectiveFill", hud);
+        TopLeft(objFill, 46f, -97f, 380f, 4f);
+        p.ObjectiveFill = Img(objFill, Venom, _solid);
+        p.ObjectiveFill.type = Image.Type.Filled;
+        p.ObjectiveFill.fillMethod = Image.FillMethod.Horizontal;
+        TopLeft(Label(hud, "MapHint", "TAB — карта и журнал", 16, HudCaption, TextAnchor.MiddleLeft, false), 46f, -110f, 400f, 24f);
+
         // ---------- Время суток: полудуга, по которой идёт солнце или луна ----------
         RectTransform dial = Rect("SunDial", hud);
         Anchor(dial, new Vector2(1f, 1f), new Vector2(0.5f, 0f), new Vector2(-104f, -92f), new Vector2(92f, 92f));
         RectTransform dialPivot = Rect("Pivot", dial);
         Anchor(dialPivot, new Vector2(0.5f, 0f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(92f, 92f));
         Image dialTrack = Img(dialPivot, Hair, UISpriteFactory.ArcRing);
+        // Полукруг: заливка Radial360 от левого края по часовой стрелке на половину круга.
         dialTrack.type = Image.Type.Filled;
-        dialTrack.fillMethod = Image.FillMethod.Radial180;
-        dialTrack.fillOrigin = (int)Image.Origin180.Bottom;
-        dialTrack.fillAmount = 1f;
+        dialTrack.fillMethod = Image.FillMethod.Radial360;
+        dialTrack.fillOrigin = (int)Image.Origin360.Left;
+        dialTrack.fillClockwise = true;
+        dialTrack.fillAmount = 0.5f;
         RectTransform progress = Rect("Progress", dialPivot);
         Stretch(progress);
         p.SunProgress = Img(progress, Venom, UISpriteFactory.ArcRing);
         p.SunProgress.type = Image.Type.Filled;
-        p.SunProgress.fillMethod = Image.FillMethod.Radial180;
-        p.SunProgress.fillOrigin = (int)Image.Origin180.Bottom;
+        p.SunProgress.fillMethod = Image.FillMethod.Radial360;
+        p.SunProgress.fillOrigin = (int)Image.Origin360.Left;
         p.SunProgress.fillClockwise = true;
         RectTransform horizon = Line(dial, Hair);
         Anchor(horizon, new Vector2(0.5f, 0f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(120f, 1f));
+        p.DayLabel = Label(hud, "DayLabel", "ДЕНЬ 1  ·  УТРО", 18, Bone, TextAnchor.UpperCenter, false);
+        Anchor(p.DayLabel.rectTransform, new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(-104f, -100f), new Vector2(240f, 24f));
         p.SunBody = Rect("Body", dialPivot);
         Anchor(p.SunBody, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(13f, 13f));
         p.SunBodyImage = Img(p.SunBody, Venom, UISpriteFactory.Dot);
@@ -671,9 +749,12 @@ internal static class UIBuilder
         layout.childControlHeight = true;
         layout.childForceExpandWidth = false;
         layout.childForceExpandHeight = false;
+        layout.padding = new RectOffset(16, 22, 9, 9);
         var fitter = hint.gameObject.AddComponent<ContentSizeFitter>();
         fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
         fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        // Тёмная плашка под подсказкой: читается поверх светлой травы и неба.
+        Img(hint, new Color(Ink.r, Ink.g, Ink.b, 0.72f), _chamfer);
         p.HintGroup = Group(hint);
         p.HintGroup.alpha = 0f;
         RectTransform keycap = Keycap(hint, "ЛКМ");
@@ -683,7 +764,7 @@ internal static class UIBuilder
         keyElement.preferredHeight = 32f;
         p.HintKeycap = keycap.gameObject;
         p.HintKey = keycap.GetComponentInChildren<Text>();
-        p.HintLabel = Label(hint, "Label", "укус", 21, Bone, TextAnchor.MiddleLeft, false);
+        p.HintLabel = Label(hint, "Label", "укус", 22, Bone, TextAnchor.MiddleLeft, false);
 
         // ---------- Прицел (только при замахе) и кольцо борьбы (только при обвивании) ----------
         RectTransform aim = Rect("Aim", hud);
@@ -758,14 +839,13 @@ internal static class UIBuilder
     /// Виньетки состояния (урон с нужной стороны, малое здоровье, иней, тепло, засада) и карта с журналом по Tab.
     /// Виньетки видны во время партии всегда — и без интерфейса; карта открывается только по Tab.
     /// </summary>
-    private static GameObject BuildOverlays(Transform root, Refs r, Texture2D edge, Texture2D shade, out OverlayParts p, out GameObject mapRoot)
+    private static GameObject BuildOverlays(Transform root, Refs r, Texture2D edge, Texture2D edgeH, Texture2D edgeV, Texture2D shade,
+        out OverlayParts p, out GameObject mapRoot)
     {
         p = new OverlayParts();
         RectTransform layer = Rect("Overlays", root);
         Stretch(layer);
 
-        Texture2D edgeH = UISpriteFactory.EdgeGradient(false);
-        Texture2D edgeV = UISpriteFactory.EdgeGradient(true);
         p.Ambush = FullLayer(layer, "Ambush", edge, new Color(Ink.r, Ink.g, Ink.b, 1f));
         p.Warmth = FullLayer(layer, "Warmth", edge, new Color(1f, 0.62f, 0.25f, 1f));
         p.Frost = FullLayer(layer, "Frost", UISpriteFactory.FrostEdge(), new Color(0.78f, 0.9f, 1f, 1f));
@@ -801,10 +881,16 @@ internal static class UIBuilder
         p.MapDay = Label(map, "Day", "ДЕНЬ 1", 96, Bone, TextAnchor.MiddleLeft, true);
         TopLeft(p.MapDay, x - 6f, -158f, 900f, 120f);
         TopLeft(Line(map, Venom), x, -290f, 72f, 5f);
-        TopLeft(Label(map, "GoalsCaption", Spaced("ЦЕЛИ ДНЯ"), 17, Venom, TextAnchor.MiddleLeft, true), x, -330f, 400f, 24f);
+        TopLeft(Label(map, "QuestCaption", Spaced("ГЛАВНАЯ ЦЕЛЬ · ПРОДОЛЖИТЬ РОД"), 17, Venom, TextAnchor.MiddleLeft, true), x, -318f, 700f, 24f);
+        p.QuestText = Label(map, "Quest", "1 из 2  ·  Повзрослеть", 30, Bone, TextAnchor.MiddleLeft, true);
+        TopLeft(p.QuestText, x, -346f, 800f, 40f);
+        p.QuestNote = Label(map, "QuestNote", "", 19, Ash, TextAnchor.UpperLeft, false);
+        p.QuestNote.horizontalOverflow = HorizontalWrapMode.Wrap;
+        TopLeft(p.QuestNote, x, -392f, 760f, 54f);
+        TopLeft(Label(map, "GoalsCaption", Spaced("ЦЕЛИ ДНЯ"), 17, Venom, TextAnchor.MiddleLeft, true), x, -470f, 400f, 24f);
         for (int i = 0; i < DailyGoals.MAX_GOALS; i++)
         {
-            float y = -372f - i * 112f;
+            float y = -506f - i * 100f;
             TopLeft(Label(map, "Index", (i + 1).ToString("00"), 21, Smoke, TextAnchor.MiddleLeft, true), x, y - 4f, 60f, 30f);
             Text label = Label(map, "Goal_" + i, "Цель", 34, Bone, TextAnchor.MiddleLeft, true);
             TopLeft(label, x + 60f, y - 4f, 760f, 44f);
@@ -817,9 +903,9 @@ internal static class UIBuilder
             p.GoalNotes[i] = note;
             p.GoalChecks[i] = check.gameObject;
         }
-        TopLeft(Line(map, Hair), x, -620f, 760f, 1f);
+        TopLeft(Line(map, Hair), x, -722f, 760f, 1f);
         p.Summary = Label(map, "Summary", "", 20, Ash, TextAnchor.MiddleLeft, false);
-        TopLeft(p.Summary, x, -640f, 760f, 28f);
+        TopLeft(p.Summary, x, -742f, 760f, 28f);
         HintRow(map, new Vector2(0f, 0f), new Vector2(x, 64f), new Vector2(0f, 0.5f), ("TAB", "держать — карта и журнал"));
         return layer.gameObject;
     }

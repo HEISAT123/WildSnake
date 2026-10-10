@@ -55,6 +55,13 @@ namespace Snake3D
         [Tooltip("Сброшенная кожа при линьке")]
         [SerializeField] private SkinShedEffect _skinShed;
 
+        [Header("Гнездо")]
+        [Tooltip("Яйца в гнезде: появляются, когда змея их отложит")]
+        [SerializeField] private GameObject _nestEggs;
+
+        [Tooltip("Светящийся столб над гнездом: виден, когда змея повзрослела")]
+        [SerializeField] private GameObject _nestBeacon;
+
         [Header("Сервисы")]
         [Tooltip("Таблица рекордов")]
         [SerializeField] private LeaderboardService _leaderboard;
@@ -142,6 +149,12 @@ namespace Snake3D
         /// <summary>Лиса отпугнута броском.</summary>
         public event Action FoxScared;
 
+        /// <summary>Главная цель перешла на новый этап.</summary>
+        public event Action<QuestStage> QuestAdvanced;
+
+        /// <summary>Змея у гнезда, но отложить яйца пока нельзя (чего не хватает).</summary>
+        public event Action<NestCheck> NestBlocked;
+
         public GameState State { get; private set; } = GameState.Menu;
         public RunStats Stats => _stats;
         public SurvivalStats Survival => _survival;
@@ -154,6 +167,24 @@ namespace Snake3D
 
         /// <summary>Длина змеи игрока, клеток.</summary>
         public float SnakeLength => _snake.BodyLengthCells;
+
+        /// <summary>Главная цель «Продолжить род».</summary>
+        public MainQuest Quest => _quest;
+
+        /// <summary>Змея у гнезда (можно попробовать отложить яйца клавишей E).</summary>
+        public bool NearNest
+        {
+            get
+            {
+                if (!_grid.HasNest || _snake.InBurrow || !_snake.IsAlive) return false;
+                Vector3 d = _grid.NestPosition - _snake.HeadPosition;
+                d.y = 0f;
+                return d.magnitude <= _config.NestRadius * _grid.CellSize;
+            }
+        }
+
+        /// <summary>Что мешает отложить яйца прямо сейчас (для подсказок).</summary>
+        public NestCheck NestStatus => _quest.CanLay(_dayNight.IsNight, _survival.Satiety01);
         public UpgradeSet Upgrades => _upgrades;
 
         /// <summary>Место последней жизни в таблице (0 — первое, -1 — не попала).</summary>
@@ -190,6 +221,7 @@ namespace Snake3D
         private readonly UpgradeSet _upgrades = new UpgradeSet();
         private readonly Constriction _constriction = new Constriction();
         private readonly DailyGoals _goals = new DailyGoals();
+        private readonly MainQuest _quest = new MainQuest();
         private bool _nightOutside;
         private PreyAnimal _heldPrey;
         private int _burrowIndex;
@@ -209,6 +241,9 @@ namespace Snake3D
                 RegenPerSecond = _config.RegenPerSecond,
                 WellFedThreshold = _config.WellFedThreshold
             };
+            _quest.TargetLength = _config.QuestLength;
+            _quest.TargetMolts = _config.QuestMolts;
+            _quest.NestSatiety = _config.NestSatiety;
             _constriction.Duration = _config.ConstrictDuration;
             _constriction.Patience = _config.ConstrictPatience;
         }
@@ -383,6 +418,8 @@ namespace Snake3D
             MoltChoiceCount = 0;
             _stats = new RunStats();
             LastRank = -1;
+            _quest.Reset();
+            SetNestVisuals(false, false);
 
             if (_rival != null)
             {
@@ -444,6 +481,12 @@ namespace Snake3D
             _snake.Stamina.RegenMultiplier = Mathf.Lerp(_config.HungryStaminaRegen, 1f, Mathf.Clamp01(_survival.Satiety01 * 2f))
                                              * _snake.Temperature.RegenMultiplier;
             TickFoxScare();
+            if (_quest.Update(_snake.BodyLengthCells, _stats.Molts))
+            {
+                SetNestVisuals(true, false);
+                _audio.Play(SoundId.Goal);
+                QuestAdvanced?.Invoke(_quest.Stage);
+            }
             if (_snake.Spot == TemperatureSpot.SunStone && _snake.Temperature.Warm01 >= 0.75f) ReportGoal(GoalType.BaskStone);
 
             // Ночь в норе пролетает быстрее (голод при этом идёт).
@@ -653,7 +696,7 @@ namespace Snake3D
             _stats.Days = _stats.Time / DayLengthSeconds;
             var entry = new LeaderboardEntry(Mathf.FloorToInt(_stats.Time), _stats.Prey, _stats.Length, _stats.Molts);
             LastRank = _leaderboard.Submit(entry);
-            _audio.SetMusicPitch(0.7f);
+            _audio.SetMusicPitch(_stats.Won ? 1.05f : 0.7f);
             _eagle.HuntingAllowed = false;
             SetState(GameState.GameOver);
         }
@@ -709,6 +752,12 @@ namespace Snake3D
                 return;
             }
 
+            if (NearNest && _quest.Stage != QuestStage.Grow && !_constriction.IsActive)
+            {
+                TryLayEggs();
+                return;
+            }
+
             int burrow = NearbyBurrow;
             if (burrow >= 0 && !_constriction.IsActive && _snake.IsGrounded)
             {
@@ -721,6 +770,30 @@ namespace Snake3D
                 _headAnimator.Flick();
                 _audio.Play(SoundId.Sniff);
             }
+        }
+
+        /// <summary>Кладка у гнезда: ночью и сытой — победа, иначе объясняем, чего не хватает.</summary>
+        private void TryLayEggs()
+        {
+            NestCheck check = NestStatus;
+            if (check != NestCheck.Ok)
+            {
+                NestBlocked?.Invoke(check);
+                return;
+            }
+            _quest.TryLay(_dayNight.IsNight, _survival.Satiety01);
+            SetNestVisuals(false, true);
+            _stats.Won = true;
+            _audio.Play(SoundId.Molt);
+            Emit(_moltParticles, _grid.NestPosition, _moltParticleCount);
+            QuestAdvanced?.Invoke(_quest.Stage);
+            EndGame();
+        }
+
+        private void SetNestVisuals(bool beacon, bool eggs)
+        {
+            if (_nestBeacon != null && _nestBeacon.activeSelf != beacon) _nestBeacon.SetActive(beacon);
+            if (_nestEggs != null && _nestEggs.activeSelf != eggs) _nestEggs.SetActive(eggs);
         }
 
         private void EnterBurrow(int index, bool save)
@@ -766,7 +839,8 @@ namespace Snake3D
                 Molts = _stats.Molts,
                 EaglesEvaded = _stats.EaglesEvaded,
                 FoxesScared = _stats.FoxesScared,
-                Burrow = _burrowIndex
+                Burrow = _burrowIndex,
+                Quest = (int)_quest.Stage
             };
             _upgrades.CopyLevels(save.Upgrades);
             return save;
@@ -786,6 +860,8 @@ namespace Snake3D
             _stats.Molts = save.Molts;
             _stats.EaglesEvaded = save.EaglesEvaded;
             _stats.FoxesScared = save.FoxesScared;
+            _quest.Restore(save.Quest == (int)QuestStage.Nest ? QuestStage.Nest : QuestStage.Grow);
+            SetNestVisuals(_quest.Stage == QuestStage.Nest, false);
         }
 
         // ---------------- Обвивание ----------------

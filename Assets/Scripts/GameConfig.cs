@@ -271,6 +271,19 @@ namespace Snake3D
         [Tooltip("Отпугнуть лису броском можно, только если здоровья больше этой доли")]
         [SerializeField, Range(0f, 1f)] private float _foxScareHealth = 0.5f;
 
+        [Header("Главная цель")]
+        [Tooltip("Какой длины должна стать змея, чтобы повзрослеть, клеток")]
+        [SerializeField, Min(1f)] private float _questLength = 11f;
+
+        [Tooltip("Сколько линек нужно пережить, чтобы повзрослеть")]
+        [SerializeField, Min(0)] private int _questMolts = 2;
+
+        [Tooltip("Сытость (доля), без которой нельзя отложить яйца")]
+        [SerializeField, Range(0f, 1f)] private float _nestSatiety = 0.6f;
+
+        [Tooltip("С какого расстояния до гнезда можно отложить яйца, клеток")]
+        [SerializeField, Min(0.3f)] private float _nestRadius = 1.6f;
+
         [Header("Цели суток")]
         [Tooltip("Какую долю роста до линьки даёт выполненная охотничья цель")]
         [SerializeField, Range(0f, 1f)] private float _goalMoltReward = 0.5f;
@@ -385,6 +398,10 @@ namespace Snake3D
         public float FoxDamage => _foxDamage;
         public float FoxScareHealth => _foxScareHealth;
         public float GoalMoltReward => _goalMoltReward;
+        public float QuestLength => _questLength;
+        public int QuestMolts => _questMolts;
+        public float NestSatiety => _nestSatiety;
+        public float NestRadius => _nestRadius;
 
         public float RivalRespawnDelay => _rivalRespawnDelay;
         public float RivalMaxHealth => _rivalMaxHealth;
@@ -437,11 +454,11 @@ namespace Snake3D
         {
             return new[]
             {
-                new PreyStats(7f, 0.25f, 0.6f, 0f, 0f, 1f, false, 7, 5),      // Жук
-                new PreyStats(22f, 0.7f, 1.4f, 5.6f, 4.5f, 2.2f, true, 3, 6),  // Мышь
-                new PreyStats(26f, 0.8f, 0f, 4.4f, 3.5f, 2.4f, true, 3, 4),    // Лягушка
-                new PreyStats(40f, 1.2f, 0.9f, 7f, 6f, 3f, true, 3, 2),        // Птица
-                new PreyStats(70f, 1.8f, 1.6f, 6.4f, 5f, 3.2f, true, 2, 1)     // Кролик
+                new PreyStats(7f, 0.25f, 0.6f, 0f, 0f, 1f, false, 14, 10),     // Жук
+                new PreyStats(22f, 0.7f, 1.4f, 5.6f, 4.5f, 2.2f, true, 6, 11), // Мышь
+                new PreyStats(26f, 0.8f, 0f, 4.4f, 3.5f, 2.4f, true, 6, 7),    // Лягушка
+                new PreyStats(40f, 1.2f, 0.9f, 7f, 6f, 3f, true, 6, 4),        // Птица
+                new PreyStats(70f, 1.8f, 1.6f, 6.4f, 5f, 3.2f, true, 4, 2)     // Кролик
             };
         }
     }

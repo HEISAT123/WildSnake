@@ -35,6 +35,15 @@ public static class EnvironmentBuilder
         public Material SunStone;
         public Material Dirt;
         public Material Hole;
+        public Material Leaves;
+        public Material LeavesFade;
+        public Material Pine;
+        public Material PineFade;
+        public Material Litter;
+        public Material Egg;
+        public Material Beacon;
+        public Mesh CrownMesh;
+        public Mesh PineMesh;
         public Mesh RockMesh;
         public Mesh TuftMesh;
     }
@@ -87,6 +96,22 @@ public static class EnvironmentBuilder
         m.SunStone = Textured("SunStone", new Color(0.95f, 0.86f, 0.7f), 0.25f, rock, rockN, 0.9f);
         m.Dirt = SnakeSceneBuilder.CreateLitMaterial("BurrowDirt", new Color(0.36f, 0.25f, 0.16f), 0.05f);
         m.Hole = SnakeSceneBuilder.CreateLitMaterial("BurrowHole", new Color(0.03f, 0.02f, 0.015f), 0f);
+
+        // Роща на арене: свои имена текстур и мешей (окружение пересохраняет LeafFoliage, CrownA и т. п.).
+        m.Leaves = FoliageMaterial("ArenaLeaves", new Color(0.14f, 0.34f, 0.1f), new Color(0.4f, 0.62f, 0.2f));
+        m.Pine = FoliageMaterial("ArenaPine", new Color(0.06f, 0.2f, 0.1f), new Color(0.18f, 0.38f, 0.18f));
+        // Полупрозрачные копии крон: на них CanopyFader меняет крону между камерой и змеёй.
+        m.LeavesFade = FadeCopy("ArenaLeavesFade", m.Leaves);
+        m.PineFade = FadeCopy("ArenaPineFade", m.Pine);
+        m.Litter = SnakeSceneBuilder.CreateLitMaterial("LeafLitter", Color.white, 0.05f);
+        m.Litter.mainTexture = Save(ProceduralTextures.LeafLitter(256));
+        SnakeSceneBuilder.MakeTransparent(m.Litter);
+        m.Egg = SnakeSceneBuilder.CreateLitMaterial("SnakeEgg", new Color(0.95f, 0.92f, 0.8f), 0.35f);
+        m.Beacon = SnakeSceneBuilder.CreateLitMaterial("NestBeacon", new Color(0.8f, 1f, 0.3f, 0.22f), 0f);
+        SnakeSceneBuilder.SetEmission(m.Beacon, new Color(0.55f, 0.85f, 0.12f));
+        SnakeSceneBuilder.MakeTransparent(m.Beacon);
+        m.CrownMesh = SaveMesh(ProceduralMeshes.Blob("ArenaCrown", 2, 0.42f, 57), "ArenaCrown");
+        m.PineMesh = SaveMesh(ProceduralMeshes.Cone("ArenaPineTier", 9), "ArenaPineTier");
         return m;
     }
 
@@ -614,6 +639,14 @@ public static class EnvironmentBuilder
         Material mat = SnakeSceneBuilder.CreateLitMaterial(name, Color.white, 0.12f);
         mat.mainTexture = Save(ProceduralTextures.Foliage(128, dark, bright, name));
         EditorUtility.SetDirty(mat);
+        return mat;
+    }
+
+    private static Material FadeCopy(string name, Material source)
+    {
+        Material mat = SnakeSceneBuilder.CreateLitMaterial(name, new Color(1f, 1f, 1f, 0.22f), 0.12f);
+        mat.mainTexture = source.mainTexture;
+        SnakeSceneBuilder.MakeTransparent(mat);
         return mat;
     }
 

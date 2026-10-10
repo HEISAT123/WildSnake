@@ -32,6 +32,10 @@ namespace Snake3D
         [SerializeField] private CanvasGroup _group;
         [SerializeField] private Text _dayText;
 
+        [Tooltip("Главная цель: этап и что делать")]
+        [SerializeField] private Text _questText;
+        [SerializeField] private Text _questNote;
+
         [Tooltip("Строки целей (до двух)")]
         [SerializeField] private Text[] _goalLabels = new Text[DailyGoals.MAX_GOALS];
 
@@ -60,12 +64,14 @@ namespace Snake3D
         {
             _game.GoalsRolled += MarkDirty;
             _game.GoalCompleted += OnGoalCompleted;
+            _game.QuestAdvanced += OnQuestAdvanced;
         }
 
         private void OnDisable()
         {
             _game.GoalsRolled -= MarkDirty;
             _game.GoalCompleted -= OnGoalCompleted;
+            _game.QuestAdvanced -= OnQuestAdvanced;
             if (_mapCamera != null) _mapCamera.enabled = false;
         }
 
@@ -73,6 +79,7 @@ namespace Snake3D
         public static string GoalName(GoalType type) => GoalTexts[(int)type];
 
         private void OnGoalCompleted(int index) => MarkDirty();
+        private void OnQuestAdvanced(QuestStage stage) => MarkDirty();
 
         private void MarkDirty()
         {
@@ -99,6 +106,20 @@ namespace Snake3D
         private void Refresh()
         {
             _dayText.text = "ДЕНЬ " + _dayNight.Day + (_dayNight.IsNight ? "  ·  НОЧЬ" : "");
+            MainQuest quest = _game.Quest;
+            if (quest.Stage == QuestStage.Grow)
+            {
+                _questText.text = "1 из 2  ·  Повзрослеть";
+                _questNote.text = "Длина " + _game.SnakeLength.ToString("0.0") + " из " + quest.TargetLength.ToString("0")
+                                  + ", линьки " + Mathf.Min(_game.Stats.Molts, quest.TargetMolts) + " из " + quest.TargetMolts
+                                  + ". Потом на карте появится гнездо.";
+            }
+            else
+            {
+                _questText.text = "2 из 2  ·  Отложить яйца в гнезде";
+                _questNote.text = "Гнездо — светлая метка на карте и столб света на поле. Нужны ночь и сытость "
+                                  + Mathf.RoundToInt(quest.NestSatiety * 100f) + "%.";
+            }
             DailyGoals goals = _game.Goals;
             for (int i = 0; i < _goalLabels.Length; i++)
             {

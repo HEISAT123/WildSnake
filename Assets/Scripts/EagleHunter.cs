@@ -208,9 +208,9 @@ namespace Snake3D
                 return;
             }
 
-            if (_target.IsHidden)
+            if (_target.IsHidden || _target.UnderCanopy)
             {
-                // Змея в траве: орёл покружит ещё немного и улетит ни с чем.
+                // Змея в траве или под кронами: орёл покружит ещё немного и улетит ни с чем.
                 _searchLeft -= dt;
                 if (_searchLeft > 0f) return;
                 Missed?.Invoke();
@@ -234,7 +234,7 @@ namespace Snake3D
 
             // Пока орёл высоко, трава ещё спасает — он теряет цель и выходит из пике.
             float t = Mathf.Clamp01(_phaseTime / _diveTime);
-            if (_target.IsHidden && t < 0.75f)
+            if ((_target.IsHidden || _target.UnderCanopy) && t < 0.75f)
             {
                 Missed?.Invoke();
                 SetPhase(Phase.Climbing);
@@ -256,7 +256,7 @@ namespace Snake3D
             Vector3 d = _target.HeadPosition - _aim;
             d.y = 0f;
             float r = _strikeRadius * _grid.CellSize;
-            if (d.sqrMagnitude <= r * r && !_target.IsHidden) Struck?.Invoke(_target.HeadPosition);
+            if (d.sqrMagnitude <= r * r && !_target.IsHidden && !_target.UnderCanopy) Struck?.Invoke(_target.HeadPosition);
             else Missed?.Invoke();
             SetPhase(Phase.Climbing);
         }

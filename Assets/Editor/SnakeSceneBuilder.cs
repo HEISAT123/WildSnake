@@ -24,6 +24,7 @@ public static class SnakeSceneBuilder
     private const string MATERIALS_FOLDER = "Assets/Materials";
     private const string SETTINGS_FOLDER = "Assets/Settings";
     private const string MINIMAP_LAYER = "Minimap";
+    private const string CANOPY_LAYER = "Canopy";
     private const int SCENT_WISPS = 16;
 
     // Материалы прошлых версий сборщика, которые больше не нужны.
@@ -71,6 +72,7 @@ public static class SnakeSceneBuilder
         EnsureFolder("Assets", "Settings");
         _urp = GraphicsSettings.currentRenderPipeline != null;
         int minimapLayer = EnsureLayer(MINIMAP_LAYER);
+        int canopyLayer = EnsureLayer(CANOPY_LAYER);
         DeleteObsoleteAssets();
 
         GameConfig config = LoadOrCreateAsset<GameConfig>(SETTINGS_FOLDER + "/GameConfig.asset");
@@ -137,7 +139,10 @@ public static class SnakeSceneBuilder
             ("_blockMaterial", arena.Block), ("_tallGrassMaterial", arena.TallGrass),
             ("_waterMaterial", arena.PondWater), ("_pondBedMaterial", arena.PondBed), ("_sunStoneMaterial", arena.SunStone),
             ("_dirtMaterial", arena.Dirt), ("_holeMaterial", arena.Hole),
+            ("_leavesMaterial", arena.Leaves), ("_pineMaterial", arena.Pine), ("_litterMaterial", arena.Litter),
+            ("_crownMesh", arena.CrownMesh), ("_pineMesh", arena.PineMesh), ("_eggMaterial", arena.Egg), ("_beaconMaterial", arena.Beacon),
             ("_rockMesh", arena.RockMesh), ("_grassTuftMesh", arena.TuftMesh));
+        SetInt(board, "_canopyLayer", canopyLayer);
         board.Build();
         BuildBurrowMarkers(grid, minimapLayer);
         EnvironmentBuilder.Build(grid, particles, out ParticleSystem pollen, out Renderer stars, out Transform clouds);
@@ -226,6 +231,11 @@ public static class SnakeSceneBuilder
         var rig = camGo.AddComponent<CameraRig>();
         Wire(rig, ("_snake", player.Controller), ("_grid", grid));
 
+        // Кроны, заслоняющие змею, становятся полупрозрачными.
+        var fader = board.gameObject.AddComponent<CanopyFader>();
+        Wire(fader, ("_board", board), ("_camera", camGo.transform), ("_snake", player.Controller),
+            ("_leaves", arena.Leaves), ("_leavesFade", arena.LeavesFade), ("_pine", arena.Pine), ("_pineFade", arena.PineFade));
+
         // Ввод игрока — на самой змее; в меню выключен, змею ведёт автопилот через то же «намерение».
         var playerInput = player.Controller.gameObject.AddComponent<PlayerSnakeInput>();
         Wire(playerInput, ("_snake", player.Controller), ("_camera", rig));
@@ -246,6 +256,8 @@ public static class SnakeSceneBuilder
         miniCam.farClipPlane = 40f;
         miniCam.depth = -10f;
         miniCam.targetTexture = minimapTexture;
+        // Кроны рощ на карте не рисуем — иначе они закрыли бы метки; рощу видно по подстилке и стволам.
+        if (canopyLayer > 0) miniCam.cullingMask = ~(1 << canopyLayer);
         // Камеру карты включает журнал (Tab), пока он открыт.
         miniCam.enabled = false;
         miniGo.transform.SetPositionAndRotation(grid.Center + Vector3.up * 20f, Quaternion.Euler(90f, 0f, 0f));
@@ -256,6 +268,7 @@ public static class SnakeSceneBuilder
             ("_config", config), ("_grid", grid),
             ("_snake", player.Controller), ("_headAnimator", player.Animator), ("_rival", rival.Controller), ("_playerAutopilot", playerAi), ("_playerInput", playerInput),
             ("_wildlife", wildlife), ("_eagle", eagle), ("_fox", fox), ("_dayNight", dayNight), ("_scent", scent), ("_skinShed", shed),
+            ("_nestEggs", board.NestEggs), ("_nestBeacon", board.NestBeacon),
             ("_leaderboard", leaderboard), ("_settings", settings), ("_audio", audio), ("_cameraRig", rig),
             ("_eatParticles", eatFx), ("_deathParticles", deathFx), ("_dustParticles", dustFx), ("_moltParticles", moltFx));
 
@@ -686,11 +699,18 @@ public static class SnakeSceneBuilder
         return root;
     }
 
-    /// <summary>Лаймовые метки нор — видны только на карте (Tab).</summary>
+    /// <summary>Лаймовые метки нор и светлая метка гнезда — видны только на карте (Tab).</summary>
     private static void BuildBurrowMarkers(GridManager grid, int markerLayer)
     {
         Material mat = CreateUnlitMaterial("MarkerBurrow", new Color(0.78f, 0.96f, 0.2f));
         var root = new GameObject("BurrowMarkers").transform;
+        if (grid.HasNest)
+        {
+            var nest = new GameObject("Nest").transform;
+            nest.SetParent(root, false);
+            nest.position = grid.NestPosition;
+            CreateMarker(nest, CreateUnlitMaterial("MarkerNest", new Color(0.95f, 0.93f, 0.88f)), markerLayer, 3.2f);
+        }
         for (int i = 0; i < grid.BurrowCount; i++)
         {
             var point = new GameObject("Burrow" + i).transform;

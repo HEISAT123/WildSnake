@@ -44,7 +44,7 @@ namespace Snake3D
         [SerializeField, Range(1, 6)] private int _waypointLookahead = 2;
 
         [Tooltip("Предел раскрытых клеток A* за одно планирование")]
-        [SerializeField, Min(100)] private int _maxExpansions = 3000;
+        [SerializeField, Min(100)] private int _maxExpansions = 9000;
 
         [Header("Стоимость клеток")]
         [Tooltip("Рядом с колонной, блоком или стеной")]

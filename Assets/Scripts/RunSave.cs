@@ -23,6 +23,7 @@ namespace Snake3D
         public int EaglesEvaded;
         public int FoxesScared;
         public int Burrow;
+        public int Quest;
         public int[] Upgrades = new int[UpgradeSet.TYPE_COUNT];
     }
 }
