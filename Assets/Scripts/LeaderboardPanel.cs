@@ -5,16 +5,24 @@ using UnityEngine.UI;
 
 namespace Snake3D
 {
-    /// <summary>Экран рекордов: топ-10 по каждому режиму в трёх колонках (заголовки колонок — в разметке).</summary>
+    /// <summary>Экран рекордов: топ-10 жизней змеи в колонках «место, сутки, добыча, длина, линьки» (заголовки — в разметке).</summary>
     public class LeaderboardPanel : MonoBehaviour
     {
+        private const int COLUMN_COUNT = 5;
+
         [Header("Ссылки")]
         [SerializeField] private LeaderboardService _leaderboard;
         [SerializeField] private AudioService _audio;
 
+        [Tooltip("Длина суток — чтобы перевести секунды в сутки")]
+        [SerializeField] private GameConfig _config;
+
         [Header("Элементы")]
-        [Tooltip("Колонки по режимам (порядок как в GameMode)")]
-        [SerializeField] private Text[] _columns = new Text[3];
+        [Tooltip("Колонки: место, сутки, добыча, длина, линьки")]
+        [SerializeField] private Text[] _columns = new Text[COLUMN_COUNT];
+
+        [Tooltip("Надпись для пустой таблицы")]
+        [SerializeField] private Text _emptyText;
 
         [SerializeField] private Button _backButton;
 
@@ -32,21 +40,28 @@ namespace Snake3D
         /// <summary>Строится при открытии экрана, а не каждый кадр.</summary>
         private void Refresh()
         {
+            Leaderboard board = _leaderboard.Board;
+            float dayLength = _config.DaySeconds + _config.NightSeconds;
             var sb = new StringBuilder();
-            for (int m = 0; m < _columns.Length; m++)
+            for (int c = 0; c < _columns.Length; c++)
             {
                 sb.Clear();
-                Leaderboard board = _leaderboard.GetBoard((GameMode)m);
-                if (board.Count == 0) sb.Append("Пока пусто — сыграйте первым");
                 for (int i = 0; i < board.Count; i++)
                 {
                     LeaderboardEntry e = board.Entries[i];
-                    sb.Append((i + 1).ToString("00")).Append("      ").Append(e.Score)
-                      .Append("      ").Append(e.Length.ToString("0.0", CultureInfo.InvariantCulture)).Append(" м")
-                      .Append('\n');
+                    switch (c)
+                    {
+                        case 0: sb.Append((i + 1).ToString("00")); break;
+                        case 1: sb.Append(TimeFormat.Days(e.Seconds, dayLength)); break;
+                        case 2: sb.Append(e.Prey); break;
+                        case 3: sb.Append(e.Length.ToString("0.0", CultureInfo.InvariantCulture).Replace('.', ',')).Append(" м"); break;
+                        default: sb.Append(e.Molts); break;
+                    }
+                    sb.Append('\n');
                 }
-                _columns[m].text = sb.ToString();
+                _columns[c].text = sb.ToString();
             }
+            _emptyText.gameObject.SetActive(board.Count == 0);
         }
 
         private void OnBackClicked()

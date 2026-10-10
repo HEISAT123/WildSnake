@@ -4,10 +4,11 @@ using UnityEngine;
 namespace Snake3D
 {
     /// <summary>
-    /// Логика змейки: непрерывное движение, руль, прыжок, рывок, рост и столкновения.
+    /// Логика змейки: непрерывное движение, руль, прыжок, бросок, рост и столкновения.
     /// Голова пишет траекторию в кольцевой буфер точек с равным шагом; тело (меш и точки
     /// позвоночника для столкновений) строится по этой траектории, поэтому повторяет
-    /// и повороты, и прыжки. Управляется игроком или ИИ (через AiSteer/AiJump).
+    /// и повороты, и прыжки. Удары не убивают сразу: змея отскакивает и сообщает об уроне
+    /// (событие Hurt), а жива ли она — решает GameManager. Управляется игроком или ИИ (AiSteer/AiJump).
     /// </summary>
     public class SnakeController : MonoBehaviour
     {
@@ -17,9 +18,6 @@ namespace Snake3D
 
         [Tooltip("Сетка поля (границы, препятствия, размер клетки)")]
         [SerializeField] private GridManager _grid;
-
-        [Tooltip("Спавнер еды (где сейчас еда)")]
-        [SerializeField] private FoodSpawner _food;
 
         [Tooltip("Логическая голова: позиция и поворот. Визуал головы — её дочерние объекты")]
         [SerializeField] private Transform _head;
@@ -54,9 +52,6 @@ namespace Snake3D
         [Tooltip("Радиус головы для препятствий и опасностей (доля клетки)")]
         [SerializeField, Min(0.1f)] private float _headRadius = 0.38f;
 
-        [Tooltip("Радиус поедания еды (доля клетки)")]
-        [SerializeField, Min(0.1f)] private float _eatRadius = 0.8f;
-
         [Tooltip("Отступ головы от стены, при котором засчитывается удар (доля клетки)")]
         [SerializeField, Min(0f)] private float _wallMargin = 0.45f;
 
@@ -66,7 +61,7 @@ namespace Snake3D
         [Tooltip("Запас при перепрыгивании препятствия (доля клетки): чем больше, тем проще")]
         [SerializeField, Min(0f)] private float _obstacleForgiveness = 0.1f;
 
-        [Tooltip("Неуязвимость после срабатывания щита, сек")]
+        [Tooltip("Неуязвимость после удара, сек")]
         [SerializeField, Min(0f)] private float _invulnerabilityTime = 1.2f;
 
         [Header("Визуал головы")]
@@ -85,12 +80,12 @@ namespace Snake3D
         [Tooltip("Сила сквош-стретча")]
         [SerializeField, Range(0f, 0.6f)] private float _squashAmount = 0.25f;
 
-        public event Action<Vector3> FoodEaten;
+        /// <summary>(точка удара, урон, источник) — змея ударилась; решение о смерти за GameManager.</summary>
+        public event Action<Vector3, float, DamageSource> Hurt;
         public event Action<Vector3> Died;
         public event Action Jumped;
         public event Action<Vector3> Landed;
         public event Action Dashed;
-        public event Action<Vector3> ShieldUsed;
         public event Action Respawned;
 
         public bool IsRunning
@@ -108,10 +103,15 @@ namespace Snake3D
         public bool IsPlayer => _isPlayer;
         public bool IsDashing => _dashTimer > 0f;
         public bool IsInvulnerable => _invulnerableTimer > 0f;
-        public bool HasShield { get; set; }
+
+        /// <summary>Змея лежит в высокой траве: добыча и орёл её почти не видят. В прыжке укрытия нет.</summary>
+        public bool IsHidden => _hidden;
+
+        /// <summary>Тело уже минимальной длины — худеть от голода некуда.</summary>
+        public bool IsAtMinLength => _targetLengthCells <= _config.StartLength + 0.01f;
 
         /// <summary>Готовность рывка: 1 — можно использовать.</summary>
-        public float DashCharge01 => _config.DashCooldown > 0f ? 1f - Mathf.Clamp01(_dashCooldownTimer / _config.DashCooldown) : 1f;
+        public float DashCharge01 => _dashCooldownTotal > 0f ? 1f - Mathf.Clamp01(_dashCooldownTimer / _dashCooldownTotal) : 1f;
 
         /// <summary>Положение руля от -1 (влево) до 1 (вправо).</summary>
         public float Steer => _steer;
@@ -128,8 +128,12 @@ namespace Snake3D
         public float HeadRadiusWorld => _headRadius * _cellSize;
         public float JumpHeightWorld => _config.JumpHeight * _cellSize;
 
-        /// <summary>Множитель скорости от бонусов (ставит GameManager).</summary>
+        /// <summary>Множитель скорости от улучшений (ставит GameManager).</summary>
         public float ExternalSpeedMultiplier { get; set; } = 1f;
+
+        /// <summary>Множители длительности и перезарядки броска от улучшений.</summary>
+        public float DashDurationScale { get; set; } = 1f;
+        public float DashCooldownScale { get; set; } = 1f;
 
         /// <summary>Чувствительность руля из настроек.</summary>
         public float SteerSensitivity { get; set; } = 1f;
@@ -178,7 +182,9 @@ namespace Snake3D
 
         private float _dashTimer;
         private float _dashCooldownTimer;
+        private float _dashCooldownTotal;
         private float _invulnerableTimer;
+        private bool _hidden;
 
         private float _squashTimer;
         private Vector3 _headBaseScale;
@@ -209,18 +215,19 @@ namespace Snake3D
             _targetLengthCells = _lengthCells;
             _yaw = yaw;
             _steer = 0f;
-            _speed = _config.StartSpeed;
+            _speed = _config.MoveSpeed;
             _height = 0f;
             _verticalSpeed = 0f;
             _grounded = true;
             _dashTimer = 0f;
             _dashCooldownTimer = 0f;
+            _dashCooldownTotal = _config.DashCooldown;
             _invulnerableTimer = 0f;
+            _hidden = false;
             _squashTimer = _squashDuration;
             AiSteer = 0f;
             AiJump = false;
             AiDash = false;
-            HasShield = false;
             IsAlive = true;
             IsRunning = false;
 
@@ -250,32 +257,25 @@ namespace Snake3D
             _targetLengthCells = Mathf.Max(_config.StartLength, _targetLengthCells - cells);
         }
 
-        public void AddSpeed(float cellsPerSecond)
+        /// <summary>
+        /// Удар извне (орёл, соперница) или о тело. awayDirection — куда отскочить (нулевой — не отскакивать).
+        /// После удара змея ненадолго неуязвима. Возвращает true, если удар засчитан.
+        /// </summary>
+        public bool TakeHit(float damage, DamageSource source, Vector3 awayDirection)
         {
-            _speed = Mathf.Min(_config.MaxSpeed, _speed + cellsPerSecond);
+            if (!IsAlive || _invulnerableTimer > 0f) return false;
+            _invulnerableTimer = _invulnerabilityTime;
+            awayDirection.y = 0f;
+            if (awayDirection.sqrMagnitude > 1e-6f) Deflect(awayDirection.normalized);
+            _squashTimer = 0f;
+            Hurt?.Invoke(_headPos, damage, source);
+            return true;
         }
 
-        /// <summary>
-        /// Удар (стена, препятствие, опасность, другая змея). Щит поглощает удар и разворачивает змейку.
-        /// Возвращает true, если змейка погибла.
-        /// </summary>
-        public bool ApplyHit()
+        /// <summary>Гибель (здоровье кончилось) — решает GameManager.</summary>
+        public void Kill()
         {
-            if (!IsAlive) return true;
-            if (_invulnerableTimer > 0f) return false;
-
-            if (HasShield)
-            {
-                HasShield = false;
-                _yaw += 180f;
-                _steer = 0f;
-                _invulnerableTimer = _invulnerabilityTime;
-                ShieldUsed?.Invoke(_headPos);
-                return false;
-            }
-
-            Die();
-            return true;
+            if (IsAlive) Die();
         }
 
         /// <summary>Отметить в сетке клетки под змейкой и прямо перед ней (для появления предметов).</summary>
@@ -293,6 +293,12 @@ namespace Snake3D
         /// </summary>
         public bool BodyHits(Vector3 point, float radius, int startIndex)
         {
+            return BodyHits(point, radius, startIndex, out _);
+        }
+
+        /// <summary>То же, плюс точка позвоночника, которую задели (для направления отскока).</summary>
+        public bool BodyHits(Vector3 point, float radius, int startIndex, out Vector3 hitPoint)
+        {
             float r = radius + BodyRadiusWorld;
             float rSqr = r * r;
             float clearance = _jumpClearance * _cellSize;
@@ -301,8 +307,13 @@ namespace Snake3D
                 Vector3 d = _spine[i] - point;
                 if (Mathf.Abs(d.y) >= clearance) continue;
                 d.y = 0f;
-                if (d.sqrMagnitude < rSqr) return true;
+                if (d.sqrMagnitude < rSqr)
+                {
+                    hitPoint = _spine[i];
+                    return true;
+                }
             }
+            hitPoint = default;
             return false;
         }
 
@@ -357,13 +368,24 @@ namespace Snake3D
             _headPos.y = _groundY + _height;
             _lengthCells = Mathf.MoveTowards(_lengthCells, _targetLengthCells, _lengthChangeSpeed * dt);
 
-            bool hitWall = ClampToArena();
+            bool hitWall = ClampToArena(out Vector3 wallNormal);
+            bool hitObstacle = !hitWall && HitsObstacle(out wallNormal);
             RecordPath();
             ComputeSpine();
 
-            if ((hitWall || HitsObstacle() || HitsSelf()) && ApplyHit()) return;
+            // Стены и камни непроницаемы: от них отскакиваем всегда, а урон — только вне неуязвимости.
+            if (hitWall || hitObstacle)
+            {
+                Deflect(wallNormal);
+                TakeHit(_config.WallDamage, DamageSource.Collision, Vector3.zero);
+            }
+            else if (HitsSelf(out Vector3 selfNormal))
+            {
+                TakeHit(_config.BodyDamage, DamageSource.Collision, selfNormal);
+            }
+            if (!IsAlive) return;
 
-            TryEat();
+            _hidden = _grounded && _grid.IsCoverAt(_headPos);
             ApplyHeadVisual(dt);
         }
 
@@ -421,15 +443,33 @@ namespace Snake3D
             AiDash = false;
             if (wantDash && _dashCooldownTimer <= 0f)
             {
-                _dashTimer = _config.DashDuration;
-                _dashCooldownTimer = _config.DashCooldown;
+                _dashTimer = _config.DashDuration * DashDurationScale;
+                _dashCooldownTotal = _config.DashCooldown * DashCooldownScale;
+                _dashCooldownTimer = _dashCooldownTotal;
                 Dashed?.Invoke();
             }
         }
 
-        /// <summary>Не выпускаем голову за арену; возвращает true, если был удар о стену.</summary>
-        private bool ClampToArena()
+        /// <summary>
+        /// Отскок от поверхности с нормалью normal: змея скользит вдоль неё и немного отходит,
+        /// а не разворачивается на 180° (иначе врезалась бы в собственную шею).
+        /// </summary>
+        private void Deflect(Vector3 normal)
         {
+            Vector3 f = Forward;
+            float into = Vector3.Dot(f, normal);
+            if (into >= 0f) return;
+            Vector3 tangent = f - normal * into;
+            if (tangent.sqrMagnitude < 0.04f) tangent = Vector3.Cross(Vector3.up, normal) * (_steer >= 0f ? 1f : -1f);
+            Vector3 dir = tangent.normalized * 0.8f + normal * 0.6f;
+            _yaw = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
+            _steer *= 0.3f;
+        }
+
+        /// <summary>Не выпускаем голову за арену; возвращает true и нормаль стены, если был удар.</summary>
+        private bool ClampToArena(out Vector3 normal)
+        {
+            normal = Vector3.zero;
             Vector2 half = _grid.ArenaHalfExtents;
             float margin = _wallMargin * _cellSize;
             float hx = half.x - margin;
@@ -440,6 +480,11 @@ namespace Snake3D
             bool hit = lx > hx || lx < -hx || lz > hz || lz < -hz;
             if (hit)
             {
+                if (lx > hx) normal.x -= 1f;
+                else if (lx < -hx) normal.x += 1f;
+                if (lz > hz) normal.z -= 1f;
+                else if (lz < -hz) normal.z += 1f;
+                normal.Normalize();
                 _headPos.x = c.x + Mathf.Clamp(lx, -hx, hx);
                 _headPos.z = c.z + Mathf.Clamp(lz, -hz, hz);
             }
@@ -484,8 +529,9 @@ namespace Snake3D
         }
 
         /// <summary>Проверяем 3x3 клетки вокруг головы: круг головы против квадрата препятствия, с учётом высоты прыжка.</summary>
-        private bool HitsObstacle()
+        private bool HitsObstacle(out Vector3 normal)
         {
+            normal = Vector3.zero;
             Vector2Int center = _grid.WorldToCell(_headPos);
             float radius = HeadRadiusWorld;
             float radiusSqr = radius * radius;
@@ -506,15 +552,28 @@ namespace Snake3D
                     float half = _grid.GetObstacleHalfSize(cell);
                     float nx = _headPos.x - Mathf.Clamp(_headPos.x, c.x - half, c.x + half);
                     float nz = _headPos.z - Mathf.Clamp(_headPos.z, c.z - half, c.z + half);
-                    if (nx * nx + nz * nz < radiusSqr) return true;
+                    float distSqr = nx * nx + nz * nz;
+                    if (distSqr >= radiusSqr) continue;
+
+                    // Выталкиваем голову из препятствия по нормали (центр внутри — от центра клетки).
+                    if (distSqr < 1e-6f)
+                    {
+                        nx = _headPos.x - c.x;
+                        nz = _headPos.z - c.z;
+                        if (nx * nx + nz * nz < 1e-6f) nx = -Forward.x;
+                    }
+                    normal = new Vector3(nx, 0f, nz).normalized;
+                    _headPos += normal * (radius - Mathf.Sqrt(distSqr));
+                    return true;
                 }
             }
             return false;
         }
 
         /// <summary>Точка тела мешает, только если она близко по горизонтали и примерно на той же высоте — так прыжок спасает.</summary>
-        private bool HitsSelf()
+        private bool HitsSelf(out Vector3 normal)
         {
+            normal = Vector3.zero;
             float radius = _selfCollisionRadius * _cellSize;
             float radiusSqr = radius * radius;
             float clearance = _jumpClearance * _cellSize;
@@ -524,18 +583,13 @@ namespace Snake3D
                 Vector3 d = _spine[i] - _headPos;
                 if (Mathf.Abs(d.y) >= clearance) continue;
                 d.y = 0f;
-                if (d.sqrMagnitude < radiusSqr) return true;
+                if (d.sqrMagnitude < radiusSqr)
+                {
+                    normal = -d;
+                    return true;
+                }
             }
             return false;
-        }
-
-        private void TryEat()
-        {
-            if (_food == null || !_food.HasFood) return;
-            float r = _eatRadius * _cellSize;
-            if ((_food.Position - _headPos).sqrMagnitude > r * r) return;
-            // Рост, очки и новая еда — решает GameManager в зависимости от вида еды.
-            FoodEaten?.Invoke(_headPos);
         }
 
         private void Die()

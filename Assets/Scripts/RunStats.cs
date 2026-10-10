@@ -1,14 +1,21 @@
 namespace Snake3D
 {
-    /// <summary>Статистика одной партии (для экрана Game Over и таблицы рекордов).</summary>
+    /// <summary>Статистика одной жизни змеи (для экрана итогов и таблицы рекордов).</summary>
     public struct RunStats
     {
-        public int Apples;
-        public int Golden;
-        public int Rotten;
-        public int PowerUps;
-        public int MaxLevel;
+        /// <summary>Сколько секунд прожила.</summary>
         public float Time;
+
+        /// <summary>Сколько суток прожила (дробное).</summary>
+        public float Days;
+
+        public int Prey;
+        public int Molts;
+
+        /// <summary>Сколько атак орла пережила без удара.</summary>
+        public int EaglesEvaded;
+
         public float Length;
+        public DamageSource Cause;
     }
 }

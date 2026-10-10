@@ -2,12 +2,12 @@ using NUnit.Framework;
 
 namespace Snake3D.Tests
 {
-    /// <summary>Таблица рекордов: порядок, лимит, места, сериализация.</summary>
+    /// <summary>Таблица рекордов выживания: порядок по прожитым секундам, ничья по добыче, лимит, места, сериализация.</summary>
     public class LeaderboardTests
     {
-        private static LeaderboardEntry Entry(int score, int apples = 0)
+        private static LeaderboardEntry Entry(int seconds, int prey = 0)
         {
-            return new LeaderboardEntry(score, 3f, 10f, apples);
+            return new LeaderboardEntry(seconds, prey, 3f, 1);
         }
 
         [Test]
@@ -19,9 +19,9 @@ namespace Snake3D.Tests
 
             Assert.AreEqual(scores.Length, board.Count);
             for (int i = 1; i < board.Count; i++)
-                Assert.GreaterOrEqual(board.Entries[i - 1].Score, board.Entries[i].Score, $"Нарушен порядок на позиции {i}");
-            Assert.AreEqual(100, board.BestScore);
-            Assert.AreEqual(0, board.Entries[board.Count - 1].Score);
+                Assert.GreaterOrEqual(board.Entries[i - 1].Seconds, board.Entries[i].Seconds, $"Нарушен порядок на позиции {i}");
+            Assert.AreEqual(100, board.BestSeconds);
+            Assert.AreEqual(0, board.Entries[board.Count - 1].Seconds);
         }
 
         [Test]
@@ -41,8 +41,8 @@ namespace Snake3D.Tests
             for (int i = 1; i <= 15; i++) board.Insert(Entry(i * 10));
 
             Assert.AreEqual(Leaderboard.MAX_ENTRIES, board.Count);
-            Assert.AreEqual(150, board.Entries[0].Score);
-            Assert.AreEqual(60, board.Entries[Leaderboard.MAX_ENTRIES - 1].Score, "Должны вытесняться худшие результаты");
+            Assert.AreEqual(150, board.Entries[0].Seconds);
+            Assert.AreEqual(60, board.Entries[Leaderboard.MAX_ENTRIES - 1].Seconds, "Должны вытесняться худшие результаты");
         }
 
         [Test]
@@ -53,18 +53,19 @@ namespace Snake3D.Tests
 
             Assert.AreEqual(-1, board.Insert(Entry(5)));
             Assert.AreEqual(Leaderboard.MAX_ENTRIES, board.Count);
-            Assert.AreEqual(10, board.Entries[Leaderboard.MAX_ENTRIES - 1].Score);
+            Assert.AreEqual(10, board.Entries[Leaderboard.MAX_ENTRIES - 1].Seconds);
         }
 
         [Test]
         public void Insert_IntoFullTable_EqualToLast_ReturnsMinusOne()
         {
             var board = new Leaderboard();
-            for (int i = 1; i <= Leaderboard.MAX_ENTRIES; i++) board.Insert(Entry(i * 10, apples: 1));
+            for (int i = 1; i <= Leaderboard.MAX_ENTRIES; i++) board.Insert(Entry(i * 10, prey: 2));
 
-            // Равный последнему встаёт ниже него, то есть за пределы таблицы.
-            Assert.AreEqual(-1, board.Insert(Entry(10, apples: 2)));
-            Assert.AreEqual(1, board.Entries[Leaderboard.MAX_ENTRIES - 1].Apples);
+            // Полностью равный последнему встаёт ниже него, то есть за пределы таблицы.
+            Assert.AreEqual(-1, board.Insert(Entry(10, prey: 2)));
+            Assert.AreEqual(-1, board.Insert(Entry(10, prey: 1)));
+            Assert.AreEqual(Leaderboard.MAX_ENTRIES, board.Count);
         }
 
         [Test]
@@ -75,20 +76,32 @@ namespace Snake3D.Tests
 
             Assert.AreEqual(0, board.Insert(Entry(1000)));
             Assert.AreEqual(Leaderboard.MAX_ENTRIES, board.Count);
-            Assert.AreEqual(1000, board.Entries[0].Score);
-            Assert.AreEqual(20, board.Entries[Leaderboard.MAX_ENTRIES - 1].Score);
+            Assert.AreEqual(1000, board.Entries[0].Seconds);
+            Assert.AreEqual(20, board.Entries[Leaderboard.MAX_ENTRIES - 1].Seconds);
         }
 
         [Test]
-        public void Insert_EqualScore_NewEntryGoesBelow()
+        public void Insert_FullyEqual_NewEntryGoesBelow()
         {
             var board = new Leaderboard();
-            board.Insert(Entry(100, apples: 1));
-            int rank = board.Insert(Entry(100, apples: 2));
+            board.Insert(new LeaderboardEntry(100, 5, 3f, 1));
+            int rank = board.Insert(new LeaderboardEntry(100, 5, 9f, 2));
 
             Assert.AreEqual(1, rank);
-            Assert.AreEqual(1, board.Entries[0].Apples, "Старый результат должен остаться выше");
-            Assert.AreEqual(2, board.Entries[1].Apples);
+            Assert.AreEqual(1, board.Entries[0].Molts, "Старый результат должен остаться выше");
+            Assert.AreEqual(2, board.Entries[1].Molts);
+        }
+
+        [Test]
+        public void Insert_EqualTime_MorePreyGoesAbove()
+        {
+            var board = new Leaderboard();
+            board.Insert(Entry(100, prey: 3));
+            Assert.AreEqual(0, board.Insert(Entry(100, prey: 7)));
+            Assert.AreEqual(1, board.Insert(Entry(100, prey: 5)));
+            Assert.AreEqual(7, board.Entries[0].Prey);
+            Assert.AreEqual(5, board.Entries[1].Prey);
+            Assert.AreEqual(3, board.Entries[2].Prey);
         }
 
         [Test]
@@ -98,16 +111,16 @@ namespace Snake3D.Tests
             board.Insert(Entry(10));
             board.Clear();
             Assert.AreEqual(0, board.Count);
-            Assert.AreEqual(0, board.BestScore);
+            Assert.AreEqual(0, board.BestSeconds);
         }
 
         [Test]
         public void SerializeParse_RoundTrip()
         {
             var board = new Leaderboard();
-            board.Insert(new LeaderboardEntry(120, 12.5f, 63.4f, 11));
-            board.Insert(new LeaderboardEntry(300, 25.25f, 140f, 27));
-            board.Insert(new LeaderboardEntry(40, 3f, 9.5f, 4));
+            board.Insert(new LeaderboardEntry(120, 11, 12.5f, 2));
+            board.Insert(new LeaderboardEntry(300, 27, 25.25f, 5));
+            board.Insert(new LeaderboardEntry(40, 4, 3f, 0));
 
             string data = board.Serialize();
             Leaderboard parsed = Leaderboard.Parse(data);
@@ -117,10 +130,10 @@ namespace Snake3D.Tests
             {
                 LeaderboardEntry a = board.Entries[i];
                 LeaderboardEntry b = parsed.Entries[i];
-                Assert.AreEqual(a.Score, b.Score, $"Score [{i}]");
+                Assert.AreEqual(a.Seconds, b.Seconds, $"Seconds [{i}]");
+                Assert.AreEqual(a.Prey, b.Prey, $"Prey [{i}]");
                 Assert.AreEqual(a.Length, b.Length, 0.01f, $"Length [{i}]");
-                Assert.AreEqual(a.Time, b.Time, 0.05f, $"Time [{i}]");
-                Assert.AreEqual(a.Apples, b.Apples, $"Apples [{i}]");
+                Assert.AreEqual(a.Molts, b.Molts, $"Molts [{i}]");
             }
             Assert.AreEqual(data, parsed.Serialize());
         }
@@ -141,12 +154,12 @@ namespace Snake3D.Tests
         [Test]
         public void Parse_Garbage_SkipsBrokenRows()
         {
-            Leaderboard board = Leaderboard.Parse("abc;1,2;10,3,4,5;x,1,1,1;7,1,1,1,1;;20,abc,1,1;30,2.5,8,2;");
+            Leaderboard board = Leaderboard.Parse("abc;1,2;10,3,4,5;x,1,1,1;7,1,1,1,1;;20,abc,1,1;30,8,2.5,2;");
 
             Assert.AreEqual(2, board.Count);
-            Assert.AreEqual(30, board.Entries[0].Score);
+            Assert.AreEqual(30, board.Entries[0].Seconds);
             Assert.AreEqual(2.5f, board.Entries[0].Length, 0.001f);
-            Assert.AreEqual(10, board.Entries[1].Score);
+            Assert.AreEqual(10, board.Entries[1].Seconds);
         }
 
         [Test]
@@ -161,9 +174,9 @@ namespace Snake3D.Tests
             Leaderboard board = Leaderboard.Parse(sb.ToString());
 
             Assert.AreEqual(Leaderboard.MAX_ENTRIES, board.Count);
-            Assert.AreEqual(140, board.BestScore);
+            Assert.AreEqual(140, board.BestSeconds);
             for (int i = 1; i < board.Count; i++)
-                Assert.GreaterOrEqual(board.Entries[i - 1].Score, board.Entries[i].Score);
+                Assert.GreaterOrEqual(board.Entries[i - 1].Seconds, board.Entries[i].Seconds);
         }
     }
 }

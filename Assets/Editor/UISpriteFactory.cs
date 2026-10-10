@@ -61,6 +61,28 @@ internal static class UISpriteFactory
         return Save(tex);
     }
 
+    /// <summary>Белая виньетка по краям экрана, прозрачная в центре: красится цветом RawImage (вспышка урона).</summary>
+    public static Texture2D EdgeVignette()
+    {
+        const int w = 128;
+        const int h = 72;
+        var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { name = "EdgeVignette", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                float u = (x + 0.5f) / w * 2f - 1f;
+                float v = (y + 0.5f) / h * 2f - 1f;
+                // Скруглённый прямоугольник: к углам темнее, центр чистый.
+                float d = Mathf.Pow(Mathf.Pow(Mathf.Abs(u), 4f) + Mathf.Pow(Mathf.Abs(v), 4f), 0.25f);
+                float a = Smooth(Mathf.InverseLerp(0.55f, 1.05f, d));
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+            }
+        }
+        tex.Apply();
+        return Save(tex);
+    }
+
     private static float Smooth(float t)
     {
         t = Mathf.Clamp01(t);

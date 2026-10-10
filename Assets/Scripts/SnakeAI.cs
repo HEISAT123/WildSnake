@@ -3,11 +3,12 @@ using UnityEngine;
 namespace Snake3D
 {
     /// <summary>
-    /// ИИ змеи-соперника в три слоя:
+    /// ИИ змеи (соперницы или автопилота меню) в три слоя:
     /// 1) план — A* по сетке поля несколько раз в секунду; стоимость клетки учитывает препятствия,
-    ///    тела обеих змей, зону перед головой игрока и вращающиеся балки;
-    /// 2) рефлексы — «щупальца» впереди: уворот от стен и колонн, прыжок через низкие стенки, тела и балки;
-    /// 3) характер — иногда охотится: выходит наперерез игроку, чтобы тот врезался в тело, и использует рывок.
+    ///    тела обеих змей и зону перед головой другой змеи;
+    /// 2) рефлексы — «щупальца» впереди: уворот от стен и камней, прыжок через брёвна и тела;
+    /// 3) охота — выбирает самую выгодную добычу (сытность / расстояние), целится с упреждением
+    ///    и делает бросок вблизи; иногда выходит наперерез игроку, чтобы тот врезался в её тело.
     /// Все буферы выделяются один раз в Start, в игровом цикле аллокаций нет.
     /// Выполняется раньше SnakeController, чтобы руль применился в том же кадре.
     /// </summary>
@@ -28,14 +29,11 @@ namespace Snake3D
         [Tooltip("Змейка игрока")]
         [SerializeField] private SnakeController _player;
 
-        [Tooltip("Еда — основная цель")]
-        [SerializeField] private FoodSpawner _food;
+        [Tooltip("Живность — основная цель")]
+        [SerializeField] private WildlifeManager _wildlife;
 
         [Tooltip("Сетка поля")]
         [SerializeField] private GridManager _grid;
-
-        [Tooltip("Вращающиеся балки (необязательно)")]
-        [SerializeField] private HazardManager _hazards;
 
         [Header("Планирование пути")]
         [Tooltip("Как часто перестраивать путь, сек")]
@@ -62,9 +60,6 @@ namespace Snake3D
 
         [Tooltip("Зона перед головой игрока (риск лобового)")]
         [SerializeField, Min(0)] private int _headOnCost = 25;
-
-        [Tooltip("Зона, которую ометает балка")]
-        [SerializeField, Min(0)] private int _hazardCost = 12;
 
         [Header("Рефлексы")]
         [Tooltip("Дальность ближнего щупальца, клеток")]
@@ -101,8 +96,17 @@ namespace Snake3D
         [Tooltip("Как часто ИИ пересматривает решение «охотиться или есть», сек")]
         [SerializeField, Min(0.5f)] private float _decisionInterval = 3f;
 
-        [Tooltip("Максимальный угол до цели для рывка, град")]
-        [SerializeField, Range(1f, 45f)] private float _dashAngle = 10f;
+        [Tooltip("Максимальный угол до цели для броска, град")]
+        [SerializeField, Range(1f, 45f)] private float _dashAngle = 12f;
+
+        [Tooltip("С какого расстояния до добычи делать бросок, клеток")]
+        [SerializeField, Min(0.5f)] private float _strikeDistance = 3f;
+
+        [Tooltip("Упреждение по скорости добычи, сек")]
+        [SerializeField, Min(0f)] private float _preyLead = 0.35f;
+
+        [Tooltip("Как часто выбирать новую добычу, сек")]
+        [SerializeField, Min(0.1f)] private float _retargetInterval = 1f;
 
         private enum Blocked
         {
@@ -130,6 +134,8 @@ namespace Snake3D
 
         private float _replanTimer;
         private float _decisionTimer;
+        private float _retargetTimer;
+        private PreyAnimal _prey;
         private bool _hunting;
         private bool _initialized;
 
@@ -170,6 +176,13 @@ namespace Snake3D
                 DecideMood();
             }
 
+            _retargetTimer -= dt;
+            if (_retargetTimer <= 0f || _prey == null || !_prey.IsActive || _prey.IsFlying)
+            {
+                _retargetTimer = _retargetInterval;
+                _prey = _wildlife.FindBestTarget(_snake.HeadPosition, OtherAlive ? _player.HeadPosition : Vector3.zero, OtherAlive);
+            }
+
             _replanTimer -= dt;
             if (_replanTimer <= 0f)
             {
@@ -184,8 +197,7 @@ namespace Snake3D
 
         private void DecideMood()
         {
-            bool golden = _food.HasFood && _food.Kind == FoodKind.Golden;
-            _hunting = !golden && OtherAlive && DistanceCells(_player.HeadPosition) < _huntRange && Random.value < _aggression;
+            _hunting = OtherAlive && DistanceCells(_player.HeadPosition) < _huntRange && Random.value < _aggression;
         }
 
         private Vector3 CurrentGoal()
@@ -197,8 +209,8 @@ namespace Snake3D
                 else return _player.HeadPosition + _player.Forward * (_interceptLead * _grid.CellSize);
             }
 
-            // Гнилое яблоко не нужно: если еда гнилая — просто патрулируем центр.
-            if (_food.HasFood && _food.Kind != FoodKind.Rotten) return _food.Position;
+            // Цель — место, где добыча окажется чуть позже (бегущую мышь ловят наперерез).
+            if (HasPrey) return _prey.Position + _prey.Velocity * _preyLead;
             return _grid.Center;
         }
 
@@ -256,7 +268,9 @@ namespace Snake3D
             TryDash(goal, angle, near, center);
         }
 
-        /// <summary>Рывок: при перехвате или в гонке за едой, если путь прямо и чисто.</summary>
+        private bool HasPrey => _prey != null && _prey.IsActive && !_prey.IsFlying;
+
+        /// <summary>Бросок: при перехвате игрока или когда добыча прямо впереди на расстоянии броска.</summary>
         private void TryDash(Vector3 goal, float angle, Blocked near, Blocked center)
         {
             if (_snake.DashCharge01 < 1f || near != Blocked.Free || center != Blocked.Free) return;
@@ -269,12 +283,7 @@ namespace Snake3D
                 return;
             }
 
-            if (!_food.HasFood || myDist > 8f) return;
-            Vector3 d = _food.Position - _player.HeadPosition;
-            d.y = 0f;
-            float playerDist = d.magnitude / _grid.CellSize;
-            bool race = OtherAlive && playerDist < myDist * 1.3f;
-            if (race || _food.Kind == FoodKind.Golden) _snake.AiDash = true;
+            if (HasPrey && myDist <= _strikeDistance) _snake.AiDash = true;
         }
 
         private bool CanLand(Vector3 head, Vector3 forward)
@@ -298,7 +307,6 @@ namespace Snake3D
             }
 
             float radius = _snake.HeadRadiusWorld;
-            if (_hazards != null && _hazards.HitsAny(point, radius, 0f)) return Blocked.Jumpable;
             // Тела перепрыгиваемы, но лучше объехать: план их и так обходит, а рефлекс прыгает в крайнем случае.
             if (OtherAlive && _player.BodyHits(point, radius, 0)) return Blocked.Jumpable;
             if (_snake.BodyHits(point, radius, 6)) return Blocked.Jumpable;
@@ -362,7 +370,7 @@ namespace Snake3D
             _pathIndex = 0;
         }
 
-        /// <summary>Временная часть стоимости: тела змей, зона перед головой игрока, балки, сужение арены.</summary>
+        /// <summary>Временная часть стоимости: тела змей и зона перед головой другой змеи.</summary>
         private void BuildDynamicCost()
         {
             System.Array.Clear(_dynamicCost, 0, _dynamicCost.Length);
@@ -376,13 +384,6 @@ namespace Snake3D
 
             // Своё тело — без участка у головы, иначе путь «боится» стартовой клетки.
             for (int i = 6; i < _snake.SpineCount; i++) MarkBody(_snake.GetSpinePoint(i));
-
-            if (_hazards != null && _hazards.ActiveCount > 0)
-            {
-                float margin = _grid.CellSize * 0.5f;
-                for (int i = 0; i < _dynamicCost.Length; i++)
-                    if (_hazards.IsInHazardZone(CellCenter(i), margin)) _dynamicCost[i] += _hazardCost;
-            }
         }
 
         private void MarkBody(Vector3 point)

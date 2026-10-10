@@ -106,6 +106,22 @@ namespace Snake3D
             GetComponent<MeshFilter>().sharedMesh = _mesh;
         }
 
+        /// <summary>
+        /// Скопировать текущую форму тела в другой меш (сброшенная при линьке кожа).
+        /// Буферы те же, что у тела, поэтому копия не создаёт мусора, кроме внутренних буферов меша.
+        /// </summary>
+        public void CopyMeshTo(Mesh target)
+        {
+            if (_mesh == null || _activeRings < 2) return;
+            int vertexCount = _activeRings * _ringVertexCount;
+            target.Clear();
+            target.SetVertices(_vertices, 0, vertexCount);
+            target.SetNormals(_normals, 0, vertexCount);
+            target.SetUVs(0, _uvs, 0, vertexCount);
+            target.SetTriangles(_triangles, 0, (_activeRings - 1) * _radialSegments * 6, 0, false);
+            target.bounds = _mesh.bounds;
+        }
+
         private void OnDestroy()
         {
             if (_mesh != null) Destroy(_mesh);

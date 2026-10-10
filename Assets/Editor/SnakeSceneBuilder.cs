@@ -14,8 +14,8 @@ using UnityEngine.InputSystem.UI;
 using SettingsService = Snake3D.SettingsService;
 
 /// <summary>
-/// Собирает сцену Snake3D с нуля: текстуры, материалы, конфиг, поле, змеи, предметы, опасности,
-/// эффекты, звук, камеры, мини-карта и весь UI. Запуск: Tools/Build Snake Scene.
+/// Собирает сцену Snake3D с нуля: текстуры, материалы, конфиг, поле с зарослями, змеи, живность, орёл,
+/// смена дня и ночи, нюх, эффекты, звук, камеры, мини-карта и весь UI. Запуск: Tools/Build Snake Scene.
 /// Сцену можно пересобирать сколько угодно раз; GameConfig при этом сохраняет ваши значения.
 /// </summary>
 public static class SnakeSceneBuilder
@@ -24,20 +24,16 @@ public static class SnakeSceneBuilder
     private const string MATERIALS_FOLDER = "Assets/Materials";
     private const string SETTINGS_FOLDER = "Assets/Settings";
     private const string MINIMAP_LAYER = "Minimap";
+    private const int SCENT_WISPS = 16;
 
     // Материалы прошлых версий сборщика, которые больше не нужны.
-    private static readonly string[] ObsoleteMaterials = { "TileLight", "TileDark", "SnakeStripe", "SnakeEyeWhite", "Ground" };
-
-
-    private static readonly Color[] PowerUpColors =
+    private static readonly string[] ObsoleteMaterials =
     {
-        new Color(1f, 0.85f, 0.2f),   // Ускорение
-        new Color(0.3f, 0.85f, 1f),   // Замедление
-        new Color(0.35f, 0.5f, 1f),   // Щит
-        new Color(0.95f, 0.3f, 0.8f), // Магнит
-        new Color(1f, 0.55f, 0.15f)   // Очки x2
+        "TileLight", "TileDark", "SnakeStripe", "SnakeEyeWhite", "Ground",
+        "Food", "FoodGolden", "FoodRotten", "AppleStem", "AppleLeaf", "MarkerFood",
+        "PowerUpSpeed", "PowerUpSlowTime", "PowerUpShield", "PowerUpMagnet", "PowerUpDoubleScore",
+        "SpinnerBeam", "SpinnerPost", "DangerWall", "ObstaclePillar", "PickupParticles"
     };
-
 
     private static bool _urp;
 
@@ -51,6 +47,14 @@ public static class SnakeSceneBuilder
         public Material Tongue;
         public Material Marker;
         public Color PieceColor;
+    }
+
+    /// <summary>Готовая змея и её части, нужные другим системам.</summary>
+    private sealed class SnakeParts
+    {
+        public SnakeController Controller;
+        public SnakeHeadAnimator Animator;
+        public SnakeBodyMesh Body;
     }
 
     [MenuItem("Tools/Build Snake Scene")]
@@ -73,7 +77,7 @@ public static class SnakeSceneBuilder
 
         // ================= Материалы =================
         Texture2D skin = SaveTexture(CreateSkinTexture(), MATERIALS_FOLDER + "/SnakeSkin.asset");
-        EnvironmentBuilder.ArenaMaterials arenaMats = EnvironmentBuilder.CreateArenaMaterials();
+        EnvironmentBuilder.ArenaMaterials arena = EnvironmentBuilder.CreateArenaMaterials();
 
         var playerLook = new SnakeLook
         {
@@ -99,35 +103,12 @@ public static class SnakeSceneBuilder
         };
         rivalLook.Body.mainTexture = skin;
 
-        Material appleNormal = CreateLitMaterial("Food", new Color(0.9f, 0.12f, 0.1f), 0.75f);
-        SetEmission(appleNormal, new Color(0.35f, 0.03f, 0.02f));
-        Material appleGolden = CreateLitMaterial("FoodGolden", new Color(1f, 0.8f, 0.2f), 0.9f);
-        SetEmission(appleGolden, new Color(0.8f, 0.55f, 0.05f));
-        Material appleRotten = CreateLitMaterial("FoodRotten", new Color(0.35f, 0.3f, 0.12f), 0.2f);
-        Material stem = CreateLitMaterial("AppleStem", new Color(0.35f, 0.22f, 0.1f), 0.1f);
-        Material leaf = CreateLitMaterial("AppleLeaf", new Color(0.25f, 0.6f, 0.2f), 0.3f);
-        Material foodMarker = CreateUnlitMaterial("MarkerFood", new Color(1f, 0.25f, 0.2f));
-
-        var powerUpMaterials = new Material[PowerUpColors.Length];
-        for (int i = 0; i < PowerUpColors.Length; i++)
-        {
-            powerUpMaterials[i] = CreateLitMaterial("PowerUp" + (PowerUpType)i, PowerUpColors[i], 0.9f);
-            SetEmission(powerUpMaterials[i], PowerUpColors[i] * 0.6f);
-        }
-
-        Material beam = CreateLitMaterial("SpinnerBeam", new Color(0.85f, 0.25f, 0.2f), 0.5f);
-        SetEmission(beam, new Color(0.3f, 0.05f, 0.03f));
-        Material post = CreateLitMaterial("SpinnerPost", new Color(0.3f, 0.3f, 0.34f), 0.4f);
-        Material danger = CreateLitMaterial("DangerWall", new Color(1f, 0.15f, 0.1f, 0.35f), 0.2f);
-        SetEmission(danger, new Color(0.6f, 0.05f, 0.02f));
-        MakeTransparent(danger);
-
         Material particles = CreateParticleMaterial("Particles");
         Material pieces = CreatePiecesMaterial("DeathPieces");
         Material trail = CreateParticleMaterial("DashTrail");
 
         // ================= Свет =================
-        var lightGo = new GameObject("Directional Light");
+        var lightGo = new GameObject("Sun");
         var light = lightGo.AddComponent<Light>();
         light.type = LightType.Directional;
         light.color = new Color(1f, 0.96f, 0.88f);
@@ -136,93 +117,91 @@ public static class SnakeSceneBuilder
         light.shadowStrength = 0.65f;
         lightGo.transform.rotation = Quaternion.Euler(55f, -35f, 0f);
 
+        // Луна — второй направленный свет; DayNightCycle включает её только ночью.
+        var moonGo = new GameObject("Moon");
+        var moon = moonGo.AddComponent<Light>();
+        moon.type = LightType.Directional;
+        moon.color = new Color(0.55f, 0.66f, 1f);
+        moon.intensity = 0f;
+        moon.shadows = LightShadows.None;
+        moon.shadowStrength = 0.5f;
+        moon.enabled = false;
+
         // ================= Поле =================
         var grid = new GameObject("Grid").AddComponent<GridManager>();
         var board = new GameObject("Board").AddComponent<BoardView>();
-        Wire(board, ("_grid", grid), ("_floorMaterial", arenaMats.Floor), ("_wallMaterial", arenaMats.Wall),
-            ("_lowWallMaterial", arenaMats.LowWall), ("_pillarMaterial", arenaMats.Pillar), ("_blockMaterial", arenaMats.Block));
+        Wire(board, ("_grid", grid), ("_floorMaterial", arena.Floor), ("_wallMaterial", arena.Wall),
+            ("_lowWallMaterial", arena.LowWall), ("_barkMaterial", arena.Bark), ("_stumpTopMaterial", arena.StumpTop),
+            ("_blockMaterial", arena.Block), ("_tallGrassMaterial", arena.TallGrass),
+            ("_rockMesh", arena.RockMesh), ("_grassTuftMesh", arena.TuftMesh));
         board.Build();
-        EnvironmentBuilder.Build(grid, particles);
+        EnvironmentBuilder.Build(grid, particles, out ParticleSystem pollen, out Renderer stars, out Transform clouds);
 
         var particleFloor = new GameObject("ParticleFloor").transform;
         particleFloor.position = grid.Center;
 
-        // ================= Еда =================
-        var foodSpawner = new GameObject("FoodSpawner").AddComponent<FoodSpawner>();
-        var appleRoot = new GameObject("Food").transform;
-        appleRoot.SetParent(foodSpawner.transform, false);
-        GameObject apple = CreatePrimitive(PrimitiveType.Sphere, "Apple", appleRoot, appleNormal);
-        GameObject stemGo = CreatePrimitive(PrimitiveType.Cylinder, "Stem", appleRoot, stem);
-        stemGo.transform.localPosition = new Vector3(0f, 0.55f, 0f);
-        stemGo.transform.localScale = new Vector3(0.07f, 0.12f, 0.07f);
-        GameObject leafGo = CreatePrimitive(PrimitiveType.Cube, "Leaf", appleRoot, leaf);
-        leafGo.transform.localPosition = new Vector3(0.12f, 0.6f, 0f);
-        leafGo.transform.localRotation = Quaternion.Euler(0f, 0f, 30f);
-        leafGo.transform.localScale = new Vector3(0.25f, 0.03f, 0.12f);
-        CreateMarker(appleRoot, foodMarker, minimapLayer, 1.8f);
-        Wire(foodSpawner, ("_config", config), ("_grid", grid), ("_food", appleRoot), ("_foodRenderer", apple.GetComponent<Renderer>()),
-            ("_normalMaterial", appleNormal), ("_goldenMaterial", appleGolden), ("_rottenMaterial", appleRotten));
-
         // ================= Частицы =================
-        ParticleSystem eatFx = CreateParticles("EatParticles", particles, new Color(1f, 0.85f, 0.3f), new Color(1f, 0.35f, 0.2f),
+        ParticleSystem eatFx = CreateParticles("EatParticles", particles, new Color(1f, 0.85f, 0.4f), new Color(0.75f, 0.2f, 0.15f),
             2f, 5f, 0.4f, 0.08f, 0.22f, 0.4f, 0.9f, 0.25f);
         ParticleSystem deathFx = CreateParticles("DeathSparks", particles, new Color(1f, 0.9f, 0.5f), new Color(1f, 0.4f, 0.2f),
             3f, 8f, 1f, 0.08f, 0.2f, 0.4f, 0.9f, 0.3f);
         ParticleSystem dustFx = CreateParticles("DustParticles", particles, new Color(0.7f, 0.65f, 0.55f, 0.7f), new Color(0.55f, 0.5f, 0.42f, 0.5f),
             0.6f, 1.6f, -0.05f, 0.25f, 0.55f, 0.4f, 0.8f, 0.3f);
-        ParticleSystem pickupFx = CreateParticles("PickupParticles", particles, Color.white, new Color(0.5f, 0.9f, 1f),
-            3f, 6f, 0f, 0.1f, 0.25f, 0.3f, 0.6f, 0.2f);
+        ParticleSystem moltFx = CreateParticles("MoltSparkles", particles, new Color(1f, 0.97f, 0.85f), new Color(0.8f, 1f, 0.4f),
+            1.5f, 4f, -0.1f, 0.08f, 0.2f, 0.6f, 1.2f, 0.6f);
         ParticleSystem piecesFx = CreatePiecesParticles(pieces, particleFloor);
 
         // ================= Змеи =================
-        SnakeController player = BuildSnake("Snake", playerLook, true, 1f, config, grid, foodSpawner, piecesFx, trail, minimapLayer);
-        SnakeController rival = BuildSnake("RivalSnake", rivalLook, false, 0.85f, config, grid, foodSpawner, piecesFx, null, minimapLayer);
-        var ai = rival.gameObject.AddComponent<SnakeAI>();
-        Wire(ai, ("_snake", rival), ("_player", player), ("_food", foodSpawner), ("_grid", grid));
-        // Автопилот змеи игрока — она сама ползает на фоне главного меню; на игрока не охотится.
-        var playerAi = player.gameObject.AddComponent<SnakeAI>();
-        Wire(playerAi, ("_snake", player), ("_player", rival), ("_food", foodSpawner), ("_grid", grid));
+        SnakeParts player = BuildSnake("Snake", playerLook, true, 1f, config, grid, piecesFx, trail, minimapLayer);
+        SnakeParts rival = BuildSnake("RivalSnake", rivalLook, false, 0.85f, config, grid, piecesFx, null, minimapLayer);
+
+        // ================= Живность =================
+        var wildlife = new GameObject("Wildlife").AddComponent<WildlifeManager>();
+        PreyAnimal[] animals = BuildPreyPool(wildlife.transform, config, minimapLayer);
+        Wire(wildlife, ("_config", config), ("_grid", grid), ("_player", player.Controller), ("_rival", rival.Controller));
+        WireArray(wildlife, "_animals", animals);
+
+        var ai = rival.Controller.gameObject.AddComponent<SnakeAI>();
+        Wire(ai, ("_snake", rival.Controller), ("_player", player.Controller), ("_wildlife", wildlife), ("_grid", grid));
+        // Автопилот змеи игрока — она сама охотится на фоне главного меню; на соперницу не нападает.
+        var playerAi = player.Controller.gameObject.AddComponent<SnakeAI>();
+        Wire(playerAi, ("_snake", player.Controller), ("_player", rival.Controller), ("_wildlife", wildlife), ("_grid", grid));
         SetFloat(playerAi, "_aggression", 0f);
         SetBool(playerAi, "_canJump", false);
         playerAi.enabled = false;
 
-        // ================= Бонусы =================
-        var powerUpSpawner = new GameObject("PowerUpSpawner").AddComponent<PowerUpSpawner>();
-        GameObject crystal = CreatePrimitive(PrimitiveType.Cube, "Crystal", powerUpSpawner.transform, powerUpMaterials[0]);
-        crystal.SetActive(false);
-        Wire(powerUpSpawner, ("_config", config), ("_grid", grid), ("_player", player), ("_item", crystal.transform),
-            ("_itemRenderer", crystal.GetComponent<Renderer>()));
-        WireArray(powerUpSpawner, "_typeMaterials", powerUpMaterials);
+        // ================= Орёл =================
+        EagleHunter eagle = BuildEagle(config, grid, player.Controller, minimapLayer);
 
-        // ================= Опасности =================
-        var hazards = new GameObject("Hazards").AddComponent<HazardManager>();
-        var spinners = new Object[4];
-        for (int i = 0; i < spinners.Length; i++) spinners[i] = CreateSpinner(hazards.transform, beam, post);
-        Wire(hazards, ("_config", config), ("_grid", grid));
-        WireArray(hazards, "_spinners", spinners);
-        Wire(ai, ("_hazards", hazards));
-        Wire(playerAi, ("_hazards", hazards));
-
-        var arena = new GameObject("ShrinkingArena").AddComponent<ShrinkingArena>();
-        var dangerWalls = new Object[4];
-        string[] wallNames = { "DangerNorth", "DangerSouth", "DangerEast", "DangerWest" };
-        for (int i = 0; i < 4; i++)
+        // ================= Нюх и линька =================
+        var scent = new GameObject("Scent").AddComponent<ScentTracker>();
+        Material wispMat = CreateUnlitMaterial("ScentWisp", new Color(0.82f, 1f, 0.35f));
+        var wisps = new Object[SCENT_WISPS];
+        for (int i = 0; i < wisps.Length; i++)
         {
-            GameObject w = CreatePrimitive(PrimitiveType.Cube, wallNames[i], arena.transform, danger);
+            GameObject w = CreatePrimitive(PrimitiveType.Sphere, "Wisp", scent.transform, wispMat);
             w.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
             w.SetActive(false);
-            dangerWalls[i] = w.transform;
+            wisps[i] = w.transform;
         }
-        Wire(arena, ("_config", config), ("_grid", grid));
-        WireArray(arena, "_walls", dangerWalls);
+        Wire(scent, ("_config", config), ("_snake", player.Controller), ("_wildlife", wildlife));
+        WireArray(scent, "_wisps", wisps);
+
+        Material shedMat = CreateLitMaterial("ShedSkin", new Color(0.92f, 0.88f, 0.74f, 0.7f), 0.3f);
+        shedMat.mainTexture = skin;
+        MakeTransparent(shedMat);
+        var shedGo = new GameObject("ShedSkin");
+        shedGo.AddComponent<MeshFilter>();
+        var shedRenderer = shedGo.AddComponent<MeshRenderer>();
+        shedRenderer.sharedMaterial = shedMat;
+        shedRenderer.shadowCastingMode = ShadowCastingMode.Off;
+        var shed = shedGo.AddComponent<SkinShedEffect>();
+        Wire(shed, ("_body", player.Body));
 
         // ================= Сервисы =================
         var services = new GameObject("Services");
-        var score = services.AddComponent<ScoreService>();
         var leaderboard = services.AddComponent<LeaderboardService>();
         var settings = services.AddComponent<SettingsService>();
-        var powerUps = services.AddComponent<PowerUpService>();
-        Wire(powerUps, ("_config", config));
         var sfxSource = services.AddComponent<AudioSource>();
         var musicSource = services.AddComponent<AudioSource>();
         var audio = services.AddComponent<AudioService>();
@@ -239,7 +218,10 @@ public static class SnakeSceneBuilder
         camGo.AddComponent<AudioListener>();
         EnvironmentBuilder.SetupSky(light, cam);
         var rig = camGo.AddComponent<CameraRig>();
-        Wire(rig, ("_snake", player));
+        Wire(rig, ("_snake", player.Controller));
+
+        var dayNight = new GameObject("DayNight").AddComponent<DayNightCycle>();
+        Wire(dayNight, ("_config", config), ("_sun", light), ("_moon", moon), ("_stars", stars), ("_fireflies", pollen), ("_clouds", clouds));
 
         RenderTexture minimapTexture = LoadOrCreateRenderTexture(SETTINGS_FOLDER + "/Minimap.renderTexture", 384);
         var miniGo = new GameObject("Minimap Camera");
@@ -257,17 +239,17 @@ public static class SnakeSceneBuilder
         // ================= GameManager =================
         var game = new GameObject("GameManager").AddComponent<GameManager>();
         Wire(game,
-            ("_config", config), ("_grid", grid), ("_hazards", hazards), ("_arena", arena),
-            ("_snake", player), ("_rival", rival), ("_playerAutopilot", playerAi),
-            ("_food", foodSpawner), ("_powerUpSpawner", powerUpSpawner), ("_powerUps", powerUps),
-            ("_score", score), ("_leaderboard", leaderboard), ("_settings", settings), ("_audio", audio), ("_cameraRig", rig),
-            ("_eatParticles", eatFx), ("_deathParticles", deathFx), ("_dustParticles", dustFx), ("_pickupParticles", pickupFx));
+            ("_config", config), ("_grid", grid),
+            ("_snake", player.Controller), ("_headAnimator", player.Animator), ("_rival", rival.Controller), ("_playerAutopilot", playerAi),
+            ("_wildlife", wildlife), ("_eagle", eagle), ("_dayNight", dayNight), ("_scent", scent), ("_skinShed", shed),
+            ("_leaderboard", leaderboard), ("_settings", settings), ("_audio", audio), ("_cameraRig", rig),
+            ("_eatParticles", eatFx), ("_deathParticles", deathFx), ("_dustParticles", dustFx), ("_moltParticles", moltFx));
 
         // ================= UI =================
         UIBuilder.Build(new UIBuilder.Refs
         {
-            Game = game, Score = score, Player = player, PowerUps = powerUps, Settings = settings, Audio = audio,
-            Arena = arena, Food = foodSpawner, Leaderboard = leaderboard,
+            Game = game, Config = config, Player = player.Controller, Settings = settings, Audio = audio, Leaderboard = leaderboard,
+            Wildlife = wildlife, Eagle = eagle, DayNight = dayNight, Scent = scent,
             CameraTransform = camGo.transform, MinimapCamera = miniCam, MinimapTexture = minimapTexture
         });
 
@@ -280,10 +262,225 @@ public static class SnakeSceneBuilder
         Debug.Log("Snake3D: сцена собрана и сохранена в " + SCENE_PATH + (_urp ? " (URP)" : " (Built-in)"));
     }
 
+    // ===================== Живность =====================
+
+    /// <summary>Пул животных: каждого вида столько, сколько нужно днём или ночью, плюс запас на улетающих птиц.</summary>
+    private static PreyAnimal[] BuildPreyPool(Transform parent, GameConfig config, int markerLayer)
+    {
+        Material beetleShell = CreateLitMaterial("PreyBeetle", new Color(0.08f, 0.32f, 0.28f), 0.92f);
+        SetEmission(beetleShell, new Color(0.02f, 0.08f, 0.06f));
+        Material dark = CreateLitMaterial("PreyDark", new Color(0.05f, 0.05f, 0.05f), 0.8f);
+        Material mouseFur = CreateLitMaterial("PreyMouse", new Color(0.52f, 0.45f, 0.4f), 0.15f);
+        Material pink = CreateLitMaterial("PreyPink", new Color(0.9f, 0.6f, 0.6f), 0.3f);
+        Material frogSkin = CreateLitMaterial("PreyFrog", new Color(0.32f, 0.62f, 0.18f), 0.75f);
+        Material frogBelly = CreateLitMaterial("PreyFrogBelly", new Color(0.85f, 0.85f, 0.5f), 0.5f);
+        Material birdFeather = CreateLitMaterial("PreyBird", new Color(0.56f, 0.38f, 0.22f), 0.2f);
+        Material birdChest = CreateLitMaterial("PreyBirdChest", new Color(0.86f, 0.74f, 0.58f), 0.2f);
+        Material beak = CreateLitMaterial("PreyBeak", new Color(1f, 0.7f, 0.15f), 0.5f);
+        Material scent = CreateLitMaterial("ScentMark", new Color(0.8f, 1f, 0.3f, 0.35f), 0f);
+        SetEmission(scent, new Color(0.6f, 0.9f, 0.15f));
+        MakeTransparent(scent);
+        Material marker = CreateUnlitMaterial("MarkerPrey", new Color(1f, 0.92f, 0.55f));
+
+        var list = new List<Object>();
+        for (int k = 0; k < 4; k++)
+        {
+            var kind = (PreyKind)k;
+            PreyStats stats = config.GetPrey(kind);
+            int count = Mathf.Max(stats.DayCount, stats.NightCount) + (kind == PreyKind.Bird ? 2 : 1);
+            for (int i = 0; i < count; i++)
+            {
+                var root = new GameObject(kind.ToString());
+                root.transform.SetParent(parent, false);
+                var body = new GameObject("Body").transform;
+                body.SetParent(root.transform, false);
+                Transform leftWing = null, rightWing = null;
+                switch (kind)
+                {
+                    case PreyKind.Beetle: BuildBeetle(body, beetleShell, dark); break;
+                    case PreyKind.Mouse: BuildMouse(body, mouseFur, pink, dark); break;
+                    case PreyKind.Frog: BuildFrog(body, frogSkin, frogBelly, dark); break;
+                    default: BuildBird(body, birdFeather, birdChest, beak, dark, out leftWing, out rightWing); break;
+                }
+
+                // Метка запаха — светящийся столбик над добычей: виден поверх травы и издалека.
+                GameObject mark = CreatePrimitive(PrimitiveType.Cylinder, "ScentMark", root.transform, scent);
+                mark.transform.localPosition = new Vector3(0f, 1.6f, 0f);
+                mark.transform.localScale = new Vector3(0.1f, 1.3f, 0.1f);
+                mark.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
+                mark.SetActive(false);
+                CreateMarker(root.transform, marker, markerLayer, kind == PreyKind.Beetle ? 0.7f : 1.1f);
+
+                foreach (Renderer r in root.GetComponentsInChildren<Renderer>(true))
+                    if (r.gameObject != mark) r.shadowCastingMode = kind == PreyKind.Beetle ? ShadowCastingMode.Off : ShadowCastingMode.On;
+
+                var animal = root.AddComponent<PreyAnimal>();
+                SetEnum(animal, "_kind", k);
+                Wire(animal, ("_body", body), ("_scentMark", mark));
+                if (leftWing != null) Wire(animal, ("_leftWing", leftWing), ("_rightWing", rightWing));
+                if (kind == PreyKind.Frog) SetFloat(animal, "_reactionTime", 0.25f);
+                if (kind == PreyKind.Bird) SetFloat(animal, "_reactionTime", 0.2f);
+                root.SetActive(false);
+                list.Add(animal);
+            }
+        }
+
+        var result = new PreyAnimal[list.Count];
+        for (int i = 0; i < result.Length; i++) result[i] = (PreyAnimal)list[i];
+        return result;
+    }
+
+    private static void BuildBeetle(Transform body, Material shell, Material dark)
+    {
+        Part(PrimitiveType.Sphere, "Shell", body, shell, new Vector3(0f, 0.13f, 0f), new Vector3(0.3f, 0.17f, 0.4f));
+        Part(PrimitiveType.Sphere, "Head", body, dark, new Vector3(0f, 0.1f, 0.21f), new Vector3(0.15f, 0.12f, 0.12f));
+        for (int side = -1; side <= 1; side += 2)
+        {
+            for (int l = 0; l < 3; l++)
+            {
+                GameObject leg = Part(PrimitiveType.Cube, "Leg", body, dark, new Vector3(0.16f * side, 0.05f, -0.1f + l * 0.1f), new Vector3(0.14f, 0.02f, 0.02f));
+                leg.transform.localRotation = Quaternion.Euler(0f, (l - 1) * 25f * side, -20f * side);
+            }
+        }
+    }
+
+    private static void BuildMouse(Transform body, Material fur, Material pink, Material dark)
+    {
+        Part(PrimitiveType.Sphere, "Torso", body, fur, new Vector3(0f, 0.17f, 0f), new Vector3(0.32f, 0.28f, 0.52f));
+        Part(PrimitiveType.Sphere, "Head", body, fur, new Vector3(0f, 0.2f, 0.3f), new Vector3(0.22f, 0.2f, 0.28f));
+        Part(PrimitiveType.Sphere, "Nose", body, pink, new Vector3(0f, 0.19f, 0.45f), Vector3.one * 0.05f);
+        for (int side = -1; side <= 1; side += 2)
+        {
+            Part(PrimitiveType.Sphere, "Ear", body, pink, new Vector3(0.09f * side, 0.32f, 0.24f), new Vector3(0.12f, 0.12f, 0.03f));
+            Part(PrimitiveType.Sphere, "Eye", body, dark, new Vector3(0.075f * side, 0.24f, 0.38f), Vector3.one * 0.045f);
+        }
+        GameObject tail = Part(PrimitiveType.Cylinder, "Tail", body, pink, new Vector3(0f, 0.09f, -0.45f), new Vector3(0.025f, 0.2f, 0.025f));
+        tail.transform.localRotation = Quaternion.Euler(80f, 0f, 0f);
+    }
+
+    private static void BuildFrog(Transform body, Material skin, Material belly, Material dark)
+    {
+        Part(PrimitiveType.Sphere, "Torso", body, skin, new Vector3(0f, 0.15f, 0f), new Vector3(0.46f, 0.28f, 0.44f));
+        Part(PrimitiveType.Sphere, "Belly", body, belly, new Vector3(0f, 0.1f, 0.04f), new Vector3(0.38f, 0.16f, 0.36f));
+        for (int side = -1; side <= 1; side += 2)
+        {
+            Part(PrimitiveType.Sphere, "Eye", body, skin, new Vector3(0.12f * side, 0.29f, 0.12f), Vector3.one * 0.13f);
+            Part(PrimitiveType.Sphere, "Pupil", body, dark, new Vector3(0.13f * side, 0.31f, 0.17f), Vector3.one * 0.06f);
+            GameObject leg = Part(PrimitiveType.Sphere, "Leg", body, skin, new Vector3(0.22f * side, 0.08f, -0.12f), new Vector3(0.16f, 0.12f, 0.32f));
+            leg.transform.localRotation = Quaternion.Euler(0f, 20f * side, 0f);
+        }
+    }
+
+    private static void BuildBird(Transform body, Material feather, Material chest, Material beak, Material dark,
+        out Transform leftWing, out Transform rightWing)
+    {
+        Part(PrimitiveType.Sphere, "Torso", body, feather, new Vector3(0f, 0.3f, 0f), new Vector3(0.3f, 0.3f, 0.48f));
+        Part(PrimitiveType.Sphere, "Chest", body, chest, new Vector3(0f, 0.27f, 0.1f), new Vector3(0.25f, 0.24f, 0.3f));
+        Part(PrimitiveType.Sphere, "Head", body, feather, new Vector3(0f, 0.47f, 0.2f), Vector3.one * 0.22f);
+        Part(PrimitiveType.Cube, "Beak", body, beak, new Vector3(0f, 0.45f, 0.34f), new Vector3(0.05f, 0.05f, 0.12f));
+        GameObject tail = Part(PrimitiveType.Cube, "Tail", body, feather, new Vector3(0f, 0.34f, -0.32f), new Vector3(0.16f, 0.025f, 0.24f));
+        tail.transform.localRotation = Quaternion.Euler(-20f, 0f, 0f);
+        for (int side = -1; side <= 1; side += 2)
+        {
+            Part(PrimitiveType.Sphere, "Eye", body, dark, new Vector3(0.08f * side, 0.5f, 0.27f), Vector3.one * 0.04f);
+            Part(PrimitiveType.Cylinder, "Leg", body, beak, new Vector3(0.06f * side, 0.08f, 0.02f), new Vector3(0.025f, 0.08f, 0.025f));
+        }
+        leftWing = WingPivot(body, "LeftWing", -1, feather);
+        rightWing = WingPivot(body, "RightWing", 1, feather);
+    }
+
+    private static Transform WingPivot(Transform body, string name, int side, Material mat)
+    {
+        var pivot = new GameObject(name).transform;
+        pivot.SetParent(body, false);
+        pivot.localPosition = new Vector3(0.13f * side, 0.36f, 0f);
+        Part(PrimitiveType.Sphere, "Feathers", pivot, mat, new Vector3(0.17f * side, 0f, -0.04f), new Vector3(0.36f, 0.05f, 0.26f));
+        return pivot;
+    }
+
+    /// <summary>Орёл: модель (тело, белая голова, клюв, хвост, крылья на шарнирах), тень на земле и маркер мини-карты.</summary>
+    private static EagleHunter BuildEagle(GameConfig config, GridManager grid, SnakeController target, int markerLayer)
+    {
+        Material feather = CreateLitMaterial("EagleFeather", new Color(0.3f, 0.2f, 0.12f), 0.15f);
+        Material tip = CreateLitMaterial("EagleWingTip", new Color(0.12f, 0.09f, 0.07f), 0.15f);
+        Material white = CreateLitMaterial("EagleWhite", new Color(0.95f, 0.94f, 0.9f), 0.2f);
+        Material beak = CreateLitMaterial("EagleBeak", new Color(1f, 0.78f, 0.15f), 0.5f);
+        Material eye = CreateLitMaterial("SnakePupil", new Color(0.02f, 0.02f, 0.02f), 0.9f);
+
+        var root = new GameObject("Eagle");
+        var model = new GameObject("EagleModel").transform;
+        model.SetParent(root.transform, false);
+        Part(PrimitiveType.Sphere, "Body", model, feather, Vector3.zero, new Vector3(0.6f, 0.55f, 1.4f));
+        Part(PrimitiveType.Sphere, "Head", model, white, new Vector3(0f, 0.16f, 0.78f), Vector3.one * 0.44f);
+        Part(PrimitiveType.Sphere, "Beak", model, beak, new Vector3(0f, 0.08f, 1.04f), new Vector3(0.14f, 0.14f, 0.28f));
+        for (int side = -1; side <= 1; side += 2)
+            Part(PrimitiveType.Sphere, "Eye", model, eye, new Vector3(0.15f * side, 0.24f, 0.92f), Vector3.one * 0.07f);
+        Part(PrimitiveType.Cube, "Tail", model, white, new Vector3(0f, 0f, -0.92f), new Vector3(0.7f, 0.05f, 0.62f));
+
+        Transform[] wings = new Transform[2];
+        for (int w = 0; w < 2; w++)
+        {
+            int side = w == 0 ? -1 : 1;
+            var pivot = new GameObject(side < 0 ? "LeftWing" : "RightWing").transform;
+            pivot.SetParent(model, false);
+            pivot.localPosition = new Vector3(0.24f * side, 0.1f, 0.1f);
+            Part(PrimitiveType.Cube, "Wing", pivot, feather, new Vector3(1.05f * side, 0f, -0.05f), new Vector3(2.1f, 0.07f, 0.8f));
+            GameObject end = Part(PrimitiveType.Cube, "WingTip", pivot, tip, new Vector3(2.35f * side, 0f, -0.18f), new Vector3(0.7f, 0.05f, 0.55f));
+            end.transform.localRotation = Quaternion.Euler(0f, -12f * side, 0f);
+            wings[w] = pivot;
+        }
+        Material redMarker = CreateUnlitMaterial("MarkerEagle", new Color(1f, 0.25f, 0.2f));
+        CreateMarker(model, redMarker, markerLayer, 3f);
+        foreach (Renderer r in model.GetComponentsInChildren<Renderer>(true))
+            if (r.gameObject.layer != markerLayer) r.shadowCastingMode = ShadowCastingMode.Off;
+
+        // Тень — мягкое пятно на земле: при высоком полёте настоящая тень почти не видна.
+        Material shadowMat = CreateLitMaterial("EagleShadow", Color.black, 0f);
+        shadowMat.mainTexture = SaveTexture(CreateBlobTexture(), MATERIALS_FOLDER + "/SoftBlob.asset");
+        MakeTransparent(shadowMat);
+        GameObject shadow = CreatePrimitive(PrimitiveType.Quad, "EagleShadow", root.transform, shadowMat);
+        var shadowRenderer = shadow.GetComponent<Renderer>();
+        shadowRenderer.shadowCastingMode = ShadowCastingMode.Off;
+        shadowRenderer.receiveShadows = false;
+
+        var eagle = root.AddComponent<EagleHunter>();
+        Wire(eagle, ("_config", config), ("_grid", grid), ("_target", target), ("_model", model),
+            ("_leftWing", wings[0]), ("_rightWing", wings[1]), ("_shadow", shadowRenderer));
+        return eagle;
+    }
+
+    /// <summary>Мягкое белое пятно с плавным краем (тень орла).</summary>
+    private static Texture2D CreateBlobTexture()
+    {
+        const int size = 64;
+        var tex = new Texture2D(size, size, TextureFormat.RGBA32, false) { name = "SoftBlob", wrapMode = TextureWrapMode.Clamp };
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                float dx = (x + 0.5f) / size * 2f - 1f;
+                float dy = (y + 0.5f) / size * 2f - 1f;
+                float d = Mathf.Sqrt(dx * dx + dy * dy);
+                float a = Mathf.Clamp01(1f - d);
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, a * a * (3f - 2f * a)));
+            }
+        }
+        tex.Apply();
+        return tex;
+    }
+
+    private static GameObject Part(PrimitiveType type, string name, Transform parent, Material mat, Vector3 localPosition, Vector3 localScale)
+    {
+        GameObject go = CreatePrimitive(type, name, parent, mat);
+        go.transform.localPosition = localPosition;
+        go.transform.localScale = localScale;
+        return go;
+    }
+
     // ===================== Змея =====================
 
-    private static SnakeController BuildSnake(string name, SnakeLook look, bool isPlayer, float speedScale, GameConfig config,
-        GridManager grid, FoodSpawner food, ParticleSystem pieces, Material trailMaterial, int markerLayer)
+    private static SnakeParts BuildSnake(string name, SnakeLook look, bool isPlayer, float speedScale, GameConfig config,
+        GridManager grid, ParticleSystem pieces, Material trailMaterial, int markerLayer)
     {
         var root = new GameObject(name);
         var snake = root.AddComponent<SnakeController>();
@@ -315,7 +512,7 @@ public static class SnakeSceneBuilder
         var bodyMesh = bodyGo.AddComponent<SnakeBodyMesh>();
         Wire(bodyMesh, ("_snake", snake));
 
-        Wire(snake, ("_config", config), ("_grid", grid), ("_food", food), ("_head", head));
+        Wire(snake, ("_config", config), ("_grid", grid), ("_head", head));
         SetBool(snake, "_isPlayer", isPlayer);
         SetFloat(snake, "_speedScale", speedScale);
 
@@ -348,7 +545,7 @@ public static class SnakeSceneBuilder
             Wire(dashTrail, ("_snake", snake));
         }
 
-        return snake;
+        return new SnakeParts { Controller = snake, Animator = animator, Body = bodyMesh };
     }
 
     /// <summary>Жёлтый глаз с вертикальным зрачком-щелью, как у настоящей змеи.</summary>
@@ -400,32 +597,6 @@ public static class SnakeSceneBuilder
         var r = marker.GetComponent<Renderer>();
         r.shadowCastingMode = ShadowCastingMode.Off;
         r.receiveShadows = false;
-    }
-
-    private static SpinnerHazard CreateSpinner(Transform parent, Material beamMat, Material postMat)
-    {
-        var go = new GameObject("Spinner");
-        go.transform.SetParent(parent, false);
-        var spinner = go.AddComponent<SpinnerHazard>();
-
-        GameObject postGo = CreatePrimitive(PrimitiveType.Cylinder, "Post", go.transform, postMat);
-        postGo.transform.localPosition = new Vector3(0f, 0.5f, 0f);
-        postGo.transform.localScale = new Vector3(0.6f, 0.5f, 0.6f);
-        GameObject cap = CreatePrimitive(PrimitiveType.Sphere, "Cap", go.transform, beamMat);
-        cap.transform.localPosition = new Vector3(0f, 1.0f, 0f);
-        cap.transform.localScale = Vector3.one * 0.45f;
-
-        // Длину балки (масштаб по Z корня Beam) задаёт SpinnerHazard.Configure.
-        var beamRoot = new GameObject("Beam").transform;
-        beamRoot.SetParent(go.transform, false);
-        beamRoot.localScale = new Vector3(1f, 1f, 5f);
-        GameObject beamGo = CreatePrimitive(PrimitiveType.Cube, "BeamMesh", beamRoot, beamMat);
-        beamGo.transform.localPosition = new Vector3(0f, 0.3f, 0f);
-        beamGo.transform.localScale = new Vector3(0.3f, 0.3f, 1f);
-
-        Wire(spinner, ("_beam", beamRoot));
-        go.SetActive(false);
-        return spinner;
     }
 
     // ===================== Объекты =====================
@@ -730,7 +901,7 @@ public static class SnakeSceneBuilder
             if (AssetDatabase.LoadAssetAtPath<Material>(path) != null) AssetDatabase.DeleteAsset(path);
         }
 
-        // Текстуры неонового меню больше не используются.
+        // Текстуры неонового меню и старый мрамор колонн больше не используются.
         foreach (string name in new[] { "MenuSky.asset", "MenuSun.asset", "MenuMountains.asset", "MenuGrid.asset",
                      "Rounded.png", "Pill.png", "Circle.png", "SoftShadow.png" })
         {
@@ -781,6 +952,22 @@ public static class SnakeSceneBuilder
         SerializedObject so = FindForWrite(target, field, out SerializedProperty prop);
         if (prop == null) return;
         prop.boolValue = value;
+        so.ApplyModifiedPropertiesWithoutUndo();
+    }
+
+    internal static void SetInt(Object target, string field, int value)
+    {
+        SerializedObject so = FindForWrite(target, field, out SerializedProperty prop);
+        if (prop == null) return;
+        prop.intValue = value;
+        so.ApplyModifiedPropertiesWithoutUndo();
+    }
+
+    private static void SetEnum(Object target, string field, int index)
+    {
+        SerializedObject so = FindForWrite(target, field, out SerializedProperty prop);
+        if (prop == null) return;
+        prop.enumValueIndex = index;
         so.ApplyModifiedPropertiesWithoutUndo();
     }
 

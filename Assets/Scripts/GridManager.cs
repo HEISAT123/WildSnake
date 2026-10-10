@@ -3,8 +3,8 @@ using UnityEngine;
 namespace Snake3D
 {
     /// <summary>
-    /// Логика поля: размеры, препятствия, текущие границы арены, клетки для появления предметов
-    /// и перевод клетка &lt;-&gt; мир. Раскладка препятствий детерминирована сидом.
+    /// Логика поля: размеры, препятствия, заросли высокой травы (укрытия), границы арены, клетки для появления
+    /// добычи и перевод клетка &lt;-&gt; мир. Раскладка детерминирована сидом.
     /// Визуал поля строит BoardView.
     /// </summary>
     public class GridManager : MonoBehaviour
@@ -44,6 +44,13 @@ namespace Snake3D
         [Tooltip("Радиус свободной зоны вокруг точки старта, клеток")]
         [SerializeField, Min(2)] private int _startClearRadius = 6;
 
+        [Header("Высокая трава")]
+        [Tooltip("Количество зарослей высокой травы (укрытий)")]
+        [SerializeField, Min(0)] private int _coverPatchCount = 16;
+
+        [Tooltip("Средний радиус зарослей, клеток")]
+        [SerializeField, Min(0.5f)] private float _coverPatchRadius = 2.6f;
+
         [Header("Предметы")]
         [Tooltip("Минимальный отступ еды и бонусов от границы арены, клеток (чтобы не появлялись в углах)")]
         [SerializeField, Min(0)] private int _itemBorderMargin = 2;
@@ -53,6 +60,7 @@ namespace Snake3D
         private bool[] _occupied;
         private bool[] _nearObstacle;
         private ObstacleType[] _obstacles;
+        private bool[] _cover;
 
         public int Width => _width;
         public int Height => _height;
@@ -86,6 +94,8 @@ namespace Snake3D
                     h = h * 31 + _pillarHeight.GetHashCode();
                     h = h * 31 + _blockHeight.GetHashCode();
                     h = h * 31 + _startClearRadius;
+                    h = h * 31 + _coverPatchCount;
+                    h = h * 31 + _coverPatchRadius.GetHashCode();
                     return h;
                 }
             }
@@ -103,12 +113,15 @@ namespace Snake3D
             _occupied = new bool[n];
             _nearObstacle = new bool[n];
             _obstacles = new ObstacleType[n];
+            _cover = new bool[n];
 
             // System.Random, а не UnityEngine.Random: свой генератор с сидом не сбивает глобальный.
             var rng = new System.Random(_obstacleSeed);
             PlaceObstacles(rng, ObstacleType.Block, _blockCount);
             PlaceObstacles(rng, ObstacleType.Pillar, _pillarCount);
             PlaceObstacles(rng, ObstacleType.LowWall, _lowWallCount);
+            // Траву раскладываем отдельным генератором: изменение зарослей не сдвигает препятствия.
+            PlaceCover(new System.Random(_obstacleSeed * 7 + 13));
 
             for (int y = 0; y < _height; y++)
                 for (int x = 0; x < _width; x++)
@@ -135,6 +148,28 @@ namespace Snake3D
         public void ClearAll()
         {
             System.Array.Clear(_occupied, 0, _occupied.Length);
+        }
+
+        /// <summary>Клетка заросла высокой травой (укрытие от добычи и орла).</summary>
+        public bool IsCover(Vector2Int cell)
+        {
+            return IsInside(cell) && _cover[ToIndex(cell)];
+        }
+
+        public bool IsCoverAt(Vector3 world)
+        {
+            return IsCover(WorldToCell(world));
+        }
+
+        public int CoverCellCount
+        {
+            get
+            {
+                int count = 0;
+                for (int i = 0; i < _cover.Length; i++)
+                    if (_cover[i]) count++;
+                return count;
+            }
         }
 
         public ObstacleType GetObstacle(Vector2Int cell)
@@ -244,6 +279,43 @@ namespace Snake3D
                     for (int x = ox; x < ox + sx; x++)
                         _obstacles[y * _width + x] = type;
                 placed++;
+            }
+        }
+
+        /// <summary>
+        /// Заросли — «кляксы» неровной формы: радиус клетки от центра сравнивается с радиусом,
+        /// который меняется по углу. Центр старта остаётся открытым, чтобы змею было видно сразу.
+        /// </summary>
+        private void PlaceCover(System.Random rng)
+        {
+            float cx = (_width - 1) * 0.5f;
+            float cy = (_height - 1) * 0.5f;
+            float clear = _startClearRadius * 0.5f;
+            for (int p = 0; p < _coverPatchCount; p++)
+            {
+                float px = 3f + (float)rng.NextDouble() * (_width - 7f);
+                float py = 3f + (float)rng.NextDouble() * (_height - 7f);
+                float radius = _coverPatchRadius * (0.7f + (float)rng.NextDouble() * 0.6f);
+                float phase = (float)rng.NextDouble() * 6.283f;
+                int r = Mathf.CeilToInt(radius * 1.4f);
+                for (int y = Mathf.FloorToInt(py) - r; y <= Mathf.CeilToInt(py) + r; y++)
+                {
+                    for (int x = Mathf.FloorToInt(px) - r; x <= Mathf.CeilToInt(px) + r; x++)
+                    {
+                        if (x < 1 || x >= _width - 1 || y < 1 || y >= _height - 1) continue;
+                        int i = y * _width + x;
+                        if (_obstacles[i] != ObstacleType.None) continue;
+                        float dx = x - px;
+                        float dy = y - py;
+                        float angle = Mathf.Atan2(dy, dx);
+                        float edge = radius * (1f + 0.3f * Mathf.Sin(angle * 3f + phase));
+                        if (dx * dx + dy * dy > edge * edge) continue;
+                        float sx = x - cx;
+                        float sy = y - cy;
+                        if (sx * sx + sy * sy < clear * clear) continue;
+                        _cover[i] = true;
+                    }
+                }
             }
         }
 

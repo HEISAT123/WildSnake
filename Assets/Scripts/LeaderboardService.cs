@@ -2,49 +2,47 @@ using UnityEngine;
 
 namespace Snake3D
 {
-    /// <summary>Таблицы рекордов по режимам, хранятся в PlayerPrefs.</summary>
+    /// <summary>Таблица рекордов выживания, хранится в PlayerPrefs.</summary>
     public class LeaderboardService : MonoBehaviour
     {
         [Header("Сохранение")]
-        [Tooltip("Префикс ключей PlayerPrefs")]
-        [SerializeField] private string _keyPrefix = "Snake3D.Leaderboard.";
+        [Tooltip("Ключ PlayerPrefs")]
+        [SerializeField] private string _key = "Snake3D.Survival.Leaderboard";
 
-        private const int MODE_COUNT = 3;
+        private Leaderboard _board;
 
-        private readonly Leaderboard[] _boards = new Leaderboard[MODE_COUNT];
+        public Leaderboard Board
+        {
+            get
+            {
+                EnsureLoaded();
+                return _board;
+            }
+        }
+
+        public int BestSeconds => Board.BestSeconds;
 
         private void Awake()
         {
-            for (int i = 0; i < MODE_COUNT; i++)
-                _boards[i] = Leaderboard.Parse(PlayerPrefs.GetString(Key((GameMode)i), string.Empty));
+            EnsureLoaded();
         }
 
-        public Leaderboard GetBoard(GameMode mode)
+        /// <summary>Записать результат. Возвращает место (0 — первое) или -1.</summary>
+        public int Submit(LeaderboardEntry entry)
         {
-            return _boards[(int)mode];
-        }
-
-        public int Best(GameMode mode)
-        {
-            return _boards[(int)mode].BestScore;
-        }
-
-        /// <summary>Записать результат партии. Возвращает место (0 — первое) или -1.</summary>
-        public int Submit(GameMode mode, LeaderboardEntry entry)
-        {
-            Leaderboard board = _boards[(int)mode];
-            int rank = board.Insert(entry);
+            int rank = Board.Insert(entry);
             if (rank >= 0)
             {
-                PlayerPrefs.SetString(Key(mode), board.Serialize());
+                PlayerPrefs.SetString(_key, _board.Serialize());
                 PlayerPrefs.Save();
             }
             return rank;
         }
 
-        private string Key(GameMode mode)
+        // Таблицу могут запросить раньше нашего Awake (порядок Awake между объектами не задан).
+        private void EnsureLoaded()
         {
-            return _keyPrefix + mode;
+            if (_board == null) _board = Leaderboard.Parse(PlayerPrefs.GetString(_key, string.Empty));
         }
     }
 }

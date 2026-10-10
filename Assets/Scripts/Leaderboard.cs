@@ -5,9 +5,9 @@ using System.Text;
 namespace Snake3D
 {
     /// <summary>
-    /// Таблица из 10 лучших результатов, отсортированная по очкам.
+    /// Таблица из 10 самых долгих жизней змеи. При равном времени выше та, что поймала больше добычи.
     /// Обычный C#-класс без зависимостей от Unity — легко тестировать.
-    /// Формат строки: "очки,длина,время,яблоки;очки,длина,время,яблоки;..."
+    /// Формат строки: "секунды,добыча,длина,линьки;секунды,добыча,длина,линьки;..."
     /// </summary>
     public class Leaderboard
     {
@@ -17,14 +17,14 @@ namespace Snake3D
 
         public IReadOnlyList<LeaderboardEntry> Entries => _entries;
         public int Count => _entries.Count;
-        public int BestScore => _entries.Count > 0 ? _entries[0].Score : 0;
+        public int BestSeconds => _entries.Count > 0 ? _entries[0].Seconds : 0;
 
         /// <summary>Добавить результат. Возвращает место (0 — первое) или -1, если в таблицу не попал.</summary>
         public int Insert(LeaderboardEntry entry)
         {
             int index = 0;
-            // При равных очках новый результат ниже старого: старый рекорд был поставлен раньше.
-            while (index < _entries.Count && _entries[index].Score >= entry.Score) index++;
+            // При полном равенстве новый результат ниже старого: старый рекорд был поставлен раньше.
+            while (index < _entries.Count && !IsBetter(entry, _entries[index])) index++;
             if (index >= MAX_ENTRIES) return -1;
 
             _entries.Insert(index, entry);
@@ -44,10 +44,10 @@ namespace Snake3D
             {
                 LeaderboardEntry e = _entries[i];
                 if (i > 0) sb.Append(';');
-                sb.Append(e.Score.ToString(CultureInfo.InvariantCulture)).Append(',')
+                sb.Append(e.Seconds.ToString(CultureInfo.InvariantCulture)).Append(',')
+                  .Append(e.Prey.ToString(CultureInfo.InvariantCulture)).Append(',')
                   .Append(e.Length.ToString("0.##", CultureInfo.InvariantCulture)).Append(',')
-                  .Append(e.Time.ToString("0.#", CultureInfo.InvariantCulture)).Append(',')
-                  .Append(e.Apples.ToString(CultureInfo.InvariantCulture));
+                  .Append(e.Molts.ToString(CultureInfo.InvariantCulture));
             }
             return sb.ToString();
         }
@@ -63,13 +63,19 @@ namespace Snake3D
             {
                 string[] parts = rows[i].Split(',');
                 if (parts.Length != 4) continue;
-                if (!int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int score)) continue;
-                if (!float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float length)) continue;
-                if (!float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float time)) continue;
-                if (!int.TryParse(parts[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out int apples)) continue;
-                board.Insert(new LeaderboardEntry(score, length, time, apples));
+                if (!int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int seconds)) continue;
+                if (!int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int prey)) continue;
+                if (!float.TryParse(parts[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float length)) continue;
+                if (!int.TryParse(parts[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out int molts)) continue;
+                board.Insert(new LeaderboardEntry(seconds, prey, length, molts));
             }
             return board;
+        }
+
+        private static bool IsBetter(LeaderboardEntry a, LeaderboardEntry b)
+        {
+            if (a.Seconds != b.Seconds) return a.Seconds > b.Seconds;
+            return a.Prey > b.Prey;
         }
     }
 }

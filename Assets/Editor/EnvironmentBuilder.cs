@@ -5,8 +5,9 @@ using UnityEngine;
 using UnityEngine.Rendering;
 
 /// <summary>
-/// Окружение вокруг арены: процедурное небо, рельеф с холмами, горами и озером, лес, камни, кусты,
-/// трава, цветы, фонари, облака и пыльца в воздухе. Плюс текстурированные материалы самой арены.
+/// Окружение вокруг арены: процедурное небо, звёзды, рельеф с холмами, горами и озером, лес, камни, кусты,
+/// трава, цветы, фонари, облака и пыльца (ночью — светлячки). Плюс материалы и меши самой арены:
+/// брёвна, деревья, валуны и заросли высокой травы.
 /// Всё строится кодом из примитивов и сгенерированных мешей/текстур, вызывается SnakeSceneBuilder.
 /// </summary>
 public static class EnvironmentBuilder
@@ -19,14 +20,18 @@ public static class EnvironmentBuilder
     private const float FLAT_HEIGHT = -0.22f;
     private const float WATER_HEIGHT = -0.75f;
 
-    /// <summary>Текстурированные материалы арены для BoardView.</summary>
+    /// <summary>Материалы и меши арены для BoardView.</summary>
     public sealed class ArenaMaterials
     {
         public Material Floor;
         public Material Wall;
         public Material LowWall;
-        public Material Pillar;
+        public Material Bark;
+        public Material StumpTop;
         public Material Block;
+        public Material TallGrass;
+        public Mesh RockMesh;
+        public Mesh TuftMesh;
     }
 
     private static Vector3 _center;
@@ -43,16 +48,25 @@ public static class EnvironmentBuilder
         ProceduralTextures.GrassFloor(256, out Texture2D grass, out Texture2D grassN);
         ProceduralTextures.StoneBricks(256, out Texture2D bricks, out Texture2D bricksN);
         ProceduralTextures.Rock(256, out Texture2D rock, out Texture2D rockN);
-        ProceduralTextures.Marble(256, out Texture2D marble, out Texture2D marbleN);
-
         var m = new ArenaMaterials
         {
             Floor = Textured("Floor", Color.white, 0.12f, Save(grass), Save(grassN), 0.8f),
             Wall = Textured("Wall", Color.white, 0.2f, Save(bricks), Save(bricksN), 1.2f),
             LowWall = Textured("ObstacleLowWall", new Color(1f, 0.95f, 0.88f), 0.15f, Save(rock), Save(rockN), 1.2f),
-            Pillar = Textured("ObstaclePillar", Color.white, 0.55f, Save(marble), Save(marbleN), 0.6f),
-            Block = Textured("ObstacleBlock", new Color(0.85f, 0.82f, 0.9f), 0.15f, rock, rockN, 1.2f)
+            Block = Textured("ObstacleBlock", new Color(0.78f, 0.78f, 0.74f), 0.15f, rock, rockN, 1.2f),
+            Bark = SnakeSceneBuilder.CreateLitMaterial("Bark", Color.white, 0.05f),
+            StumpTop = SnakeSceneBuilder.CreateLitMaterial("StumpTop", new Color(0.78f, 0.62f, 0.42f), 0.1f),
+            TallGrass = SnakeSceneBuilder.CreateLitMaterial("TallGrass", new Color(0.6f, 0.78f, 0.4f), 0.05f),
+            // Свои имена мешей и текстур: окружение ниже пересохраняет Boulder*, GrassBlades и т. п.,
+            // а пересохранение удаляет старый ассет — ссылки поля потерялись бы.
+            RockMesh = SaveMesh(ProceduralMeshes.Blob("ArenaRock", 2, 0.45f, 211), "ArenaRock"),
+            TuftMesh = SaveMesh(ProceduralMeshes.GrassTuft("TallGrassTuft"), "TallGrassTuft")
         };
+        m.Bark.mainTexture = Save(ProceduralTextures.Bark(128));
+        Texture2D blades = ProceduralTextures.GrassBlades(128);
+        blades.name = "TallGrassBlades";
+        m.TallGrass.mainTexture = Save(blades);
+        MakeCutout(m.TallGrass);
         // Стены — длинные кубы: повторяем кладку вдоль, иначе кирпичи растянутся на всю длину.
         m.Wall.mainTextureScale = new Vector2(24f, 0.6f);
         return m;
@@ -94,7 +108,8 @@ public static class EnvironmentBuilder
 
     // ===================== Окружение =====================
 
-    public static void Build(GridManager grid, Material particleMaterial)
+    /// <summary>Строит окружение; pollen — пыльца (ночью DayNightCycle делает её светлячками), stars — звёздное небо.</summary>
+    public static void Build(GridManager grid, Material particleMaterial, out ParticleSystem pollen, out Renderer stars, out Transform clouds)
     {
         EnsureFolders();
         _center = grid.Center;
@@ -112,8 +127,72 @@ public static class EnvironmentBuilder
         BuildBushes(root, rng);
         BuildGrassAndFlowers(root, rng);
         BuildLanterns(root, grid);
-        BuildClouds(root, rng);
-        BuildPollen(root, particleMaterial);
+        clouds = BuildClouds(root, rng);
+        pollen = BuildPollen(root, particleMaterial);
+        stars = BuildStars(root, rng);
+    }
+
+    /// <summary>
+    /// Звёзды — сотни маленьких квадов на далёкой полусфере в одном меше. Материал без тумана и освещения;
+    /// прозрачность меняет DayNightCycle (днём звёзд нет).
+    /// </summary>
+    private static Renderer BuildStars(Transform root, System.Random rng)
+    {
+        const int count = 900;
+        const float radius = 420f;
+        var verts = new List<Vector3>(count * 4);
+        var uvs = new List<Vector2>(count * 4);
+        var colors = new List<Color>(count * 4);
+        var tris = new List<int>(count * 6);
+        for (int i = 0; i < count; i++)
+        {
+            // Равномерно по верхней полусфере, но не у самого горизонта — там их скрыл бы туман.
+            float y = Lerp(rng, 0.12f, 1f);
+            float a = Lerp(rng, 0f, Mathf.PI * 2f);
+            float r = Mathf.Sqrt(1f - y * y);
+            var dir = new Vector3(Mathf.Cos(a) * r, y, Mathf.Sin(a) * r);
+            Vector3 c = dir * radius;
+            Vector3 right = Vector3.Cross(Vector3.up, dir).normalized;
+            if (right.sqrMagnitude < 0.01f) right = Vector3.right;
+            Vector3 up = Vector3.Cross(dir, right);
+            float size = Lerp(rng, 0.9f, 2.6f) * (rng.NextDouble() < 0.06 ? 1.8f : 1f);
+            float warmth = Lerp(rng, -1f, 1f);
+            var tint = new Color(1f - Mathf.Max(0f, -warmth) * 0.25f, 0.95f, 1f - Mathf.Max(0f, warmth) * 0.3f, Lerp(rng, 0.45f, 1f));
+
+            int b = verts.Count;
+            verts.Add(c + (-right - up) * size);
+            verts.Add(c + (right - up) * size);
+            verts.Add(c + (right + up) * size);
+            verts.Add(c + (-right + up) * size);
+            uvs.Add(new Vector2(0f, 0f)); uvs.Add(new Vector2(1f, 0f)); uvs.Add(new Vector2(1f, 1f)); uvs.Add(new Vector2(0f, 1f));
+            for (int k = 0; k < 4; k++) colors.Add(tint);
+            tris.Add(b); tris.Add(b + 2); tris.Add(b + 1);
+            tris.Add(b); tris.Add(b + 3); tris.Add(b + 2);
+        }
+
+        var mesh = new Mesh { name = "Stars" };
+        mesh.SetVertices(verts);
+        mesh.SetUVs(0, uvs);
+        mesh.SetColors(colors);
+        mesh.SetTriangles(tris, 0);
+        mesh.RecalculateBounds();
+        SaveMesh(mesh, "Stars");
+
+        Material mat = SnakeSceneBuilder.LoadOrCreateMaterial("Stars", Shader.Find("Sprites/Default"));
+        var dot = AssetDatabase.GetBuiltinExtraResource<Texture2D>("Default-Particle.psd");
+        if (dot != null) mat.mainTexture = dot;
+        mat.color = new Color(1f, 1f, 1f, 0f);
+        EditorUtility.SetDirty(mat);
+
+        var go = new GameObject("Stars");
+        go.transform.SetParent(root, false);
+        go.transform.position = _center;
+        go.AddComponent<MeshFilter>().sharedMesh = mesh;
+        var renderer = go.AddComponent<MeshRenderer>();
+        renderer.sharedMaterial = mat;
+        renderer.shadowCastingMode = ShadowCastingMode.Off;
+        renderer.receiveShadows = false;
+        return renderer;
     }
 
     /// <summary>
@@ -365,10 +444,11 @@ public static class EnvironmentBuilder
         glow.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
     }
 
-    private static void BuildClouds(Transform root, System.Random rng)
+    private static Transform BuildClouds(Transform root, System.Random rng)
     {
         Mesh cloudMesh = SaveMesh(ProceduralMeshes.Blob("CloudPuff", 2, 0.25f, 31), "CloudPuff");
         Material cloud = SnakeSceneBuilder.CreateLitMaterial("Cloud", new Color(0.97f, 0.97f, 1f), 0f);
+        // Подсветка снизу, чтобы облака были белыми, а не серыми; ночью её гасит DayNightCycle.
         SnakeSceneBuilder.SetEmission(cloud, new Color(0.45f, 0.46f, 0.5f));
 
         var layer = new GameObject("Clouds");
@@ -390,10 +470,11 @@ public static class EnvironmentBuilder
                 puff.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
             }
         }
+        return layer.transform;
     }
 
     /// <summary>Пыльца и светлячки, медленно плавающие над ареной.</summary>
-    private static void BuildPollen(Transform root, Material particleMaterial)
+    private static ParticleSystem BuildPollen(Transform root, Material particleMaterial)
     {
         var go = new GameObject("Pollen");
         go.transform.SetParent(root, false);
@@ -436,6 +517,7 @@ public static class EnvironmentBuilder
         var renderer = go.GetComponent<ParticleSystemRenderer>();
         renderer.sharedMaterial = particleMaterial;
         renderer.shadowCastingMode = ShadowCastingMode.Off;
+        return ps;
     }
 
     // ===================== Утилиты =====================

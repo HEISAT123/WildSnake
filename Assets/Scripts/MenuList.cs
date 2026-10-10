@@ -7,7 +7,7 @@ namespace Snake3D
     /// <summary>
     /// Список пунктов в стиле интерфейса игры: выбор стрелками/W-S и мышью, Enter/Space — нажать.
     /// Выбранный пункт выезжает вправо, у него горит акцентная полоса и номер; при показе
-    /// строки появляются лесенкой. Используется в главном меню, на паузе и в итогах.
+    /// строки появляются лесенкой. Используется в главном меню, на паузе, на линьке и в итогах.
     /// Нажатия передаются кнопкам (их onClick обрабатывает UIController).
     /// </summary>
     public class MenuList : MonoBehaviour
@@ -16,8 +16,11 @@ namespace Snake3D
         [Tooltip("Звук перемещения по списку")]
         [SerializeField] private AudioService _audio;
 
-        [Tooltip("Таблицы рекордов — для подписей «рекорд» у режимов (необязательно)")]
+        [Tooltip("Таблица рекордов — для подписи «рекорд» у пункта «Выживание» (необязательно)")]
         [SerializeField] private LeaderboardService _leaderboard;
+
+        [Tooltip("Длина суток — рекорд показывается в сутках (нужен, если есть подписи рекордов)")]
+        [SerializeField] private GameConfig _config;
 
         [Tooltip("Прозрачность всего экрана — для плавного появления (необязательно)")]
         [SerializeField] private CanvasGroup _group;
@@ -38,7 +41,7 @@ namespace Snake3D
         [Tooltip("Номера пунктов «01», «02»… (могут быть пустыми)")]
         [SerializeField] private Text[] _indexes = new Text[0];
 
-        [Tooltip("Подписи «рекорд» у первых пунктов-режимов (по порядку GameMode)")]
+        [Tooltip("Подписи «рекорд» у пунктов (необязательно)")]
         [SerializeField] private Text[] _records = new Text[0];
 
         [Header("Вид")]
@@ -123,8 +126,8 @@ namespace Snake3D
             EventSystem es = EventSystem.current;
             if (es != null && es.currentSelectedGameObject != null) es.SetSelectedGameObject(null);
 
-            if (GameInput.MenuUp) Select((_selected - 1 + _items.Length) % _items.Length, true);
-            else if (GameInput.MenuDown) Select((_selected + 1) % _items.Length, true);
+            if (GameInput.MenuUp) Select(Step(-1), true);
+            else if (GameInput.MenuDown) Select(Step(1), true);
             else if (GameInput.Confirm) _items[_selected].onClick.Invoke();
         }
 
@@ -146,13 +149,23 @@ namespace Snake3D
 
         private void RefreshRecords()
         {
-            if (_leaderboard == null) return;
-            for (int m = 0; m < _records.Length; m++)
+            if (_leaderboard == null || _config == null) return;
+            int best = _leaderboard.BestSeconds;
+            string text = best > 0 ? "РЕКОРД  " + TimeFormat.Days(best, _config.DaySeconds + _config.NightSeconds) + " СУТ." : "—";
+            for (int i = 0; i < _records.Length; i++)
+                if (_records[i] != null) _records[i].text = text;
+        }
+
+        /// <summary>Следующий видимый пункт: скрытые (на линьке бывает меньше трёх вариантов) пропускаем.</summary>
+        private int Step(int direction)
+        {
+            int index = _selected;
+            for (int i = 0; i < _items.Length; i++)
             {
-                if (_records[m] == null) continue;
-                int best = _leaderboard.Best((GameMode)m);
-                _records[m].text = best > 0 ? "РЕКОРД  " + best : "—";
+                index = (index + direction + _items.Length) % _items.Length;
+                if (_items[index].gameObject.activeSelf) return index;
             }
+            return _selected;
         }
 
         private void OnItemHovered(int index)

@@ -50,6 +50,12 @@ namespace Snake3D
             SetTongue(0f);
         }
 
+        /// <summary>Высунуть язык прямо сейчас (змея нюхает).</summary>
+        public void Flick()
+        {
+            if (_tongueTime < 0f) _tongueTime = 0f;
+        }
+
         private void Update()
         {
             float dt = Time.deltaTime;

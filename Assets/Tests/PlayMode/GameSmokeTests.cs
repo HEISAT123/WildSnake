@@ -7,8 +7,8 @@ using UnityEngine.TestTools;
 namespace Snake3D.Tests
 {
     /// <summary>
-    /// Дымовые тесты сцены: каждый режим запускается и живёт пару секунд без ошибок в логе
-    /// (Test Framework валит тест на LogType.Error/Exception), меню и Resume не ломают состояние.
+    /// Дымовые тесты сцены: партия, меню с живым фоном, ночь — всё живёт несколько секунд без ошибок в логе
+    /// (Test Framework валит тест на LogType.Error/Exception); меню и Resume не ломают состояние.
     /// </summary>
     public class GameSmokeTests
     {
@@ -47,35 +47,57 @@ namespace Snake3D.Tests
         }
 
         [UnityTest]
-        public IEnumerator Classic_RunsWithoutErrors()
+        public IEnumerator Menu_LiveBackground_RunsWithoutErrors()
         {
-            yield return RunMode(GameMode.Classic);
-            if (_game.State == GameState.Playing)
-                Assert.Greater(_game.Stats.Time, 0f, "Время партии не идёт");
+            yield return new WaitForSeconds(3f);
+            Assert.AreEqual(GameState.Menu, _game.State, "Игра сама вышла из меню");
         }
 
         [UnityTest]
-        public IEnumerator TimeAttack_RunsWithoutErrors()
+        public IEnumerator Survival_RunsWithoutErrors_AndHungerGrows()
         {
-            float before = -1f;
-            yield return RunMode(GameMode.TimeAttack, () => before = _game.TimeLeft);
-            Assert.IsTrue(_game.IsTimed);
-            Assert.Greater(before, 0f, "Таймер режима «На время» не выставлен");
-            if (_game.State == GameState.Playing)
-                Assert.Less(_game.TimeLeft, before, "Таймер режима «На время» не уменьшается");
+            _game.StartGame();
+            Assert.AreEqual(GameState.Playing, _game.State);
+            Assert.AreEqual(1f, Time.timeScale);
+            float startSatiety = _game.Survival.Satiety;
+
+            yield return new WaitForSeconds(RUN_SECONDS);
+
+            Assert.That(_game.State, Is.EqualTo(GameState.Playing).Or.EqualTo(GameState.GameOver).Or.EqualTo(GameState.Molting));
+            Assert.Greater(_game.Stats.Time, 0f, "Время жизни не идёт");
+            Assert.Less(_game.Survival.Satiety, startSatiety + 30f, "Сытость не должна расти сама по себе");
         }
 
         [UnityTest]
-        public IEnumerator Survival_RunsWithoutErrors()
+        public IEnumerator Wildlife_IsPopulated()
         {
-            yield return RunMode(GameMode.Survival);
-            Assert.IsFalse(_game.IsTimed);
+            _game.StartGame();
+            yield return null;
+
+            var wildlife = Object.FindAnyObjectByType<WildlifeManager>();
+            Assert.IsNotNull(wildlife, "В сцене нет живности");
+            int active = 0;
+            for (int i = 0; i < wildlife.AnimalCount; i++)
+                if (wildlife.GetAnimal(i).IsActive) active++;
+            Assert.Greater(active, 5, "На арене должна быть добыча");
+        }
+
+        [UnityTest]
+        public IEnumerator Night_RunsWithoutErrors()
+        {
+            _game.StartGame();
+            var dayNight = Object.FindAnyObjectByType<DayNightCycle>();
+            Assert.IsNotNull(dayNight);
+            dayNight.SetPhase(0.9f);
+            Assert.IsTrue(dayNight.IsNight);
+            yield return new WaitForSeconds(1.5f);
+            Assert.That(_game.State, Is.EqualTo(GameState.Playing).Or.EqualTo(GameState.GameOver).Or.EqualTo(GameState.Molting));
         }
 
         [UnityTest]
         public IEnumerator Resume_WhilePlaying_DoesNothing()
         {
-            _game.StartGame(GameMode.Classic);
+            _game.StartGame();
             yield return null;
             _game.Resume();
             Assert.AreEqual(GameState.Playing, _game.State);
@@ -96,7 +118,7 @@ namespace Snake3D.Tests
         [UnityTest]
         public IEnumerator OpenMenu_AfterStart_ReturnsToMenu()
         {
-            _game.StartGame(GameMode.Classic);
+            _game.StartGame();
             yield return new WaitForSeconds(0.5f);
 
             _game.OpenMenu();
@@ -109,47 +131,16 @@ namespace Snake3D.Tests
         }
 
         [UnityTest]
-        public IEnumerator Restart_FromAnyMode_StartsPlaying()
+        public IEnumerator Restart_ResetsRun()
         {
-            _game.StartGame(GameMode.Survival);
+            _game.StartGame();
             yield return new WaitForSeconds(0.5f);
             _game.Restart();
             Assert.AreEqual(GameState.Playing, _game.State);
-            Assert.AreEqual(GameMode.Survival, _game.Mode);
-            Assert.AreEqual(1, _game.Level);
             Assert.AreEqual(-1, _game.LastRank);
+            Assert.AreEqual(0, _game.Stats.Prey);
+            Assert.AreEqual(_game.Survival.MaxHealth, _game.Survival.Health);
             yield return new WaitForSeconds(0.5f);
-        }
-
-        [UnityTest]
-        public IEnumerator SwitchingModes_InSequence_WorksWithoutErrors()
-        {
-            GameMode[] modes = { GameMode.Classic, GameMode.TimeAttack, GameMode.Survival, GameMode.Classic };
-            foreach (GameMode mode in modes)
-            {
-                _game.StartGame(mode);
-                Assert.AreEqual(mode, _game.Mode);
-                Assert.AreEqual(GameState.Playing, _game.State);
-                yield return new WaitForSeconds(0.5f);
-                _game.OpenMenu();
-                Assert.AreEqual(GameState.Menu, _game.State);
-                yield return null;
-            }
-        }
-
-        private IEnumerator RunMode(GameMode mode, System.Action afterStart = null)
-        {
-            _game.StartGame(mode);
-            Assert.AreEqual(mode, _game.Mode);
-            Assert.AreEqual(GameState.Playing, _game.State);
-            Assert.AreEqual(1f, Time.timeScale);
-            Assert.AreEqual(1, _game.Level);
-            afterStart?.Invoke();
-
-            yield return new WaitForSeconds(RUN_SECONDS);
-
-            Assert.That(_game.State, Is.EqualTo(GameState.Playing).Or.EqualTo(GameState.GameOver),
-                $"Неожиданное состояние после {RUN_SECONDS} с в режиме {mode}");
         }
     }
 }

@@ -18,6 +18,7 @@ namespace Snake3D
         public static bool Dash => Input.GetKeyDown(KeyCode.LeftShift) || Input.GetKeyDown(KeyCode.RightShift);
         public static bool Pause => Input.GetKeyDown(KeyCode.Escape);
         public static bool Restart => Input.GetKeyDown(KeyCode.R);
+        public static bool Smell => Input.GetKeyDown(KeyCode.E) || Input.GetMouseButtonDown(1);
         public static bool ToggleFullscreen => Input.GetKeyDown(KeyCode.F11);
         public static bool Confirm => Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter);
         public static bool MenuUp => Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W);
@@ -30,6 +31,7 @@ namespace Snake3D
         public static bool Dash => K != null && (K.leftShiftKey.wasPressedThisFrame || K.rightShiftKey.wasPressedThisFrame);
         public static bool Pause => K != null && K.escapeKey.wasPressedThisFrame;
         public static bool Restart => K != null && K.rKey.wasPressedThisFrame;
+        public static bool Smell => (K != null && K.eKey.wasPressedThisFrame) || (Mouse.current != null && Mouse.current.rightButton.wasPressedThisFrame);
         public static bool ToggleFullscreen => K != null && K.f11Key.wasPressedThisFrame;
         public static bool Confirm => K != null && (K.spaceKey.wasPressedThisFrame || K.enterKey.wasPressedThisFrame || K.numpadEnterKey.wasPressedThisFrame);
         public static bool MenuUp => K != null && (K.upArrowKey.wasPressedThisFrame || K.wKey.wasPressedThisFrame);
@@ -41,6 +43,7 @@ namespace Snake3D
         public static bool Dash => false;
         public static bool Pause => false;
         public static bool Restart => false;
+        public static bool Smell => false;
         public static bool ToggleFullscreen => false;
         public static bool Confirm => false;
         public static bool MenuUp => false;

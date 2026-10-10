@@ -4,9 +4,10 @@ using UnityEngine.Rendering;
 namespace Snake3D
 {
     /// <summary>
-    /// Визуал поля: пол одним объектом с шахматной текстурой, земля вокруг, стены по периметру
-    /// и препятствия из раскладки GridManager. Строится один раз (в редакторе SnakeSceneBuilder'ом
-    /// или в Start, если раскладку поменяли в инспекторе).
+    /// Визуал поля: пол одним объектом, стены по периметру и «дикие» препятствия из раскладки GridManager:
+    /// низкие стенки — поваленные брёвна, колонны — сломанные пни и стоячие камни, блоки — валуны;
+    /// плюс заросли высокой травы.
+    /// Строится один раз (в редакторе SnakeSceneBuilder'ом или в Start, если раскладку поменяли в инспекторе).
     /// </summary>
     public class BoardView : MonoBehaviour
     {
@@ -24,14 +25,29 @@ namespace Snake3D
         [Tooltip("Стены по периметру")]
         [SerializeField] private Material _wallMaterial;
 
-        [Tooltip("Низкие стенки (перепрыгиваемые)")]
+        [Tooltip("Парапет стен")]
         [SerializeField] private Material _lowWallMaterial;
 
-        [Tooltip("Колонны")]
-        [SerializeField] private Material _pillarMaterial;
+        [Tooltip("Кора: брёвна и пни")]
+        [SerializeField] private Material _barkMaterial;
 
-        [Tooltip("Большие блоки")]
+        [Tooltip("Светлый спил на верхушке пня")]
+        [SerializeField] private Material _stumpTopMaterial;
+
+        [Tooltip("Валуны")]
         [SerializeField] private Material _blockMaterial;
+
+        [Tooltip("Высокая трава (укрытия)")]
+        [SerializeField] private Material _tallGrassMaterial;
+
+        [Header("Меши")]
+        [Tooltip("Меш валуна")]
+        [SerializeField] private Mesh _rockMesh;
+
+        [Tooltip("Меш пучка травы")]
+        [SerializeField] private Mesh _grassTuftMesh;
+
+
 
         [Header("Размеры")]
         [Tooltip("Толщина пола")]
@@ -45,6 +61,15 @@ namespace Snake3D
 
         [Tooltip("Насколько земля выходит за поле, клеток")]
         [SerializeField, Min(0f)] private float _groundPadding = 40f;
+
+        [Tooltip("Высота пня, клеток")]
+        [SerializeField, Min(0.5f)] private float _stumpHeight = 1.5f;
+
+        [Tooltip("Пучков высокой травы на клетку укрытия")]
+        [SerializeField, Range(1, 6)] private int _tuftsPerCell = 3;
+
+        [Tooltip("Высота высокой травы, клеток (ниже камеры, чтобы не закрывала змею)")]
+        [SerializeField, Min(0.2f)] private float _tallGrassHeight = 0.85f;
 
         // Запоминаем, для какой раскладки построено поле, чтобы не пересоздавать его без нужды.
         [SerializeField, HideInInspector] private int _builtLayoutVersion;
@@ -74,6 +99,7 @@ namespace Snake3D
             BuildFloor(cs);
             BuildWalls(cs);
             BuildObstacles(cs);
+            BuildTallGrass(cs);
 
             _builtLayoutVersion = _grid.LayoutVersion;
             _isBuilt = true;
@@ -140,32 +166,177 @@ namespace Snake3D
                 {
                     var cell = new Vector2Int(x, y);
                     ObstacleType type = _grid.GetObstacle(cell);
-                    if (type == ObstacleType.None) continue;
-
-                    float h = _grid.GetObstacleHeight(cell);
-                    Vector3 basePos = _grid.CellToWorld(cell);
                     switch (type)
                     {
                         case ObstacleType.Pillar:
-                        {
-                            // Античная колонна: база, ствол (цилиндр Unity высотой 2 при scale.y = 1) и капитель.
-                            float d = _grid.GetObstacleHalfSize(cell) * 2f;
-                            float plinth = 0.14f * cs;
-                            CreateShape(PrimitiveType.Cube, "PillarBase", basePos + Vector3.up * (plinth * 0.5f), new Vector3(d * 1.25f, plinth, d * 1.25f), _pillarMaterial);
-                            CreateShape(PrimitiveType.Cylinder, "Pillar", basePos + Vector3.up * (h * 0.5f), new Vector3(d * 0.85f, h * 0.5f, d * 0.85f), _pillarMaterial);
-                            CreateShape(PrimitiveType.Cylinder, "PillarNeck", basePos + Vector3.up * (h - plinth * 1.4f), new Vector3(d, plinth * 0.4f, d), _pillarMaterial);
-                            CreateShape(PrimitiveType.Cube, "PillarCapital", basePos + Vector3.up * (h - plinth * 0.5f), new Vector3(d * 1.25f, plinth, d * 1.25f), _pillarMaterial);
+                            if (Hash(x, y) < 0.55f) BuildStump(cell, cs);
+                            else BuildStandingStone(cell, cs);
                             break;
-                        }
                         case ObstacleType.Block:
-                            CreateShape(PrimitiveType.Cube, "Block", basePos + Vector3.up * (h * 0.5f), new Vector3(cs, h, cs), _blockMaterial);
+                            // Блок 2x2 — один валун, строим его от левой нижней клетки.
+                            if (!IsType(x - 1, y, type) && !IsType(x, y - 1, type)) BuildBoulder(cell, cs);
                             break;
-                        default:
-                            CreateShape(PrimitiveType.Cube, "LowWall", basePos + Vector3.up * (h * 0.5f), new Vector3(cs * 0.96f, h, cs * 0.96f), _lowWallMaterial);
+                        case ObstacleType.LowWall:
+                            BuildLogFrom(x, y, cs);
                             break;
                     }
                 }
             }
+        }
+
+        /// <summary>Сломанный пень: толстый ствол со светлым спилом, острый обломок сбоку и корни.</summary>
+        private void BuildStump(Vector2Int cell, float cs)
+        {
+            Vector3 basePos = _grid.CellToWorld(cell);
+            float d = _grid.GetObstacleHalfSize(cell) * 2f;
+            float h = _stumpHeight * cs * (0.85f + 0.3f * Hash(cell.y, cell.x));
+            float yaw = Hash(cell.x, cell.y) * 360f;
+            Quaternion turn = Quaternion.Euler(0f, yaw, 0f);
+
+            CreateShape(PrimitiveType.Cylinder, "Stump", basePos + Vector3.up * (h * 0.5f), new Vector3(d * 0.95f, h * 0.5f, d * 0.95f), _barkMaterial);
+            CreateShape(PrimitiveType.Cylinder, "StumpTop", basePos + Vector3.up * h, new Vector3(d * 0.86f, 0.012f * cs, d * 0.86f), _stumpTopMaterial);
+
+            // Обломок ствола торчит над спилом — силуэт сломанного дерева, а не ровного столба.
+            float shard = h * 0.5f;
+            Renderer s = CreateShape(PrimitiveType.Cylinder, "Shard", basePos + turn * new Vector3(d * 0.2f, 0f, 0f) + Vector3.up * (h + shard * 0.35f),
+                new Vector3(d * 0.5f, shard * 0.5f, d * 0.38f), _barkMaterial);
+            s.transform.rotation = turn * Quaternion.Euler(0f, 0f, -12f);
+
+            for (int i = 0; i < 4; i++)
+            {
+                Quaternion around = turn * Quaternion.Euler(0f, i * 90f + 20f * Hash(cell.x + i, cell.y), 0f);
+                Renderer root = CreateShape(PrimitiveType.Sphere, "Root", basePos + around * new Vector3(0f, 0.06f * cs, d * 0.5f),
+                    new Vector3(d * 0.32f, 0.22f * cs, d * 0.6f), _barkMaterial);
+                root.transform.rotation = around * Quaternion.Euler(18f, 0f, 0f);
+            }
+        }
+
+        /// <summary>Стоячий камень — вытянутый вверх валун.</summary>
+        private void BuildStandingStone(Vector2Int cell, float cs)
+        {
+            Vector3 basePos = _grid.CellToWorld(cell);
+            float d = _grid.GetObstacleHalfSize(cell) * 2f;
+            float h = _grid.GetObstacleHeight(cell) * (0.85f + 0.2f * Hash(cell.y, cell.x));
+            float yaw = Hash(cell.x, cell.y) * 360f;
+            if (_rockMesh == null)
+            {
+                CreateShape(PrimitiveType.Cube, "Stone", basePos + Vector3.up * (h * 0.5f), new Vector3(d, h, d), _blockMaterial);
+                return;
+            }
+            CreateMesh("StandingStone", _rockMesh, _blockMaterial, basePos + Vector3.up * (h * 0.45f), new Vector3(d * 1.35f, h, d * 1.15f), yaw);
+        }
+
+        private void BuildBoulder(Vector2Int cell, float cs)
+        {
+            Vector3 center = (_grid.CellToWorld(cell) + _grid.CellToWorld(new Vector2Int(cell.x + 1, cell.y + 1))) * 0.5f;
+            float h = _grid.GetObstacleHeight(cell);
+            float yaw = Hash(cell.x, cell.y) * 360f;
+            if (_rockMesh == null)
+            {
+                CreateShape(PrimitiveType.Cube, "Block", center + Vector3.up * (h * 0.5f), new Vector3(2f * cs, h, 2f * cs), _blockMaterial);
+                return;
+            }
+            // Чуть шире квадрата 2x2, чтобы углы столкновения не торчали из камня.
+            CreateMesh("Boulder", _rockMesh, _blockMaterial, center + Vector3.up * (h * 0.42f), new Vector3(2.5f * cs, h * 1.25f, 2.5f * cs), yaw);
+        }
+
+        /// <summary>Бревно на всю длину стенки: строим только от её начала (слева или снизу).</summary>
+        private void BuildLogFrom(int x, int y, float cs)
+        {
+            bool alongX = IsType(x + 1, y, ObstacleType.LowWall) || IsType(x - 1, y, ObstacleType.LowWall);
+            if (alongX ? IsType(x - 1, y, ObstacleType.LowWall) : IsType(x, y - 1, ObstacleType.LowWall)) return;
+
+            int length = 1;
+            while (alongX ? IsType(x + length, y, ObstacleType.LowWall) : IsType(x, y + length, ObstacleType.LowWall)) length++;
+
+            var first = new Vector2Int(x, y);
+            var last = alongX ? new Vector2Int(x + length - 1, y) : new Vector2Int(x, y + length - 1);
+            Vector3 center = (_grid.CellToWorld(first) + _grid.CellToWorld(last)) * 0.5f;
+            float diameter = Mathf.Max(_grid.GetObstacleHeight(first), 0.3f * cs) * 1.1f;
+            // Цилиндр Unity вытянут по Y: кладём его на бок вдоль X или Z и чуть поворачиваем вокруг оси (кора не повторяется).
+            Quaternion lay = alongX ? Quaternion.Euler(0f, 0f, 90f) : Quaternion.Euler(90f, 0f, 0f);
+            Renderer log = CreateShape(PrimitiveType.Cylinder, "Log", center + Vector3.up * (diameter * 0.5f),
+                new Vector3(diameter, length * cs * 0.5f, diameter), _barkMaterial);
+            log.transform.rotation = lay * Quaternion.Euler(0f, Hash(x, y) * 360f, 0f);
+        }
+
+        /// <summary>Заросли: несколько пучков на клетку со случайным сдвигом, все в одном меше — один вызов отрисовки.</summary>
+        private void BuildTallGrass(float cs)
+        {
+            if (_grassTuftMesh == null || _tallGrassMaterial == null) return;
+            int count = _grid.CoverCellCount * _tuftsPerCell;
+            if (count == 0) return;
+
+            var combine = new CombineInstance[count];
+            int k = 0;
+            Vector3 origin = transform.position;
+            for (int y = 0; y < _grid.Height; y++)
+            {
+                for (int x = 0; x < _grid.Width; x++)
+                {
+                    var cell = new Vector2Int(x, y);
+                    if (!_grid.IsCover(cell)) continue;
+                    Vector3 c = _grid.CellToWorld(cell) - origin;
+                    for (int t = 0; t < _tuftsPerCell; t++)
+                    {
+                        float hx = Hash(x * 7 + t, y * 3 + 1) - 0.5f;
+                        float hz = Hash(x * 5 + 2, y * 11 + t) - 0.5f;
+                        float hs = Hash(x + t * 13, y + 5);
+                        var pos = c + new Vector3(hx * 0.8f * cs, -0.02f, hz * 0.8f * cs);
+                        float width = (0.9f + 0.4f * hs) * cs;
+                        var scale = new Vector3(width, _tallGrassHeight * (0.8f + 0.4f * hs) * cs, width);
+                        combine[k++] = new CombineInstance
+                        {
+                            mesh = _grassTuftMesh,
+                            transform = Matrix4x4.TRS(pos, Quaternion.Euler(0f, hs * 360f + t * 40f, 0f), scale)
+                        };
+                    }
+                }
+            }
+
+            var mesh = new Mesh { name = "TallGrass" };
+            if (count * _grassTuftMesh.vertexCount > 65000) mesh.indexFormat = IndexFormat.UInt32;
+            mesh.CombineMeshes(combine, true, true);
+            mesh.RecalculateBounds();
+
+            var go = new GameObject("TallGrass");
+            go.transform.SetParent(transform, false);
+            go.transform.rotation = Quaternion.identity;
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = _tallGrassMaterial;
+            r.shadowCastingMode = ShadowCastingMode.Off;
+        }
+
+        private bool IsType(int x, int y, ObstacleType type)
+        {
+            var cell = new Vector2Int(x, y);
+            return _grid.IsInside(cell) && _grid.GetObstacle(cell) == type;
+        }
+
+        /// <summary>Детерминированный «случайный» 0..1 по координатам клетки: поле одинаково при каждой сборке.</summary>
+        private static float Hash(int x, int y)
+        {
+            unchecked
+            {
+                uint h = (uint)(x * 73856093) ^ (uint)(y * 19349663);
+                h ^= h >> 13;
+                h *= 0x5bd1e995;
+                h ^= h >> 15;
+                return (h & 0xFFFF) / 65535f;
+            }
+        }
+
+        private Renderer CreateMesh(string objectName, Mesh mesh, Material mat, Vector3 worldPos, Vector3 scale, float yaw)
+        {
+            var go = new GameObject(objectName);
+            go.transform.SetPositionAndRotation(worldPos, Quaternion.Euler(0f, yaw, 0f));
+            go.transform.localScale = scale;
+            go.transform.SetParent(transform, true);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var r = go.AddComponent<MeshRenderer>();
+            r.sharedMaterial = mat;
+            return r;
         }
 
         private Renderer CreateShape(PrimitiveType type, string objectName, Vector3 worldPos, Vector3 scale, Material mat)

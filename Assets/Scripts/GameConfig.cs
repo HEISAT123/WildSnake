@@ -3,21 +3,15 @@ using UnityEngine;
 namespace Snake3D
 {
     /// <summary>
-    /// Все игровые параметры баланса в одном ассете. Можно сделать несколько ассетов
-    /// (лёгкий/сложный) и подставлять нужный в GameManager и SnakeController.
+    /// Все параметры баланса выживания в одном ассете: движение змеи, голод и здоровье,
+    /// нюх, линька, добыча, смена дня и ночи, орёл. Подставляется в GameManager и системы.
     /// </summary>
     [CreateAssetMenu(fileName = "GameConfig", menuName = "Snake3D/Game Config")]
     public class GameConfig : ScriptableObject
     {
         [Header("Змейка: скорость и руль")]
-        [Tooltip("Начальная скорость, клеток в секунду")]
-        [SerializeField, Min(0.5f)] private float _startSpeed = 4.5f;
-
-        [Tooltip("Максимальная скорость (без бонусов), клеток в секунду")]
-        [SerializeField, Min(0.5f)] private float _maxSpeed = 9f;
-
-        [Tooltip("Прибавка скорости за яблоко, клеток в секунду")]
-        [SerializeField, Min(0f)] private float _speedPerFood = 0.1f;
+        [Tooltip("Скорость ползания, клеток в секунду")]
+        [SerializeField, Min(0.5f)] private float _moveSpeed = 4.6f;
 
         [Tooltip("Скорость поворота при руле до упора, град/с")]
         [SerializeField, Min(10f)] private float _turnSpeed = 190f;
@@ -25,121 +19,140 @@ namespace Snake3D
         [Tooltip("Как быстро руль доходит до упора, 1/с")]
         [SerializeField, Min(0.5f)] private float _steerResponse = 6f;
 
-        [Header("Змейка: прыжок и рывок")]
+        [Header("Змейка: прыжок и бросок")]
         [Tooltip("Высота прыжка, клеток")]
         [SerializeField, Min(0.1f)] private float _jumpHeight = 1.4f;
 
         [Tooltip("Гравитация, клеток в секунду²")]
         [SerializeField, Min(1f)] private float _gravity = 30f;
 
-        [Tooltip("Множитель скорости во время рывка")]
-        [SerializeField, Min(1f)] private float _dashMultiplier = 2.2f;
+        [Tooltip("Множитель скорости во время броска")]
+        [SerializeField, Min(1f)] private float _dashMultiplier = 2.4f;
 
-        [Tooltip("Длительность рывка, сек")]
+        [Tooltip("Длительность броска, сек")]
         [SerializeField, Min(0.05f)] private float _dashDuration = 0.35f;
 
-        [Tooltip("Перезарядка рывка, сек")]
-        [SerializeField, Min(0.1f)] private float _dashCooldown = 3f;
+        [Tooltip("Перезарядка броска, сек")]
+        [SerializeField, Min(0.1f)] private float _dashCooldown = 2.2f;
 
         [Header("Змейка: длина")]
-        [Tooltip("Начальная длина тела, клеток")]
+        [Tooltip("Начальная (и минимальная) длина тела, клеток")]
         [SerializeField, Min(1f)] private float _startLength = 3f;
 
         [Tooltip("Максимальная длина тела, клеток")]
         [SerializeField, Min(2f)] private float _maxLength = 120f;
 
-        [Tooltip("Рост за обычное яблоко, клеток")]
-        [SerializeField, Min(0.1f)] private float _growthPerFood = 0.9f;
+        [Header("Выживание: здоровье")]
+        [Tooltip("Максимум здоровья")]
+        [SerializeField, Min(1f)] private float _maxHealth = 100f;
 
-        [Header("Еда")]
-        [Tooltip("Очки за обычное яблоко")]
-        [SerializeField, Min(1)] private int _normalPoints = 10;
+        [Tooltip("Урон от удара о стену, камень или дерево")]
+        [SerializeField, Min(0f)] private float _wallDamage = 15f;
 
-        [Tooltip("Очки за золотое яблоко")]
-        [SerializeField, Min(1)] private int _goldenPoints = 50;
+        [Tooltip("Урон от удара головой о тело (своё или соперницы)")]
+        [SerializeField, Min(0f)] private float _bodyDamage = 20f;
 
-        [Tooltip("Штраф за гнилое яблоко")]
-        [SerializeField, Min(0)] private int _rottenPenalty = 20;
+        [Tooltip("Восстановление здоровья в секунду, пока змея сыта")]
+        [SerializeField, Min(0f)] private float _regenPerSecond = 2.5f;
 
-        [Tooltip("Шанс золотого яблока (0..1)")]
-        [SerializeField, Range(0f, 1f)] private float _goldenChance = 0.15f;
+        [Tooltip("Доля сытости, начиная с которой идёт восстановление")]
+        [SerializeField, Range(0f, 1f)] private float _wellFedThreshold = 0.6f;
 
-        [Tooltip("Шанс гнилого яблока (0..1)")]
-        [SerializeField, Range(0f, 1f)] private float _rottenChance = 0.1f;
+        [Header("Выживание: голод")]
+        [Tooltip("Максимум сытости")]
+        [SerializeField, Min(1f)] private float _maxSatiety = 100f;
 
-        [Tooltip("Время жизни золотого яблока, сек")]
-        [SerializeField, Min(1f)] private float _goldenLifetime = 6f;
+        [Tooltip("Сытость в начале партии")]
+        [SerializeField, Min(0f)] private float _startSatiety = 80f;
 
-        [Tooltip("Время жизни гнилого яблока, сек")]
-        [SerializeField, Min(1f)] private float _rottenLifetime = 8f;
+        [Tooltip("Расход сытости в секунду")]
+        [SerializeField, Min(0f)] private float _hungerPerSecond = 1.1f;
 
-        [Tooltip("Насколько укорачивает гнилое яблоко, клеток")]
-        [SerializeField, Min(0f)] private float _rottenShrink = 1.5f;
+        [Tooltip("Множитель голода ночью (холодно)")]
+        [SerializeField, Min(0f)] private float _nightHungerMultiplier = 1.25f;
 
-        [Header("Бонусы")]
-        [Tooltip("Задержка первого бонуса после старта, сек")]
-        [SerializeField, Min(0f)] private float _powerUpFirstDelay = 8f;
+        [Tooltip("Цена броска в сытости")]
+        [SerializeField, Min(0f)] private float _dashHungerCost = 4f;
 
-        [Tooltip("Интервал между бонусами, сек")]
-        [SerializeField, Min(1f)] private float _powerUpInterval = 14f;
+        [Tooltip("Цена прыжка в сытости")]
+        [SerializeField, Min(0f)] private float _jumpHungerCost = 1.5f;
 
-        [Tooltip("Сколько бонус лежит на поле, сек")]
-        [SerializeField, Min(1f)] private float _powerUpLifetime = 10f;
+        [Tooltip("При пустой сытости тело худеет, клеток в секунду")]
+        [SerializeField, Min(0f)] private float _starveShrinkPerSecond = 0.3f;
 
-        [Tooltip("Длительность ускорения, сек")]
-        [SerializeField, Min(0.5f)] private float _speedBoostDuration = 6f;
+        [Tooltip("Урон в секунду от голода, когда худеть уже некуда")]
+        [SerializeField, Min(0f)] private float _starveDamagePerSecond = 6f;
 
-        [Tooltip("Множитель скорости при ускорении")]
-        [SerializeField, Min(1f)] private float _speedBoostMultiplier = 1.5f;
+        [Header("Нюх")]
+        [Tooltip("Радиус, в котором язык чует добычу, клеток")]
+        [SerializeField, Min(1f)] private float _smellRadius = 22f;
 
-        [Tooltip("Длительность замедления времени, сек (реального)")]
-        [SerializeField, Min(0.5f)] private float _slowTimeDuration = 6f;
+        [Tooltip("Сколько секунд виден след запаха")]
+        [SerializeField, Min(0.5f)] private float _smellDuration = 3.5f;
 
-        [Tooltip("Масштаб времени при замедлении")]
-        [SerializeField, Range(0.2f, 1f)] private float _slowTimeScale = 0.6f;
+        [Tooltip("Перезарядка нюха, сек")]
+        [SerializeField, Min(0.5f)] private float _smellCooldown = 6f;
 
-        [Tooltip("Длительность магнита, сек")]
-        [SerializeField, Min(0.5f)] private float _magnetDuration = 8f;
+        [Header("Линька")]
+        [Tooltip("Сколько клеток роста нужно до следующей линьки")]
+        [SerializeField, Min(0.5f)] private float _moltGrowth = 4.5f;
 
-        [Tooltip("Радиус магнита, клеток")]
-        [SerializeField, Min(1f)] private float _magnetRadius = 7f;
+        [Header("Добыча")]
+        [Tooltip("Радиус поимки касанием, клеток")]
+        [SerializeField, Min(0.1f)] private float _touchCatchRadius = 0.8f;
 
-        [Tooltip("Скорость притяжения еды магнитом, клеток в секунду")]
-        [SerializeField, Min(0.5f)] private float _magnetPullSpeed = 6f;
+        [Tooltip("Радиус поимки броском, клеток")]
+        [SerializeField, Min(0.1f)] private float _strikeCatchRadius = 1.3f;
 
-        [Tooltip("Длительность двойных очков, сек")]
-        [SerializeField, Min(0.5f)] private float _doubleScoreDuration = 10f;
+        [Tooltip("Параметры видов добычи (порядок как в PreyKind)")]
+        [SerializeField] private PreyStats[] _prey =
+        {
+            new PreyStats(7f, 0.25f, 0.6f, 0f, 0f, 1f, false, 7, 5),     // Жук
+            new PreyStats(22f, 0.7f, 1.4f, 5.6f, 4.5f, 2.2f, true, 3, 6), // Мышь
+            new PreyStats(26f, 0.8f, 0f, 4.4f, 3.5f, 2.4f, true, 3, 4),   // Лягушка
+            new PreyStats(40f, 1.2f, 0.9f, 7f, 6f, 3f, true, 3, 2)        // Птица
+        };
 
-        [Header("Уровни")]
-        [Tooltip("Сколько яблок нужно для следующего уровня")]
-        [SerializeField, Min(1)] private int _applesPerLevel = 5;
+        [Tooltip("Насколько хуже замечают змею в высокой траве (множитель радиуса)")]
+        [SerializeField, Range(0.05f, 1f)] private float _coverAwareness = 0.45f;
 
-        [Tooltip("Максимум вращающихся балок на поле")]
-        [SerializeField, Min(0)] private int _maxSpinners = 4;
+        [Tooltip("Насколько лучше замечают змею во время броска (множитель радиуса)")]
+        [SerializeField, Min(1f)] private float _dashAwareness = 1.4f;
 
-        [Tooltip("Скорость вращения балки на 2-м уровне, град/с")]
-        [SerializeField, Min(0f)] private float _spinnerBaseSpeed = 45f;
+        [Tooltip("Насколько хуже замечают спящие ночью птицы (множитель радиуса)")]
+        [SerializeField, Range(0.05f, 1f)] private float _sleepAwareness = 0.35f;
 
-        [Tooltip("Прибавка скорости балок за уровень, град/с")]
-        [SerializeField, Min(0f)] private float _spinnerSpeedPerLevel = 8f;
+        [Header("День и ночь")]
+        [Tooltip("Длительность дня, сек")]
+        [SerializeField, Min(5f)] private float _daySeconds = 150f;
 
-        [Header("Режимы")]
-        [Tooltip("Длительность режима «На время», сек")]
-        [SerializeField, Min(10f)] private float _timeAttackSeconds = 120f;
+        [Tooltip("Длительность ночи, сек")]
+        [SerializeField, Min(5f)] private float _nightSeconds = 70f;
 
-        [Tooltip("Интервал сужения арены в режиме «Выживание», сек")]
-        [SerializeField, Min(2f)] private float _shrinkInterval = 15f;
+        [Tooltip("Время суток в начале партии (0 — полночь, 0.25 — рассвет, 0.5 — полдень, 0.75 — закат)")]
+        [SerializeField, Range(0f, 1f)] private float _startPhase = 0.33f;
 
-        [Tooltip("Минимальный размер арены в режиме «Выживание», клеток")]
-        [SerializeField, Min(6)] private int _minArenaSize = 14;
+        [Header("Орёл")]
+        [Tooltip("Через сколько секунд после старта появляется первый орёл")]
+        [SerializeField, Min(0f)] private float _eagleFirstDelay = 35f;
 
-        [Header("Соперник")]
-        [Tooltip("Задержка возрождения змеи-соперника, сек")]
-        [SerializeField, Min(0f)] private float _rivalRespawnDelay = 4f;
+        [Tooltip("Пауза между охотами орла, сек (мин)")]
+        [SerializeField, Min(1f)] private float _eagleIntervalMin = 28f;
 
-        public float StartSpeed => _startSpeed;
-        public float MaxSpeed => _maxSpeed;
-        public float SpeedPerFood => _speedPerFood;
+        [Tooltip("Пауза между охотами орла, сек (макс)")]
+        [SerializeField, Min(1f)] private float _eagleIntervalMax = 50f;
+
+        [Tooltip("Урон от удара орла")]
+        [SerializeField, Min(0f)] private float _eagleDamage = 35f;
+
+        [Header("Соперница")]
+        [Tooltip("Задержка возрождения змеи-соперницы, сек")]
+        [SerializeField, Min(0f)] private float _rivalRespawnDelay = 6f;
+
+        [Tooltip("Здоровье змеи-соперницы")]
+        [SerializeField, Min(1f)] private float _rivalMaxHealth = 60f;
+
+        public float MoveSpeed => _moveSpeed;
         public float TurnSpeed => _turnSpeed;
         public float SteerResponse => _steerResponse;
         public float JumpHeight => _jumpHeight;
@@ -149,47 +162,48 @@ namespace Snake3D
         public float DashCooldown => _dashCooldown;
         public float StartLength => _startLength;
         public float MaxLength => _maxLength;
-        public float GrowthPerFood => _growthPerFood;
 
-        public int NormalPoints => _normalPoints;
-        public int GoldenPoints => _goldenPoints;
-        public int RottenPenalty => _rottenPenalty;
-        public float GoldenChance => _goldenChance;
-        public float RottenChance => _rottenChance;
-        public float GoldenLifetime => _goldenLifetime;
-        public float RottenLifetime => _rottenLifetime;
-        public float RottenShrink => _rottenShrink;
+        public float MaxHealth => _maxHealth;
+        public float WallDamage => _wallDamage;
+        public float BodyDamage => _bodyDamage;
+        public float RegenPerSecond => _regenPerSecond;
+        public float WellFedThreshold => _wellFedThreshold;
+        public float MaxSatiety => _maxSatiety;
+        public float StartSatiety => _startSatiety;
+        public float HungerPerSecond => _hungerPerSecond;
+        public float NightHungerMultiplier => _nightHungerMultiplier;
+        public float DashHungerCost => _dashHungerCost;
+        public float JumpHungerCost => _jumpHungerCost;
+        public float StarveShrinkPerSecond => _starveShrinkPerSecond;
+        public float StarveDamagePerSecond => _starveDamagePerSecond;
 
-        public float PowerUpFirstDelay => _powerUpFirstDelay;
-        public float PowerUpInterval => _powerUpInterval;
-        public float PowerUpLifetime => _powerUpLifetime;
-        public float SpeedBoostMultiplier => _speedBoostMultiplier;
-        public float SlowTimeScale => _slowTimeScale;
-        public float MagnetRadius => _magnetRadius;
-        public float MagnetPullSpeed => _magnetPullSpeed;
+        public float SmellRadius => _smellRadius;
+        public float SmellDuration => _smellDuration;
+        public float SmellCooldown => _smellCooldown;
+        public float MoltGrowth => _moltGrowth;
 
-        public int ApplesPerLevel => _applesPerLevel;
-        public int MaxSpinners => _maxSpinners;
-        public float SpinnerBaseSpeed => _spinnerBaseSpeed;
-        public float SpinnerSpeedPerLevel => _spinnerSpeedPerLevel;
+        public float TouchCatchRadius => _touchCatchRadius;
+        public float StrikeCatchRadius => _strikeCatchRadius;
+        public float CoverAwareness => _coverAwareness;
+        public float DashAwareness => _dashAwareness;
+        public float SleepAwareness => _sleepAwareness;
+        public int PreyKindCount => _prey.Length;
 
-        public float TimeAttackSeconds => _timeAttackSeconds;
-        public float ShrinkInterval => _shrinkInterval;
-        public int MinArenaSize => _minArenaSize;
+        public float DaySeconds => _daySeconds;
+        public float NightSeconds => _nightSeconds;
+        public float StartPhase => _startPhase;
+
+        public float EagleFirstDelay => _eagleFirstDelay;
+        public float EagleIntervalMin => _eagleIntervalMin;
+        public float EagleIntervalMax => Mathf.Max(_eagleIntervalMin, _eagleIntervalMax);
+        public float EagleDamage => _eagleDamage;
 
         public float RivalRespawnDelay => _rivalRespawnDelay;
+        public float RivalMaxHealth => _rivalMaxHealth;
 
-        /// <summary>Длительность бонуса; для щита 0 — он действует до первого удара.</summary>
-        public float GetPowerUpDuration(PowerUpType type)
+        public PreyStats GetPrey(PreyKind kind)
         {
-            switch (type)
-            {
-                case PowerUpType.Speed: return _speedBoostDuration;
-                case PowerUpType.SlowTime: return _slowTimeDuration;
-                case PowerUpType.Magnet: return _magnetDuration;
-                case PowerUpType.DoubleScore: return _doubleScoreDuration;
-                default: return 0f;
-            }
+            return _prey[(int)kind];
         }
     }
 }

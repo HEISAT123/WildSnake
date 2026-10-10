@@ -4,25 +4,27 @@ using UnityEngine.UI;
 namespace Snake3D
 {
     /// <summary>
-    /// Обучение при первом запуске: по шагам подсказывает руль, прыжок, рывок, еду и бонусы.
+    /// Обучение при первом запуске: по шагам подсказывает руль, охоту, бросок, нюх, укрытия и линьку.
     /// Шаг засчитывается, когда игрок сделал действие (или прошло время для информационных шагов).
     /// </summary>
     public class TutorialController : MonoBehaviour
     {
-        private const string KEY_DONE = "Snake3D.TutorialDone";
+        private const string KEY_DONE = "Snake3D.Survival.TutorialDone";
 
         private static readonly string[] Steps =
         {
             "Зажмите A / D или ← / →, чтобы рулить",
-            "Нажмите Space, чтобы прыгнуть — так можно перелететь низкую стенку или свой хвост",
-            "Нажмите Shift для рывка",
-            "Яблоки: красное — рост, золотое — много очков, гнилое — укорачивает",
-            "Кристаллы — бонусы: ускорение, замедление, щит, магнит и очки x2"
+            "Сытость тает — охотьтесь. Жука достаточно просто коснуться",
+            "Мышей, лягушек и птиц ловят броском: Shift, когда добыча рядом",
+            "E — нюх: язык покажет след к ближайшей добыче",
+            "Высокая трава прячет змею и от добычи, и от орла",
+            "Набрав рост, змея линяет — и вы выбираете улучшение"
         };
 
         [Header("Ссылки")]
         [SerializeField] private GameManager _game;
         [SerializeField] private SnakeController _snake;
+        [SerializeField] private ScentTracker _scent;
 
         [Tooltip("Плашка подсказки")]
         [SerializeField] private GameObject _plate;
@@ -35,7 +37,10 @@ namespace Snake3D
         [SerializeField, Min(0.1f)] private float _steerTime = 1f;
 
         [Tooltip("Сколько висят информационные подсказки, сек")]
-        [SerializeField, Min(1f)] private float _infoTime = 5f;
+        [SerializeField, Min(1f)] private float _infoTime = 6f;
+
+        [Tooltip("Через сколько секунд подсказка про охоту уступает следующей, даже если никого не поймали")]
+        [SerializeField, Min(1f)] private float _huntTime = 12f;
 
         private int _step;
         private float _timer;
@@ -48,14 +53,16 @@ namespace Snake3D
 
         private void OnEnable()
         {
-            _snake.Jumped += OnJumped;
+            _game.PreyCaught += OnPreyCaught;
             _snake.Dashed += OnDashed;
+            _scent.Sniffed += OnSniffed;
         }
 
         private void OnDisable()
         {
-            _snake.Jumped -= OnJumped;
+            _game.PreyCaught -= OnPreyCaught;
             _snake.Dashed -= OnDashed;
+            _scent.Sniffed -= OnSniffed;
         }
 
         private void Start()
@@ -84,22 +91,31 @@ namespace Snake3D
                     if (Mathf.Abs(_snake.Steer) > 0.5f) _timer += dt;
                     if (_timer >= _steerTime) ShowStep(1);
                     break;
-                case 3:
+                case 1:
+                    _timer += dt;
+                    if (_timer >= _huntTime) ShowStep(2);
+                    break;
                 case 4:
+                case 5:
                     _timer += dt;
                     if (_timer >= _infoTime) ShowStep(_step + 1);
                     break;
             }
         }
 
-        private void OnJumped()
+        private void OnPreyCaught(PreyKind kind)
         {
             if (_step == 1) ShowStep(2);
         }
 
         private void OnDashed()
         {
-            if (_step == 2) ShowStep(3);
+            if (_step == 2 && _game.State == GameState.Playing) ShowStep(3);
+        }
+
+        private void OnSniffed(bool found)
+        {
+            if (_step == 3) ShowStep(4);
         }
 
         private void ShowStep(int step)
