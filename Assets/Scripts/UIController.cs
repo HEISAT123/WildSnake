@@ -427,12 +427,10 @@ namespace Snake3D
 
         private void RefreshPlayRow()
         {
-            if (_playLabel == null || _playDescription == null) return;
+            if (_playLabel == null) return;
             bool hasSave = RunSaveStore.TryLoad(out RunSave save);
-            _playLabel.text = hasSave ? "ПРОДОЛЖИТЬ" : "ВЫЖИВАНИЕ";
-            _playDescription.text = hasSave
-                ? "День " + save.Day + " · змея ждёт в норе. Новая жизнь — пауза, «Заново»"
-                : "Голод, хищники, смена дня и ночи";
+            _playLabel.text = hasSave ? "ПРОДОЛЖИТЬ" : "ИГРАТЬ";
+            if (_playDescription != null) _playDescription.text = hasSave ? "день " + save.Day + " · новая жизнь — «заново» в паузе" : "";
         }
 
         // ---------------- Кнопки ----------------

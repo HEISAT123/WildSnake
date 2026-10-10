@@ -9,6 +9,8 @@ namespace Snake3D
     /// 2) рефлексы — «щупальца» впереди: уворот от стен и камней, прыжок через брёвна и тела;
     /// 3) охота — выбирает самую выгодную добычу (сытность / расстояние), подкрадывается к ней,
     ///    целится с упреждением и делает бросок вблизи; иногда выходит наперерез игроку.
+    /// 4) страховка от застревания — если змея почти не сдвинулась или долго не приближается к цели,
+    ///    она отползает в самую свободную сторону, а недостижимую добычу на время бросает.
     /// Управляет змеёй тем же «намерением», что и игрок: желаемое направление + темп, бросок, прыжок.
     /// Все буферы выделяются один раз в Start, в игровом цикле аллокаций нет.
     /// Выполняется раньше SnakeController, чтобы намерение применилось в том же кадре.
@@ -44,7 +46,7 @@ namespace Snake3D
         [SerializeField, Range(1, 6)] private int _waypointLookahead = 2;
 
         [Tooltip("Предел раскрытых клеток A* за одно планирование")]
-        [SerializeField, Min(100)] private int _maxExpansions = 9000;
+        [SerializeField, Min(100)] private int _maxExpansions = 40000;
 
         [Header("Стоимость клеток")]
         [Tooltip("Рядом с колонной, блоком или стеной")]
@@ -115,6 +117,22 @@ namespace Snake3D
         [Tooltip("Как часто выбирать новую добычу, сек")]
         [SerializeField, Min(0.1f)] private float _retargetInterval = 1f;
 
+        [Header("Застревание")]
+        [Tooltip("За это время змея должна сдвинуться хотя бы на _stuckDistance, иначе — застряла, сек")]
+        [SerializeField, Min(0.3f)] private float _stuckTime = 1.2f;
+
+        [Tooltip("Минимальный сдвиг за _stuckTime, клеток")]
+        [SerializeField, Min(0.1f)] private float _stuckDistance = 0.8f;
+
+        [Tooltip("Сколько можно не приближаться к цели, прежде чем сменить её, сек")]
+        [SerializeField, Min(1f)] private float _noProgressTime = 7f;
+
+        [Tooltip("Сколько длится отползание при застревании, сек")]
+        [SerializeField, Min(0.2f)] private float _escapeTime = 1.1f;
+
+        [Tooltip("Сколько не возвращаться к добыче, до которой не добраться, сек")]
+        [SerializeField, Min(0f)] private float _ignorePreyTime = 10f;
+
         private enum Blocked
         {
             Free,
@@ -148,6 +166,18 @@ namespace Snake3D
         private bool _wantJump;
         private bool _wantStrike;
 
+        private Vector3 _stuckAnchor;
+        private float _stuckTimer;
+        private int _stuckStreak;
+        private float _bestGoalDistance = float.MaxValue;
+        private float _progressTimer;
+        private Vector3 _escapeDir;
+        private float _escapeTimer;
+        private PreyAnimal _ignoredPrey;
+        private float _ignoreTimer;
+        private Vector3 _wanderGoal;
+        private bool _hasWanderGoal;
+
         /// <summary>Другая змея на поле: выключенный объект (соперник отключён в настройках) не считается.</summary>
         private bool OtherAlive => _player != null && _player.isActiveAndEnabled && _player.IsAlive;
 
@@ -174,12 +204,26 @@ namespace Snake3D
             if (!_initialized || !_snake.IsRunning || !_snake.IsAlive)
             {
                 _pathLength = 0;
+                _stuckAnchor = _snake.HeadPosition;
+                _stuckTimer = 0f;
+                _escapeTimer = 0f;
                 return;
             }
             _wantJump = false;
             _wantStrike = false;
 
             float dt = Time.deltaTime;
+            if (_ignoreTimer > 0f && (_ignoreTimer -= dt) <= 0f) _ignoredPrey = null;
+            if (_escapeTimer > 0f)
+            {
+                // Отползаем, не думая о цели: иначе план тут же развернёт змею обратно в тупик.
+                _escapeTimer -= dt;
+                _snake.SetMoveIntent(_escapeDir, SnakePace.Walk);
+                if (_escapeTimer <= 0f) _replanTimer = 0f;
+                return;
+            }
+            if (CheckStuck(dt)) return;
+
             _decisionTimer -= dt;
             if (_decisionTimer <= 0f)
             {
@@ -191,7 +235,9 @@ namespace Snake3D
             if (_retargetTimer <= 0f || _prey == null || !_prey.IsActive || _prey.IsFlying)
             {
                 _retargetTimer = _retargetInterval;
-                _prey = _wildlife.FindBestTarget(_snake.HeadPosition, OtherAlive ? _player.HeadPosition : Vector3.zero, OtherAlive);
+                PreyAnimal previous = _prey;
+                _prey = _wildlife.FindBestTarget(_snake.HeadPosition, OtherAlive ? _player.HeadPosition : Vector3.zero, OtherAlive, _ignoredPrey);
+                if (_prey != previous) ResetProgress();
             }
 
             _replanTimer -= dt;
@@ -222,7 +268,112 @@ namespace Snake3D
 
             // Цель — место, где добыча окажется чуть позже (бегущую мышь ловят наперерез).
             if (HasPrey) return _prey.Position + _prey.Velocity * _preyLead;
-            return _grid.Center;
+            // Добычи нет — бродим по случайным свободным местам, а не кружим в одной точке.
+            if (!_hasWanderGoal || DistanceCells(_wanderGoal) < 2f) PickWanderGoal();
+            return _hasWanderGoal ? _wanderGoal : _grid.Center;
+        }
+
+        private void PickWanderGoal()
+        {
+            _hasWanderGoal = _grid.TryGetRandomFreeCell(out Vector2Int cell);
+            if (_hasWanderGoal) _wanderGoal = _grid.CellToWorld(cell);
+            ResetProgress();
+        }
+
+        // ---------------- Застревание ----------------
+
+        private void ResetProgress()
+        {
+            _bestGoalDistance = float.MaxValue;
+            _progressTimer = 0f;
+        }
+
+        /// <summary>
+        /// Два признака беды: змея почти стоит на месте (упёрлась) или долго не приближается к цели (кружит).
+        /// В обоих случаях отползаем в самую свободную сторону; если не помогает — бросаем цель.
+        /// </summary>
+        private bool CheckStuck(float dt)
+        {
+            Vector3 head = _snake.HeadPosition;
+            bool busy = _snake.IsStriking || _snake.IsCoiled || !_snake.IsGrounded;
+
+            _stuckTimer += dt;
+            if (_stuckTimer >= _stuckTime)
+            {
+                Vector3 moved = head - _stuckAnchor;
+                moved.y = 0f;
+                bool stuck = !busy && moved.magnitude < _stuckDistance * _grid.CellSize;
+                _stuckAnchor = head;
+                _stuckTimer = 0f;
+                if (!stuck) _stuckStreak = 0;
+                else
+                {
+                    // Второй раз подряд упёрлись — цель, видимо, за препятствием: бросаем её.
+                    _stuckStreak++;
+                    StartEscape(_stuckStreak >= 2);
+                    return true;
+                }
+            }
+
+            float goalDistance = DistanceCells(CurrentGoal());
+            if (goalDistance < _bestGoalDistance - 1f)
+            {
+                _bestGoalDistance = goalDistance;
+                _progressTimer = 0f;
+            }
+            else if ((_progressTimer += dt) > _noProgressTime && !_hunting)
+            {
+                StartEscape(true);
+                return true;
+            }
+            return false;
+        }
+
+        private void StartEscape(bool giveUpGoal)
+        {
+            if (giveUpGoal)
+            {
+                if (HasPrey)
+                {
+                    _ignoredPrey = _prey;
+                    _ignoreTimer = _ignorePreyTime;
+                    _prey = null;
+                    _retargetTimer = 0f;
+                }
+                _hunting = false;
+                _hasWanderGoal = false;
+                _stuckStreak = 0;
+            }
+            _escapeDir = FreestDirection();
+            _escapeTimer = _escapeTime;
+            _pathLength = 0;
+            ResetProgress();
+        }
+
+        /// <summary>Из 16 направлений — то, где дальше всего свободно; при равенстве — ближе к текущему курсу.</summary>
+        private Vector3 FreestDirection()
+        {
+            Vector3 head = _snake.HeadPosition;
+            Vector3 forward = _snake.Forward;
+            float cs = _grid.CellSize;
+            Vector3 best = -forward;
+            float bestScore = float.MinValue;
+            for (int i = 0; i < 16; i++)
+            {
+                Vector3 dir = Quaternion.Euler(0f, i * 22.5f, 0f) * Vector3.forward;
+                int free = 0;
+                for (int step = 1; step <= 6; step++)
+                {
+                    if (Probe(head + dir * (step * 0.7f * cs)) == Blocked.Solid) break;
+                    free = step;
+                }
+                // При равной свободе — ближе к нынешнему курсу: разворот на месте змее даётся тяжело.
+                float score = free * 10f + Vector3.Dot(dir, forward) * 2f + Random.value;
+                if (score <= bestScore) continue;
+                bestScore = score;
+                best = dir;
+            }
+            return best;
         }
 
         // ---------------- Рулление ----------------

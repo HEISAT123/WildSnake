@@ -124,7 +124,7 @@ internal static class UIBuilder
         canvasGo.AddComponent<UIFontApplier>();
         var overlays = new Object[] { settings, board, guide };
 
-        WireList(menu, menuRows, menuGroup, r, overlays, 1);
+        WireList(menu, menuRows, menuGroup, r, overlays, 0);
         WireList(pause, pauseRows, pauseGroup, r, overlays, 0);
         WireList(molt, moltRows, moltGroup, r, overlays, 0);
         WireList(over, overRows, overGroup, r, overlays, 0);
@@ -260,32 +260,27 @@ internal static class UIBuilder
     {
         RectTransform screen = Screen(root, "MenuPanel", shade, out group);
 
-        // Марка: лаймовая плашка «3D» и разреженная подпись.
+        // Только название и пять строк — без слоганов, описаний и подсказок.
         RectTransform tag = Rect("Tag", screen);
-        TopLeft(tag, LEFT, -92f, 56f, 30f);
+        TopLeft(tag, LEFT, -112f, 56f, 30f);
         Img(tag, Venom, _chamfer);
         Text tagText = Label(tag, "Text", "3D", 19, Ink, TextAnchor.MiddleCenter, true);
         Stretch(tagText.rectTransform);
-        TopLeft(Label(screen, "Kicker", Spaced("ДИКАЯ ПРИРОДА"), 20, Ash, TextAnchor.MiddleLeft, true), LEFT + 72f, -92f, 500f, 30f);
 
-        TopLeft(Label(screen, "Title", "ЗМЕЙКА", 164, Bone, TextAnchor.MiddleLeft, true), LEFT - 10f, -122f, 1000f, 200f);
-        TopLeft(Line(screen, Venom), LEFT, -330f, 72f, 5f);
-        TopLeft(Label(screen, "Tagline", "Охоться. Прячься. Линяй. Доживи до рассвета.", 24, Ash, TextAnchor.MiddleLeft, false), LEFT, -352f, 900f, 34f);
+        TopLeft(Label(screen, "Title", "ЗМЕЙКА", 164, Bone, TextAnchor.MiddleLeft, true), LEFT - 10f, -142f, 1000f, 200f);
+        TopLeft(Line(screen, Venom), LEFT, -350f, 72f, 5f);
 
-        rows = new Row[5];
-        rows[0] = MakeRow(screen, 0, "ВЫЖИВАНИЕ", "Голод, хищники, смена дня и ночи", LEFT, -430f, 640f, 92f, 50, Venom, true);
-        rows[1] = MakeRow(screen, 1, "СПРАВОЧНИК", "Как охотиться, прятаться и линять", LEFT, -534f, 640f, 92f, 50, Sky, false);
-
-        TopLeft(Line(screen, Hair), LEFT, -652f, 640f, 1f);
-        string[] links = { "РЕКОРДЫ", "НАСТРОЙКИ", "ВЫХОД" };
-        float[] linkX = { LEFT, LEFT + 214f, LEFT + 452f };
-        for (int i = 0; i < 3; i++)
-            rows[2 + i] = MakeRow(screen, 2 + i, links[i], null, linkX[i], -670f, 200f, 60f, 26, i == 2 ? Ember : Venom, false);
-
-        HintRow(screen, new Vector2(0f, 0f), new Vector2(LEFT, 64f), new Vector2(0f, 0.5f),
-            ("↑ ↓", "выбор"), ("ENTER", "играть"));
-        Text version = Label(screen, "Version", "v2.0", 18, Smoke, TextAnchor.MiddleRight, true);
-        Anchor(version.rectTransform, new Vector2(1f, 0f), new Vector2(1f, 0.5f), new Vector2(-48f, 64f), new Vector2(200f, 24f));
+        string[] items = { "ИГРАТЬ", "СПРАВОЧНИК", "РЕКОРДЫ", "НАСТРОЙКИ", "ВЫХОД" };
+        rows = new Row[items.Length];
+        for (int i = 0; i < items.Length; i++)
+        {
+            // Под «Играть» — место для строки о сохранении, поэтому дальше строки чуть ниже.
+            float y = -410f - i * 88f - (i > 0 ? 26f : 0f);
+            rows[i] = MakeRow(screen, i, items[i], null, LEFT, y, 620f, 76f, 44, i == items.Length - 1 ? Ember : Venom, false);
+        }
+        // Есть сохранение — мелко «день N»; без сохранения строка пустая.
+        rows[0].Description = Label(rows[0].Content, "Description", "", 20, Smoke, TextAnchor.MiddleLeft, false);
+        Anchor(rows[0].Description.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(66f, -46f), new Vector2(560f, 26f));
         return screen.gameObject;
     }
 
@@ -557,7 +552,7 @@ internal static class UIBuilder
         Color[] accents = { Venom, Venom, Ember, Sky };
         string[] bodies =
         {
-            "WASD — ползти, мышь — камера. CTRL — красться, SHIFT — быстрее (тратит силы).\n\nЖука достаточно коснуться. Мышь, лягушку и птицу ловят броском: ЛКМ — укус, ПКМ — замах, и бросок летит дальше.\n\nКролика бросок только хватает — держите F, чтобы задушить, пока хватает сил.",
+            "WASD — ползти, мышь — камера. CTRL — красться, SHIFT — быстрее (тратит выносливость).\n\nЖука достаточно коснуться. Мышь, лягушку и птицу ловят броском: ЛКМ — укус, ПКМ — замах, и бросок летит дальше.\n\nКролика бросок только хватает — держите F, чтобы задушить, пока хватает сил.",
             "Замрите на пару секунд — змея сольётся с местностью, а в высокой траве её почти не видно. Затаившаяся змея подманивает добычу кончиком хвоста: так ловят птиц.\n\nПромах броском на секунду выдаёт змею.",
             "Днём — орёл: метка у края экрана и тень. Спасают трава или бросок в последний миг.\n\nНочью приходит лиса: идёт по следу, в пруд не заходит. Бросок в морду отпугнёт её, пока здоровья больше половины.",
             "Змея холоднокровна: на солнечном камне греется, ночью и в воде мёрзнет — иней по краям экрана.\n\nE у норы — войти: прогресс сохраняется, ночь проходит быстрее.\n\nTAB — карта и цели дня. H — скрыть интерфейс."
@@ -665,7 +660,6 @@ internal static class UIBuilder
             // Разрыв дуги — внизу справа; поворачиваем, чтобы он смотрел вниз.
             arc.localRotation = Quaternion.Euler(0f, 0f, -45f);
             CanvasGroup arcGroup = Group(arc);
-            arcGroup.alpha = 0f;
             Image track = Radial(arc, "Track", Hair, 0.75f);
             track.rectTransform.sizeDelta = Vector2.zero;
             Image fill = Radial(arc, "Fill", Bone, 0.75f);
@@ -673,18 +667,17 @@ internal static class UIBuilder
             p.VitalArcs[i] = arcGroup;
         }
 
-        // Подписи дуг справа от блока: появляются вместе со своей дугой.
-        string[] vitalNames = { "ЗДОРОВЬЕ", "СЫТОСТЬ", "СИЛЫ" };
+        // Подписи дуг справа от блока — видны всегда.
+        string[] vitalNames = { "ЗДОРОВЬЕ", "СЫТОСТЬ", "ВЫНОСЛИВОСТЬ" };
         for (int i = 0; i < 3; i++)
         {
             RectTransform row = Rect("VitalLabel_" + names[i], hud);
-            Anchor(row, new Vector2(0f, 0f), new Vector2(0f, 0.5f), new Vector2(232f, 168f - i * 34f), new Vector2(240f, 30f));
+            Anchor(row, new Vector2(0f, 0f), new Vector2(0f, 0.5f), new Vector2(232f, 168f - i * 34f), new Vector2(340f, 30f));
             CanvasGroup rowGroup = Group(row);
-            rowGroup.alpha = 0f;
-            Text caption = Label(row, "Caption", Spaced(vitalNames[i]), 15, HudCaption, TextAnchor.MiddleLeft, true);
-            Anchor(caption.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), Vector2.zero, new Vector2(150f, 30f));
+            Text caption = Label(row, "Caption", Spaced(vitalNames[i]), 17, Bone, TextAnchor.MiddleLeft, false);
+            Anchor(caption.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), Vector2.zero, new Vector2(250f, 30f));
             Text value = Label(row, "Value", "100", 22, Bone, TextAnchor.MiddleLeft, false);
-            Anchor(value.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(150f, 0f), new Vector2(80f, 30f));
+            Anchor(value.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(250f, 0f), new Vector2(80f, 30f));
             p.VitalLabels[i] = rowGroup;
             p.VitalValues[i] = value;
         }

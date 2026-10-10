@@ -50,8 +50,11 @@ namespace Snake3D
         [Tooltip("Радиус головы для препятствий и опасностей (доля клетки)")]
         [SerializeField, Min(0.1f)] private float _headRadius = 0.38f;
 
-        [Tooltip("Отступ головы от стены, при котором засчитывается удар (доля клетки)")]
-        [SerializeField, Min(0f)] private float _wallMargin = 0.45f;
+        [Tooltip("Докуда змея может забраться в горы: доля «горности» склона (TerrainShape.MountainFactor), 0 — подножие")]
+        [SerializeField, Range(0.05f, 0.9f)] private float _climbLimit = 0.32f;
+
+        [Tooltip("С какой доли предела подъём начинает заметно тормозить")]
+        [SerializeField, Range(0f, 1f)] private float _climbSlowStart = 0.45f;
 
         [Tooltip("На сколько голова должна быть выше или ниже тела, чтобы пролететь над ним (доля клетки)")]
         [SerializeField, Min(0.1f)] private float _jumpClearance = 0.6f;
@@ -668,22 +671,23 @@ namespace Snake3D
             UpdateSlope(dt);
             _lengthCells = Mathf.MoveTowards(_lengthCells, _targetLengthCells, _lengthChangeSpeed * dt);
 
-            bool blocked = ClampToArena(out Vector3 normal) | HitsObstacle(out Vector3 obstacleNormal);
-            if (blocked)
+            bool steep = ClampToMountains(out Vector3 normal);
+            bool blocked = HitsObstacle(out Vector3 obstacleNormal);
+            if (blocked && IsStriking)
             {
-                // Камни и стены непроницаемы: на шагу змея скользит вдоль них, а с броска — бьётся головой.
-                if (IsStriking)
-                {
-                    CancelStrike();
-                    TakeHit(_config.WallDamage, DamageSource.Collision, Vector3.zero);
-                }
-                else
-                {
-                    Vector3 n = obstacleNormal.sqrMagnitude > 0f ? obstacleNormal : normal;
-                    float into = -Vector3.Dot(Forward, n);
-                    if (into > 0.7f) _speed *= 1f - Mathf.Clamp01(dt * 8f);
-                }
+                // Камни и брёвна непроницаемы: с броска змея бьётся о них головой.
+                CancelStrike();
+                TakeHit(_config.WallDamage, DamageSource.Collision, Vector3.zero);
             }
+            else if (blocked || steep)
+            {
+                // На шагу скользим вдоль препятствия или склона; в упор — гасим ход. Склон гор не бьёт.
+                if (IsStriking) CancelStrike();
+                Vector3 n = blocked ? obstacleNormal : normal;
+                float into = -Vector3.Dot(Forward, n);
+                if (into > 0.7f) _speed *= 1f - Mathf.Clamp01(dt * 8f);
+            }
+            if (steep || blocked) _headPos.y = BodyY(_headPos) + _height - _sink;
             if (!IsAlive) return;
 
             RecordPath();
@@ -711,7 +715,7 @@ namespace Snake3D
                 if (IsExposed) target *= _config.MissSlowdown;
                 target *= _digestion.SpeedMultiplier * _temperature.SpeedMultiplier;
                 if (_inWater) target *= _config.SwimSpeed;
-                else target *= SlopeSpeedMultiplier();
+                else target *= SlopeSpeedMultiplier() * ClimbSpeedMultiplier();
                 // Крутой разворот — сбавляем ход, иначе дуга вышла бы слишком широкой.
                 float turnAbs = Mathf.Abs(delta);
                 if (turnAbs > 90f) target *= Mathf.Lerp(1f, 0.55f, Mathf.InverseLerp(90f, 170f, turnAbs));
@@ -735,6 +739,17 @@ namespace Snake3D
         {
             float rise = _grid.SurfaceHeight(_headPos + Forward * (0.5f * _cellSize)) - _grid.SurfaceHeight(_headPos);
             return rise <= 0f ? 1f : Mathf.Max(0.55f, 1f - rise / (0.5f * _cellSize) * 0.6f);
+        }
+
+        /// <summary>У предела подъёма в горы змея ползёт вверх всё медленнее — склон «не пускает», а не отбрасывает.</summary>
+        private float ClimbSpeedMultiplier()
+        {
+            Vector3 c = _grid.Center;
+            float here = TerrainShape.MountainFactor(_headPos.x, _headPos.z, c);
+            Vector3 ahead = _headPos + Forward * (0.5f * _cellSize);
+            if (TerrainShape.MountainFactor(ahead.x, ahead.z, c) <= here) return 1f;
+            float k = Mathf.InverseLerp(_climbLimit * _climbSlowStart, _climbLimit, here);
+            return Mathf.Lerp(1f, 0.3f, k);
         }
 
         /// <summary>Выдохшаяся змея быстро ползти не может — переходит на шаг.</summary>
@@ -800,28 +815,35 @@ namespace Snake3D
         }
 
         /// <summary>Не выпускаем голову за арену; возвращает true и нормаль стены, если упёрлась.</summary>
-        private bool ClampToArena(out Vector3 normal)
+        /// <summary>
+        /// Граница мира — склон гор, а не клетки: голова не заходит выше линии уровня _climbLimit по TerrainShape.
+        /// Её мягко возвращают по градиенту на эту линию, поэтому вдоль гор змея скользит ровно, без «ступенек»
+        /// и без отката вниз по склону.
+        /// </summary>
+        private bool ClampToMountains(out Vector3 normal)
         {
             normal = Vector3.zero;
-            Vector2 half = _grid.ArenaHalfExtents;
-            float margin = _wallMargin * _cellSize;
-            float hx = half.x - margin;
-            float hz = half.y - margin;
             Vector3 c = _grid.Center;
-            float lx = _headPos.x - c.x;
-            float lz = _headPos.z - c.z;
-            bool hit = lx > hx || lx < -hx || lz > hz || lz < -hz;
-            if (hit)
+            float m = TerrainShape.MountainFactor(_headPos.x, _headPos.z, c);
+            if (m <= _climbLimit) return false;
+
+            const float e = 0.25f;
+            float gx = TerrainShape.MountainFactor(_headPos.x + e, _headPos.z, c) - TerrainShape.MountainFactor(_headPos.x - e, _headPos.z, c);
+            float gz = TerrainShape.MountainFactor(_headPos.x, _headPos.z + e, c) - TerrainShape.MountainFactor(_headPos.x, _headPos.z - e, c);
+            var grad = new Vector3(gx, 0f, gz) / (2f * e);
+            float len = grad.magnitude;
+            if (len < 1e-5f)
             {
-                if (lx > hx) normal.x -= 1f;
-                else if (lx < -hx) normal.x += 1f;
-                if (lz > hz) normal.z -= 1f;
-                else if (lz < -hz) normal.z += 1f;
-                normal.Normalize();
-                _headPos.x = c.x + Mathf.Clamp(lx, -hx, hx);
-                _headPos.z = c.z + Mathf.Clamp(lz, -hz, hz);
+                // На ровном плато гор градиента нет — возвращаем к центру мира.
+                grad = new Vector3(_headPos.x - c.x, 0f, _headPos.z - c.z);
+                len = Mathf.Max(1e-4f, grad.magnitude);
+                normal = -grad / len;
+                _headPos += normal * (0.5f * _cellSize);
+                return true;
             }
-            return hit;
+            normal = -grad / len;
+            _headPos += normal * Mathf.Min((m - _climbLimit) / len, _cellSize);
+            return true;
         }
 
         /// <summary>Добавляем точки строго через _sampleDist, чтобы точка тела находилась по индексу за O(1).</summary>
@@ -876,6 +898,8 @@ namespace Snake3D
                 {
                     var cell = new Vector2Int(center.x + dx, center.y + dy);
                     if (!_grid.IsInside(cell)) continue;
+                    // Горы держит ClampToMountains — по плавной линии склона, а не по квадратам клеток.
+                    if (_grid.GetObstacle(cell) == ObstacleType.Mountain) continue;
                     float obstacleHeight = _grid.GetObstacleHeight(cell);
                     if (obstacleHeight <= 0f) continue;
                     // _height — высота низа головы над полем: выше препятствия — пролетаем.

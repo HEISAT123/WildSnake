@@ -5,7 +5,9 @@ namespace Snake3D
     /// <summary>
     /// Камера от третьего лица, как в обычных играх: мышь вращает её вокруг змеи (орбита с ограничением
     /// по вертикали), колесо приближает, при замахе камера подходит ближе и смещается через плечо.
-    /// Камни, пни и стены арены не пропускают камеру: короткий проход по сетке поля придвигает её к змее.
+    /// Холмы и горы не пропускают камеру: короткий проход по рельефу придвигает её к змее. Через низкие
+    /// препятствия (брёвна, пни, камни) камера не ныряет — сама приподнимается над ними; высокие стволы
+    /// и кроны на линии взгляда становятся полупрозрачными (CanopyFader).
     /// В меню — облёт-витрина. Тряска — смерть, удары, бросок.
     /// </summary>
     public class CameraRig : MonoBehaviour
@@ -58,6 +60,9 @@ namespace Snake3D
 
         [Tooltip("Шаг проверки луча камеры по сетке, мировых единиц")]
         [SerializeField, Min(0.05f)] private float _collisionStep = 0.25f;
+
+        [Tooltip("Препятствия не выше этого камера облетает сверху (брёвна, пни, камни), мировых единиц")]
+        [SerializeField, Min(0f)] private float _liftOverHeight = 2.2f;
 
         [Tooltip("Насколько камера может сама подняться над препятствием позади, град")]
         [SerializeField, Range(0f, 60f)] private float _maxAutoPitch = 40f;
@@ -264,17 +269,17 @@ namespace Snake3D
         }
 
         /// <summary>
-        /// Камни и пни позади змеи не должны прижимать камеру к её затылку: если луч упирается в препятствие,
-        /// ищем наклон круче, при котором камера проходит над ним, и плавно поднимаемся туда.
+        /// Бревно, камень или склон позади змеи не должны прижимать камеру к её затылку или прятать змею:
+        /// если луч упирается в них, ищем наклон круче, при котором камера проходит сверху, и плавно поднимаемся туда.
         /// </summary>
         private void UpdateAutoPitch(Vector3 pivot, float wanted)
         {
             float target = 0f;
-            float best = FreeDistance(pivot, Quaternion.Euler(_orbitPitch, _orbitYaw, 0f) * Vector3.back, wanted);
-            for (float extra = 10f; best < wanted * 0.8f && extra <= _maxAutoPitch; extra += 10f)
+            float best = FreeDistance(pivot, Quaternion.Euler(_orbitPitch, _orbitYaw, 0f) * Vector3.back, wanted, true);
+            for (float extra = 8f; best < wanted * 0.9f && extra <= _maxAutoPitch; extra += 8f)
             {
                 float pitch = Mathf.Min(_pitchRange.y, _orbitPitch + extra);
-                float free = FreeDistance(pivot, Quaternion.Euler(pitch, _orbitYaw, 0f) * Vector3.back, wanted);
+                float free = FreeDistance(pivot, Quaternion.Euler(pitch, _orbitYaw, 0f) * Vector3.back, wanted, true);
                 if (free <= best + 0.2f) continue;
                 best = free;
                 target = extra;
@@ -286,15 +291,24 @@ namespace Snake3D
         /// Сколько можно отодвинуть камеру от точки взгляда, не заходя в препятствие: шагаем вдоль луча
         /// и сравниваем высоту точки над рельефом с высотой препятствия в клетке; склоны и горы тоже не пускают.
         /// </summary>
-        private float FreeDistance(Vector3 pivot, Vector3 direction, float maxDistance)
+        private float FreeDistance(Vector3 pivot, Vector3 direction, float maxDistance, bool lowObstacles = false)
         {
             for (float t = _collisionStep; t <= maxDistance; t += _collisionStep)
             {
                 Vector3 p = pivot + direction * t;
                 float above = p.y - _grid.GroundHeight(p);
-                // Камеру останавливает только рельеф (холмы и горы): стволы, пни и камни перед ней
-                // не толкают её к змее, а становятся полупрозрачными (CanopyFader).
+                // Расстояние ограничивает только рельеф (холмы и горы): стволы перед камерой не толкают её к змее,
+                // а становятся полупрозрачными. Низкие препятствия учитываются лишь для автоподъёма.
                 bool hit = above < 0.35f;
+                if (!hit && lowObstacles)
+                {
+                    Vector2Int cell = _grid.WorldToCell(p);
+                    if (_grid.IsInside(cell) && _grid.GetObstacle(cell) != ObstacleType.Mountain)
+                    {
+                        float h = _grid.GetObstacleHeight(cell);
+                        hit = h > 0f && h <= _liftOverHeight && above < h + 0.3f;
+                    }
+                }
                 if (hit) return Mathf.Max(_distanceRange.x * 0.6f, t - _collisionMargin);
             }
             return maxDistance;

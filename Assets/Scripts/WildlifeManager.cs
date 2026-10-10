@@ -172,7 +172,7 @@ namespace Snake3D
         /// <summary>
         /// Лучшая цель для ИИ: сытность делится на расстояние, убегающая и чужая (рядом с другой змеёй) — хуже.
         /// </summary>
-        public PreyAnimal FindBestTarget(Vector3 from, Vector3 otherHead, bool otherActive)
+        public PreyAnimal FindBestTarget(Vector3 from, Vector3 otherHead, bool otherActive, PreyAnimal ignore = null)
         {
             PreyAnimal best = null;
             float bestScore = 0f;
@@ -182,6 +182,8 @@ namespace Snake3D
                 PreyAnimal a = _animals[i];
                 // Кролика ИИ не душит — не гоняется за ним зря.
                 if (!a.IsActive || a.IsFlying || a.IsHeld || a.IsCurled || _config.RequiresConstrict(a.Kind)) continue;
+                // Ёж колется — ИИ его обходит; до недоступной добычи (ignore) не тянется.
+                if (a == ignore || a.Kind == PreyKind.Hedgehog) continue;
                 Vector3 d = a.Position - from;
                 d.y = 0f;
                 float dist = d.magnitude / cs;

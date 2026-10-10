@@ -52,30 +52,30 @@ namespace Snake3D
         [SerializeField] private Color _sunLowColor = new Color(1f, 0.52f, 0.28f);
 
         [Tooltip("Яркость луны")]
-        [SerializeField, Min(0f)] private float _moonIntensity = 0.42f;
+        [SerializeField, Min(0f)] private float _moonIntensity = 0.8f;
 
-        [SerializeField] private Color _moonColor = new Color(0.55f, 0.66f, 1f);
+        [SerializeField] private Color _moonColor = new Color(0.66f, 0.75f, 1f);
 
         [Header("Рассеянный свет (небо / горизонт / земля)")]
         [SerializeField] private Color _daySky = new Color(0.55f, 0.62f, 0.76f);
         [SerializeField] private Color _dayEquator = new Color(0.45f, 0.48f, 0.44f);
         [SerializeField] private Color _dayGround = new Color(0.3f, 0.28f, 0.22f);
-        [SerializeField] private Color _nightSky = new Color(0.12f, 0.15f, 0.26f);
-        [SerializeField] private Color _nightEquator = new Color(0.07f, 0.08f, 0.13f);
-        [SerializeField] private Color _nightGround = new Color(0.03f, 0.03f, 0.05f);
+        [SerializeField] private Color _nightSky = new Color(0.27f, 0.31f, 0.44f);
+        [SerializeField] private Color _nightEquator = new Color(0.18f, 0.2f, 0.28f);
+        [SerializeField] private Color _nightGround = new Color(0.1f, 0.1f, 0.13f);
         [SerializeField] private Color _duskTint = new Color(0.95f, 0.55f, 0.4f);
 
         [Header("Небо и туман")]
         [SerializeField] private Color _dayFog = new Color(0.72f, 0.8f, 0.88f);
-        [SerializeField] private Color _nightFog = new Color(0.04f, 0.055f, 0.1f);
+        [SerializeField] private Color _nightFog = new Color(0.1f, 0.12f, 0.2f);
         [SerializeField] private Color _daySkyTint = new Color(0.52f, 0.62f, 0.8f);
-        [SerializeField] private Color _nightSkyTint = new Color(0.18f, 0.22f, 0.42f);
+        [SerializeField] private Color _nightSkyTint = new Color(0.24f, 0.29f, 0.5f);
 
         [Tooltip("Яркость неба днём и ночью")]
         [SerializeField] private Vector2 _skyExposure = new Vector2(1.25f, 0.18f);
 
         [Tooltip("Дальность тумана днём и ночью")]
-        [SerializeField] private Vector2 _fogEnd = new Vector2(260f, 120f);
+        [SerializeField] private Vector2 _fogEnd = new Vector2(260f, 170f);
 
         [Header("Светлячки")]
         [SerializeField] private Color _pollenColorA = new Color(1f, 0.95f, 0.7f, 0.8f);
