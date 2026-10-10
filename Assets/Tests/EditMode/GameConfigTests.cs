@@ -72,6 +72,23 @@ namespace Snake3D.Tests
         }
 
         [Test]
+        public void Hedgehog_IsCaughtByStrike_AndHurts()
+        {
+            Assert.IsTrue(_config.GetPrey(PreyKind.Hedgehog).RequiresStrike);
+            Assert.IsFalse(_config.RequiresConstrict(PreyKind.Hedgehog));
+            Assert.Greater(_config.HedgehogDamage, 0f, "Свернувшийся ёж должен колоться");
+            Assert.Greater(_config.GetPrey(PreyKind.Hedgehog).NightCount, _config.GetPrey(PreyKind.Hedgehog).DayCount, "Ёж — ночной зверь");
+        }
+
+        [Test]
+        public void Rain_Settings_AreSane()
+        {
+            Assert.LessOrEqual(_config.RainInterval.x, _config.RainInterval.y);
+            Assert.LessOrEqual(_config.RainDuration.x, _config.RainDuration.y);
+            Assert.Greater(_config.RainChill, 0f);
+        }
+
+        [Test]
         public void EnsurePreyDefaults_ExtendsOldAsset_KeepsValues()
         {
             var field = typeof(GameConfig).GetField("_prey", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);

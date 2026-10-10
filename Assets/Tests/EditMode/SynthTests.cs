@@ -45,4 +45,28 @@ public class SynthTests
         Assert.Greater(peak, 0.1f);
         Assert.LessOrEqual(peak, 1f);
     }
+
+    [Test]
+    public void Ambience_Loops_HaveLengthAndNoClipping()
+    {
+        float[][] loops =
+        {
+            AmbientSynth.Rain(out int rain), AmbientSynth.Birds(out int birds),
+            AmbientSynth.Crickets(out int crickets), AmbientSynth.Rustle(out int rustle)
+        };
+        int[] frames = { rain, birds, crickets, rustle };
+        for (int i = 0; i < loops.Length; i++)
+        {
+            Assert.AreEqual(frames[i] * 2, loops[i].Length, "Петля " + i + ": стерео-данные не той длины");
+            Assert.Greater(frames[i], AmbientSynth.SAMPLE_RATE, "Петля " + i + " слишком короткая");
+            float peak = 0f;
+            foreach (float s in loops[i])
+            {
+                Assert.IsFalse(float.IsNaN(s), "NaN в петле " + i);
+                peak = System.Math.Max(peak, System.Math.Abs(s));
+            }
+            Assert.Greater(peak, 0.01f, "Петля " + i + " беззвучна");
+            Assert.LessOrEqual(peak, 1f, "Петля " + i + " перегружена");
+        }
+    }
 }

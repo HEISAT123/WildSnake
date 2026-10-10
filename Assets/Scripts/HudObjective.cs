@@ -19,11 +19,19 @@ namespace Snake3D
         [Tooltip("Полоса прогресса взросления (Image Filled Horizontal)")]
         [SerializeField] private Image _progress;
 
+        [Tooltip("Полоса до следующей линьки (Image Filled Horizontal)")]
+        [SerializeField] private Image _moltFill;
+
+        [Tooltip("Процент до следующей линьки")]
+        [SerializeField] private Text _moltValue;
+
         private int _shownKey = -1;
+        private int _shownMolt = -1;
 
         private void OnEnable()
         {
             _shownKey = -1;
+            _shownMolt = -1;
         }
 
         private void LateUpdate()
@@ -32,6 +40,16 @@ namespace Snake3D
             float length = _game.SnakeLength;
             int molts = _game.Stats.Molts;
             _progress.fillAmount = quest.Stage == QuestStage.Grow ? quest.GrowProgress01(length, molts) : 1f;
+
+            // До следующей линьки: сколько ещё съесть, видно сразу.
+            float molt = _game.MoltProgress01;
+            _moltFill.fillAmount = molt;
+            int moltPercent = Mathf.FloorToInt(molt * 100f);
+            if (moltPercent != _shownMolt)
+            {
+                _shownMolt = moltPercent;
+                _moltValue.text = moltPercent + "%";
+            }
 
             // Ключ показываемого состояния: этап, длина до десятых, линьки, ночь и сытость — текст пересобираем только при его смене.
             int stateKey = quest.Stage == QuestStage.Grow

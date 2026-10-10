@@ -3,14 +3,15 @@ using UnityEngine;
 namespace Snake3D
 {
     /// <summary>
-    /// Кроны рощ не должны прятать змею от игрока: крона, которая оказалась между камерой и головой змеи
-    /// (или рядом с самой камерой), подменяется полупрозрачной копией материала, а потом возвращается обратно.
-    /// Проверка — расстояние от центра кроны до отрезка «камера — голова», без физики и аллокаций.
+    /// Ничто не должно прятать змею от игрока: крона, ствол, пень, камень или бревно, оказавшиеся между камерой
+    /// и головой змеи или вплотную к самой камере, подменяются полупрозрачной копией своего материала,
+    /// а потом возвращаются обратно. Проверка — расстояние от центра объекта до отрезка «камера — голова»,
+    /// без физики и аллокаций.
     /// </summary>
     public class CanopyFader : MonoBehaviour
     {
         [Header("Ссылки")]
-        [Tooltip("Поле: из него берутся кроны")]
+        [Tooltip("Поле: из него берутся кроны и препятствия")]
         [SerializeField] private BoardView _board;
 
         [Tooltip("Камера игрока")]
@@ -20,42 +21,53 @@ namespace Snake3D
         [SerializeField] private SnakeController _snake;
 
         [Header("Материалы")]
-        [SerializeField] private Material _leaves;
-        [SerializeField] private Material _leavesFade;
-        [SerializeField] private Material _pine;
-        [SerializeField] private Material _pineFade;
+        [Tooltip("Обычные материалы (кроны, кора, камень…) — по индексу им соответствуют прозрачные копии")]
+        [SerializeField] private Material[] _opaque = new Material[0];
+
+        [Tooltip("Полупрозрачные копии тех же материалов")]
+        [SerializeField] private Material[] _faded = new Material[0];
 
         [Header("Поведение")]
-        [Tooltip("Запас к радиусу кроны при проверке, мировых единиц")]
-        [SerializeField, Min(0f)] private float _margin = 0.6f;
+        [Tooltip("Запас к радиусу объекта при проверке, мировых единиц")]
+        [SerializeField, Min(0f)] private float _margin = 0.4f;
+
+        [Tooltip("Объекты ближе этого к камере прячутся всегда, мировых единиц")]
+        [SerializeField, Min(0f)] private float _nearCamera = 2.2f;
 
         [Tooltip("Как часто пересчитывать, сек")]
         [SerializeField, Min(0f)] private float _interval = 0.05f;
 
-        private Renderer[] _crowns;
+        private Renderer[] _items;
         private Vector3[] _centers;
         private float[] _radii;
-        private bool[] _faded;
+        private bool[] _isFaded;
+        private int[] _pair;
         private float _timer;
 
         private void Start()
         {
-            _crowns = _board.Crowns;
-            int n = _crowns.Length;
+            Renderer[] crowns = _board.Crowns;
+            Renderer[] occluders = _board.Occluders;
+            int n = crowns.Length + occluders.Length;
+            _items = new Renderer[n];
             _centers = new Vector3[n];
             _radii = new float[n];
-            _faded = new bool[n];
+            _isFaded = new bool[n];
+            _pair = new int[n];
             for (int i = 0; i < n; i++)
             {
-                Bounds b = _crowns[i].bounds;
+                Renderer r = i < crowns.Length ? crowns[i] : occluders[i - crowns.Length];
+                _items[i] = r;
+                Bounds b = r.bounds;
                 _centers[i] = b.center;
                 _radii[i] = Mathf.Max(b.extents.x, b.extents.z);
+                _pair[i] = System.Array.IndexOf(_opaque, r.sharedMaterial);
             }
         }
 
         private void LateUpdate()
         {
-            if (_crowns == null) return;
+            if (_items == null) return;
             _timer -= Time.unscaledDeltaTime;
             if (_timer > 0f) return;
             _timer = _interval;
@@ -64,18 +76,24 @@ namespace Snake3D
             Vector3 to = _snake.HeadPosition + Vector3.up * 0.3f;
             Vector3 seg = to - from;
             float segLenSqr = Mathf.Max(1e-4f, seg.sqrMagnitude);
-            for (int i = 0; i < _crowns.Length; i++)
+            float nearSqr = _nearCamera * _nearCamera;
+            for (int i = 0; i < _items.Length; i++)
             {
+                int pair = _pair[i];
+                if (pair < 0) continue;
                 Vector3 c = _centers[i];
-                float t = Mathf.Clamp01(Vector3.Dot(c - from, seg) / segLenSqr);
-                float dist = (from + seg * t - c).magnitude;
-                bool fade = dist < _radii[i] + _margin;
-                if (fade == _faded[i]) continue;
-                _faded[i] = fade;
-                Renderer r = _crowns[i];
-                Material current = r.sharedMaterial;
-                if (fade) r.sharedMaterial = current == _pine ? _pineFade : _leavesFade;
-                else r.sharedMaterial = current == _pineFade ? _pine : _leaves;
+                // Быстрый отсев далёких объектов: дальше отрезка плюс радиус — точно не мешают.
+                float far = segLenSqr + (_radii[i] + _nearCamera) * (_radii[i] + _nearCamera) * 4f;
+                bool fade = false;
+                if ((c - from).sqrMagnitude < far)
+                {
+                    float t = Mathf.Clamp01(Vector3.Dot(c - from, seg) / segLenSqr);
+                    float dist = (from + seg * t - c).magnitude;
+                    fade = dist < _radii[i] + _margin || (_items[i].bounds.ClosestPoint(from) - from).sqrMagnitude < nearSqr;
+                }
+                if (fade == _isFaded[i]) continue;
+                _isFaded[i] = fade;
+                _items[i].sharedMaterial = fade ? _faded[pair] : _opaque[pair];
             }
         }
     }

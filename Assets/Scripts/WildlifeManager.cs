@@ -13,7 +13,7 @@ namespace Snake3D
     /// </summary>
     public class WildlifeManager : MonoBehaviour
     {
-        private const int KIND_COUNT = 5;
+        private const int KIND_COUNT = 6;
 
         [Header("Ссылки")]
         [Tooltip("Параметры баланса")]
@@ -53,6 +53,12 @@ namespace Snake3D
         /// <summary>Змея игрока схватила броском добычу, которую нужно задушить (кролик).</summary>
         public event Action<PreyAnimal> Grabbed;
 
+        /// <summary>Змея игрока укусила свернувшегося ежа и укололась.</summary>
+        public event Action Pricked;
+
+        /// <summary>Сила дождя 0..1: птицы, мыши и жуки прячутся, лягушек больше, шум дождя скрывает змею.</summary>
+        public float Rain01 { get; set; }
+
         /// <summary>Ночью меняется состав и птицы спят.</summary>
         public bool IsNight { get; set; }
 
@@ -66,6 +72,7 @@ namespace Snake3D
 
         private readonly float[] _spawnTimers = new float[KIND_COUNT];
         private float[] _startleTimers;
+        private float _hideTimer;
         private bool _initialized;
 
         private void Start()
@@ -174,7 +181,7 @@ namespace Snake3D
             {
                 PreyAnimal a = _animals[i];
                 // Кролика ИИ не душит — не гоняется за ним зря.
-                if (!a.IsActive || a.IsFlying || a.IsHeld || _config.RequiresConstrict(a.Kind)) continue;
+                if (!a.IsActive || a.IsFlying || a.IsHeld || a.IsCurled || _config.RequiresConstrict(a.Kind)) continue;
                 Vector3 d = a.Position - from;
                 d.y = 0f;
                 float dist = d.magnitude / cs;
@@ -227,6 +234,8 @@ namespace Snake3D
             else if (snake.IsMoving && snake.Pace == SnakePace.Sneak) m *= _config.SneakAwareness;
             else if (snake.IsMoving && snake.Pace == SnakePace.Sprint) m *= _config.SprintAwareness;
             m *= snake.Ambush.AwarenessMultiplier(snake.IsHidden);
+            // Шум дождя скрывает шорох змеи.
+            m *= 1f - 0.3f * Rain01;
             if (snake.IsExposed) m *= _config.MissAwareness;
             return new PreyThreat(true, snake.HeadPosition, m, snake.Ambush.IsLuring);
         }
@@ -257,6 +266,14 @@ namespace Snake3D
                 if (d.sqrMagnitude > rSqr) continue;
 
                 PreyStats stats = _config.GetPrey(a.Kind);
+                if (a.IsCurled)
+                {
+                    // Колючий шар: укус ранит саму змею, ёж остаётся.
+                    snake.TakeHit(_config.HedgehogDamage, DamageSource.Hedgehog, head - a.Position);
+                    snake.CancelStrike();
+                    if (snake == _player) Pricked?.Invoke();
+                    return;
+                }
                 if (_config.RequiresConstrict(a.Kind))
                 {
                     // Крупную добычу бросок только хватает — и только змея игрока умеет её задушить.
@@ -293,10 +310,19 @@ namespace Snake3D
 
         private void MaintainPopulation(float dt)
         {
+            _hideTimer -= dt;
             for (int k = 0; k < KIND_COUNT; k++)
             {
                 var kind = (PreyKind)k;
-                if (CountActive(kind) >= TargetCount(kind)) continue;
+                int active = CountActive(kind);
+                int target = TargetCount(kind);
+                // В дождь лишние животные понемногу прячутся — те, что далеко от змеи.
+                if (active > target)
+                {
+                    if (_hideTimer <= 0f && HideOne(kind)) _hideTimer = 2f;
+                    continue;
+                }
+                if (active >= target) continue;
                 _spawnTimers[k] -= dt;
                 if (_spawnTimers[k] > 0f) continue;
                 SpawnOne(kind);
@@ -313,7 +339,37 @@ namespace Snake3D
         private int TargetCount(PreyKind kind)
         {
             PreyStats s = _config.GetPrey(kind);
-            return IsNight ? s.NightCount : s.DayCount;
+            int count = IsNight ? s.NightCount : s.DayCount;
+            return Mathf.RoundToInt(count * Mathf.Lerp(1f, RainFactor(kind), Rain01));
+        }
+
+        /// <summary>Кто как переносит дождь: лягушкам раздолье, птицы и жуки прячутся.</summary>
+        private static float RainFactor(PreyKind kind)
+        {
+            switch (kind)
+            {
+                case PreyKind.Frog: return 1.5f;
+                case PreyKind.Bird: return 0.35f;
+                case PreyKind.Beetle: return 0.5f;
+                case PreyKind.Mouse: return 0.6f;
+                case PreyKind.Rabbit: return 0.5f;
+                default: return 0.8f;
+            }
+        }
+
+        /// <summary>Убрать одно животное вида подальше от змеи (ушло в укрытие). Возвращает true, если нашлось.</summary>
+        private bool HideOne(PreyKind kind)
+        {
+            float minDist = 15f * _grid.CellSize;
+            for (int i = 0; i < _animals.Length; i++)
+            {
+                PreyAnimal a = _animals[i];
+                if (!a.IsActive || a.Kind != kind || a.IsHeld) continue;
+                if (DistanceToSnake(_player, a.Position) < minDist) continue;
+                a.Despawn();
+                return true;
+            }
+            return false;
         }
 
         private int CountActive(PreyKind kind)

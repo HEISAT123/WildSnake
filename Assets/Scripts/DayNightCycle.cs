@@ -96,6 +96,21 @@ namespace Snake3D
         /// <summary>Насколько светло: 1 — день, 0 — ночь, между — сумерки.</summary>
         public float Daylight01 { get; private set; } = 1f;
 
+        /// <summary>Пасмурность 0..1 (ставит WeatherSystem): тусклее солнце, серее небо и туман, ближе горизонт.</summary>
+        public float Overcast01
+        {
+            get => _overcast;
+            set
+            {
+                if (Mathf.Approximately(_overcast, value)) return;
+                _overcast = value;
+                // Вне партии время стоит, а погода может смениться (новая жизнь, меню) — перекрашиваем сразу.
+                if (!Running) Apply();
+            }
+        }
+
+        private float _overcast;
+
         /// <summary>Доля прошедшего светлого времени (днём) или тёмного (ночью), 0..1.</summary>
         public float PeriodProgress01
         {
@@ -210,7 +225,7 @@ namespace Snake3D
             float low = 1f - Mathf.Clamp01(elevation / 30f);
             _sun.color = Color.Lerp(_sunNoonColor, _sunLowColor, low * low);
             // Свет солнца не выключаем совсем: по нему процедурное небо рисует закат и тёмную ночь.
-            _sun.intensity = _sunIntensity * Smooth(Mathf.InverseLerp(-2f, 10f, elevation));
+            _sun.intensity = _sunIntensity * Smooth(Mathf.InverseLerp(-2f, 10f, elevation)) * (1f - 0.7f * _overcast);
             SetShadows(_sun, _sun.intensity > 0.05f);
 
             if (_moon != null)
@@ -224,20 +239,23 @@ namespace Snake3D
                 SetShadows(_moon, moonOn && !(_sun.intensity > 0.05f));
             }
 
-            RenderSettings.ambientSkyColor = Mix(_nightSky, _daySky, daylight, dusk * 0.35f);
-            RenderSettings.ambientEquatorColor = Mix(_nightEquator, _dayEquator, daylight, dusk * 0.5f);
-            RenderSettings.ambientGroundColor = Color.Lerp(_nightGround, _dayGround, daylight);
-            RenderSettings.fogColor = Mix(_nightFog, _dayFog, daylight, dusk * 0.55f);
-            RenderSettings.fogEndDistance = Mathf.Lerp(_fogEnd.y, _fogEnd.x, daylight);
+            // В непогоду всё серее и темнее, а туман ближе.
+            float gloom = 1f - 0.35f * _overcast;
+            Color grey = new Color(0.5f, 0.53f, 0.57f) * Mathf.Lerp(0.15f, 1f, daylight);
+            RenderSettings.ambientSkyColor = Color.Lerp(Mix(_nightSky, _daySky, daylight, dusk * 0.35f), grey, _overcast * 0.6f) * gloom;
+            RenderSettings.ambientEquatorColor = Mix(_nightEquator, _dayEquator, daylight, dusk * 0.5f) * gloom;
+            RenderSettings.ambientGroundColor = Color.Lerp(_nightGround, _dayGround, daylight) * gloom;
+            RenderSettings.fogColor = Color.Lerp(Mix(_nightFog, _dayFog, daylight, dusk * 0.55f), grey, _overcast * 0.75f);
+            RenderSettings.fogEndDistance = Mathf.Lerp(_fogEnd.y, _fogEnd.x, daylight) * (1f - 0.55f * _overcast);
 
             if (_sky != null)
             {
                 _sky.SetColor(SkyTintId, Color.Lerp(_nightSkyTint, _daySkyTint, daylight));
-                _sky.SetFloat(ExposureId, Mathf.Lerp(_skyExposure.y, _skyExposure.x, daylight));
+                _sky.SetFloat(ExposureId, Mathf.Lerp(_skyExposure.y, _skyExposure.x, daylight) * (1f - 0.45f * _overcast));
             }
 
             // Ночью облака не должны светиться в тёмном небе — гасим их подсветку вместе с днём.
-            if (_cloudMaterial != null) _cloudMaterial.SetColor(EmissionId, _cloudEmission * Mathf.Lerp(0.06f, 1f, daylight));
+            if (_cloudMaterial != null) _cloudMaterial.SetColor(EmissionId, _cloudEmission * Mathf.Lerp(0.06f, 1f, daylight) * (1f - 0.75f * _overcast));
 
             if (_starsMaterial != null)
             {

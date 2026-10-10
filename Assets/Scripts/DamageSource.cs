@@ -12,6 +12,8 @@ namespace Snake3D
         /// <summary>Голод.</summary>
         Starvation,
         /// <summary>Укус лисы.</summary>
-        Fox
+        Fox,
+        /// <summary>Колючки свернувшегося ежа.</summary>
+        Hedgehog
     }
 }

@@ -9,6 +9,8 @@ namespace Snake3D
         /// <summary>Высокая колонна — только объехать.</summary>
         Pillar,
         /// <summary>Большой блок 2x2 — только объехать.</summary>
-        Block
+        Block,
+        /// <summary>Гора — граница мира.</summary>
+        Mountain
     }
 }

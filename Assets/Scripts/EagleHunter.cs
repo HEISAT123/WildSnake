@@ -107,7 +107,7 @@ namespace Snake3D
         public float DiveProgress01 => _phase == Phase.Diving ? Mathf.Clamp01(_phaseTime / _diveTime) : 0f;
 
         /// <summary>Точка на земле под орлом (там, где его тень).</summary>
-        public Vector3 GroundPosition => new Vector3(_pos.x, Ground(), _pos.z);
+        public Vector3 GroundPosition => new Vector3(_pos.x, _grid.GroundHeight(_pos), _pos.z);
 
         private Phase _phase;
         private float _phaseTime;
@@ -306,7 +306,7 @@ namespace Snake3D
             _leftWing.localRotation = Quaternion.Euler(0f, 0f, -wing);
             _rightWing.localRotation = Quaternion.Euler(0f, 0f, wing);
 
-            float ground = Ground();
+            float ground = _grid.GroundHeight(_pos);
             float height = Mathf.Max(0f, _pos.y - ground);
             float k = Mathf.Clamp01(height / (_circleHeight + 4f));
             float size = Mathf.Lerp(_shadowLowSize, _shadowHighSize, k);
@@ -334,9 +334,10 @@ namespace Snake3D
             return _target != null && _target.IsAlive && _target.IsRunning && !_target.InBurrow;
         }
 
+        /// <summary>Земля под змеёй (высота кружения и точка удара считаются от неё).</summary>
         private float Ground()
         {
-            return _grid.Center.y;
+            return _target != null ? _grid.SurfaceHeight(_target.HeadPosition) : _grid.Center.y;
         }
     }
 }

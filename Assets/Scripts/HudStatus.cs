@@ -18,17 +18,19 @@ namespace Snake3D
         private const int DIGEST = 1 << 6;
         private const int TIRED = 1 << 7;
         private const int EXPOSED = 1 << 8;
+        private const int RAIN = 1 << 9;
 
-        private static readonly int[] Flags = { EXPOSED, TIRED, COLD, AMBUSH, GRASS, CANOPY, WATER, DIGEST, WARM };
+        private static readonly int[] Flags = { EXPOSED, TIRED, COLD, RAIN, AMBUSH, GRASS, CANOPY, WATER, DIGEST, WARM };
         private static readonly string[] Words =
         {
-            "ВЫДАЛА СЕБЯ", "НЕТ СИЛ", "ХОЛОДНО — МЕДЛЕННЕЕ", "ЗАСАДА", "В ТРАВЕ — НЕ ВИДНО", "ПОД КРОНАМИ — ОРЁЛ НЕ ВИДИТ",
-            "В ВОДЕ", "ПЕРЕВАРИВАЕТ — ТЯЖЕЛЕЕ", "ПРОГРЕЛАСЬ"
+            "ВЫДАЛА СЕБЯ", "НЕТ СИЛ", "ХОЛОДНО — МЕДЛЕННЕЕ", "ДОЖДЬ — ЗЯБНЕТ", "ЗАСАДА", "В ТРАВЕ — НЕ ВИДНО",
+            "ПОД КРОНАМИ — ОРЁЛ НЕ ВИДИТ", "В ВОДЕ", "ПЕРЕВАРИВАЕТ — ТЯЖЕЛЕЕ", "ПРОГРЕЛАСЬ"
         };
 
         [Header("Источники")]
         [SerializeField] private GameManager _game;
         [SerializeField] private SnakeController _snake;
+        [SerializeField] private WeatherSystem _weather;
 
         [Header("Элементы")]
         [Tooltip("Строки снизу вверх")]
@@ -61,6 +63,7 @@ namespace Snake3D
                 if (_snake.Digestion.IsDigesting) state |= DIGEST;
                 if (_snake.Stamina.IsExhausted) state |= TIRED;
                 if (_snake.IsExposed) state |= EXPOSED;
+                if (_weather.Rain01 > 0.5f && !_snake.UnderCanopy) state |= RAIN;
             }
             if (state == _shown) return;
             _shown = state;
@@ -81,7 +84,7 @@ namespace Snake3D
         private Color ColorFor(int flag)
         {
             if (flag == EXPOSED || flag == TIRED) return _badColor;
-            if (flag == COLD || flag == WATER) return _coldColor;
+            if (flag == COLD || flag == WATER || flag == RAIN) return _coldColor;
             if (flag == AMBUSH || flag == GRASS || flag == CANOPY || flag == WARM) return _goodColor;
             return _infoColor;
         }

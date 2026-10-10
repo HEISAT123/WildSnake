@@ -59,9 +59,6 @@ namespace Snake3D
         [Tooltip("Шаг проверки луча камеры по сетке, мировых единиц")]
         [SerializeField, Min(0.05f)] private float _collisionStep = 0.25f;
 
-        [Tooltip("Высота стен арены для камеры")]
-        [SerializeField, Min(0f)] private float _wallHeight = 1.1f;
-
         [Tooltip("Насколько камера может сама подняться над препятствием позади, град")]
         [SerializeField, Range(0f, 60f)] private float _maxAutoPitch = 40f;
 
@@ -287,23 +284,17 @@ namespace Snake3D
 
         /// <summary>
         /// Сколько можно отодвинуть камеру от точки взгляда, не заходя в препятствие: шагаем вдоль луча
-        /// и сравниваем высоту точки над землёй с высотой препятствия в клетке; стены арены — тоже препятствие.
+        /// и сравниваем высоту точки над рельефом с высотой препятствия в клетке; склоны и горы тоже не пускают.
         /// </summary>
         private float FreeDistance(Vector3 pivot, Vector3 direction, float maxDistance)
         {
-            Vector3 c = _grid.Center;
-            Vector2 half = _grid.ArenaHalfExtents;
             for (float t = _collisionStep; t <= maxDistance; t += _collisionStep)
             {
                 Vector3 p = pivot + direction * t;
-                float above = p.y - c.y;
-                bool outside = Mathf.Abs(p.x - c.x) > half.x || Mathf.Abs(p.z - c.z) > half.y;
-                bool hit = above < 0.25f || (outside && above < _wallHeight);
-                if (!hit && !outside)
-                {
-                    Vector2Int cell = _grid.WorldToCell(p);
-                    hit = _grid.IsInside(cell) && _grid.GetObstacleHeight(cell) + 0.15f > above;
-                }
+                float above = p.y - _grid.GroundHeight(p);
+                // Камеру останавливает только рельеф (холмы и горы): стволы, пни и камни перед ней
+                // не толкают её к змее, а становятся полупрозрачными (CanopyFader).
+                bool hit = above < 0.35f;
                 if (hit) return Mathf.Max(_distanceRange.x * 0.6f, t - _collisionMargin);
             }
             return maxDistance;

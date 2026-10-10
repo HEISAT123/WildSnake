@@ -29,6 +29,9 @@ namespace Snake3D
         /// <summary>Насколько холод замедляет движение и бросок при полном окоченении.</summary>
         public float ColdSlowdown { get; set; } = 0.3f;
 
+        /// <summary>Насколько остужает дождь (снижение «температуры места»; в норе не действует).</summary>
+        public float Chill { get; set; }
+
         public float Value01 { get; private set; }
 
         /// <summary>Насколько змее холодно, 0..1.</summary>
@@ -71,6 +74,7 @@ namespace Snake3D
         {
             if (dt <= 0f) return;
             float target = SpotTarget(spot, daylight01);
+            if (spot != TemperatureSpot.Burrow) target = Math.Max(0f, target - Chill);
             if (Value01 < target)
             {
                 float rate = HeatRate * (spot == TemperatureSpot.SunStone ? StoneBonus : 1f);

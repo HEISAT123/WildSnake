@@ -30,6 +30,7 @@ internal static class UIBuilder
         public EagleHunter Eagle;
         public FoxHunter Fox;
         public GridManager Grid;
+        public WeatherSystem Weather;
         public DayNightCycle DayNight;
         public ScentTracker Scent;
         public Transform CameraTransform;
@@ -137,10 +138,11 @@ internal static class UIBuilder
         SnakeSceneBuilder.WireArray(vitals, "_values", hp.VitalValues);
 
         var objective = hud.AddComponent<HudObjective>();
-        SnakeSceneBuilder.Wire(objective, ("_game", r.Game), ("_dayNight", r.DayNight), ("_text", hp.ObjectiveText), ("_progress", hp.ObjectiveFill));
+        SnakeSceneBuilder.Wire(objective, ("_game", r.Game), ("_dayNight", r.DayNight), ("_text", hp.ObjectiveText), ("_progress", hp.ObjectiveFill),
+            ("_moltFill", hp.MoltFill), ("_moltValue", hp.MoltValue));
 
         var status = hud.AddComponent<HudStatus>();
-        SnakeSceneBuilder.Wire(status, ("_game", r.Game), ("_snake", r.Player));
+        SnakeSceneBuilder.Wire(status, ("_game", r.Game), ("_snake", r.Player), ("_weather", r.Weather));
         SnakeSceneBuilder.WireArray(status, "_lines", hp.StatusLines);
 
         var dial = hud.AddComponent<SunDial>();
@@ -601,7 +603,8 @@ internal static class UIBuilder
         public CanvasGroup BannerGroup;
         public Text BannerText;
         public Text ObjectiveText, DayLabel;
-        public Image ObjectiveFill;
+        public Image ObjectiveFill, MoltFill;
+        public Text MoltValue;
         public Object[] StatusLines = new Object[3];
         public Object[] VitalLabels = new Object[3];
         public Object[] VitalValues = new Object[3];
@@ -707,7 +710,19 @@ internal static class UIBuilder
         p.ObjectiveFill = Img(objFill, Venom, _solid);
         p.ObjectiveFill.type = Image.Type.Filled;
         p.ObjectiveFill.fillMethod = Image.FillMethod.Horizontal;
-        TopLeft(Label(hud, "MapHint", "TAB — карта и журнал", 16, HudCaption, TextAnchor.MiddleLeft, false), 46f, -110f, 400f, 24f);
+        // До следующей линьки — сколько ещё съесть.
+        TopLeft(Label(hud, "MoltCaption", Spaced("ДО ЛИНЬКИ"), 15, HudCaption, TextAnchor.MiddleLeft, true), 46f, -116f, 200f, 22f);
+        RectTransform moltTrack = Rect("MoltTrack", hud);
+        TopLeft(moltTrack, 196f, -127f, 230f, 2f);
+        Img(moltTrack, Hair, null);
+        RectTransform moltFillRt = Rect("MoltFill", hud);
+        TopLeft(moltFillRt, 196f, -126f, 230f, 4f);
+        p.MoltFill = Img(moltFillRt, Sky, _solid);
+        p.MoltFill.type = Image.Type.Filled;
+        p.MoltFill.fillMethod = Image.FillMethod.Horizontal;
+        p.MoltValue = Label(hud, "MoltValue", "0%", 16, Bone, TextAnchor.MiddleLeft, false);
+        TopLeft(p.MoltValue, 436f, -116f, 80f, 22f);
+        TopLeft(Label(hud, "MapHint", "TAB — карта и журнал", 16, HudCaption, TextAnchor.MiddleLeft, false), 46f, -144f, 400f, 24f);
 
         // ---------- Время суток: полудуга, по которой идёт солнце или луна ----------
         RectTransform dial = Rect("SunDial", hud);

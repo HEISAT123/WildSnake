@@ -31,6 +31,7 @@ namespace Snake3D
             NestLay,
             NestNight,
             NestFood,
+            Hedgehog,
             Count
         }
 
@@ -38,7 +39,7 @@ namespace Snake3D
 
         private static readonly string[] Keys =
         {
-            "F", "E", "ЛКМ", "ЛКМ", "ПКМ", "ЛКМ", "E", "", "SPACE", "CTRL", "WASD", "", "E", "", "E", "", ""
+            "F", "E", "ЛКМ", "ЛКМ", "ПКМ", "ЛКМ", "E", "", "SPACE", "CTRL", "WASD", "", "E", "", "E", "", "", ""
         };
 
         private static readonly string[] Texts =
@@ -59,11 +60,12 @@ namespace Snake3D
             "замрите — добыча подойдёт сама",
             "отложить яйца",
             "гнездо — вернитесь ночью",
-            "гнездо — сначала наешьтесь"
+            "гнездо — сначала наешьтесь",
+            "ёж свернулся — уколетесь, подождите"
         };
 
         // Сколько раз показывать каждую подсказку.
-        private static readonly int[] Limits = { 6, 4, 4, 4, 4, 3, 4, 3, 3, 3, 3, 3, 3, 3, 99, 99, 99 };
+        private static readonly int[] Limits = { 6, 4, 4, 4, 4, 3, 4, 3, 3, 3, 3, 3, 3, 3, 99, 99, 99, 4 };
 
         [Header("Источники")]
         [SerializeField] private GameManager _game;
@@ -196,12 +198,17 @@ namespace Snake3D
                 preyDist = d.magnitude / cs;
             }
 
-            if (hasPrey && !prey.IsFleeing && preyDist <= _config.StrikeDistance + 0.4f && FacesTowards(prey.Position, 60f))
+            if (hasPrey && prey.IsCurled && preyDist <= _config.ChargedStrikeDistance)
+            {
+                Hint h = Allow(Hint.Hedgehog);
+                if (h != Hint.None) return h;
+            }
+            if (hasPrey && !prey.IsFleeing && !prey.IsCurled && preyDist <= _config.StrikeDistance + 0.4f && FacesTowards(prey.Position, 60f))
             {
                 Hint h = Allow(prey.Kind == PreyKind.Rabbit ? Hint.Grab : Hint.Bite);
                 if (h != Hint.None) return h;
             }
-            if (hasPrey && !prey.IsFleeing && !_snake.IsCoiled && preyDist > _config.StrikeDistance && preyDist <= _config.ChargedStrikeDistance
+            if (hasPrey && !prey.IsFleeing && !prey.IsCurled && !_snake.IsCoiled && preyDist > _config.StrikeDistance && preyDist <= _config.ChargedStrikeDistance
                 && Allow(Hint.Coil) != Hint.None) return Hint.Coil;
 
             if (_fox.IsChasing && _game.Survival.Health01 > _config.FoxScareHealth)

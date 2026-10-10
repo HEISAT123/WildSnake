@@ -281,8 +281,8 @@ namespace Snake3D
 
         // Кэш геометрии, пересчитывается в ResetSnake.
         private float _cellSize = 1f;
-        private float _groundY;
         private float _sampleDist;
+        private float _slopePitch;
 
         private void Awake()
         {
@@ -308,7 +308,6 @@ namespace Snake3D
         public void ResetSnake(Vector3 position, float yaw)
         {
             _cellSize = _grid.CellSize;
-            _groundY = _grid.Center.y + _bodyHeight * _cellSize;
             _sampleDist = _pathSampleDistance * _cellSize;
 
             _lengthCells = _config.StartLength;
@@ -343,7 +342,9 @@ namespace Snake3D
             IsAlive = true;
             IsRunning = false;
 
-            _headPos = new Vector3(position.x, _groundY, position.z);
+            _headPos = new Vector3(position.x, 0f, position.z);
+            _headPos.y = BodyY(_headPos);
+            _slopePitch = 0f;
             LayStraightPath();
 
             _head.localScale = _headBaseScale;
@@ -352,14 +353,25 @@ namespace Snake3D
             Respawned?.Invoke();
         }
 
-        /// <summary>Траектория прямой линией позади головы (старт, выход из норы).</summary>
+        /// <summary>Траектория прямой линией позади головы (старт, выход из норы) — по рельефу.</summary>
         private void LayStraightPath()
         {
             Vector3 forward = Forward;
             int needed = Mathf.Min(_path.Length, Mathf.CeilToInt((_targetLengthCells + 1f) / _pathSampleDistance) + 2);
             _pathHead = _path.Length - 1;
             _pathCount = 0;
-            for (int j = needed - 1; j >= 0; j--) PushPathPoint(_headPos - forward * (j * _sampleDist));
+            for (int j = needed - 1; j >= 0; j--)
+            {
+                Vector3 p = _headPos - forward * (j * _sampleDist);
+                p.y = BodyY(p);
+                PushPathPoint(p);
+            }
+        }
+
+        /// <summary>Высота оси тела над землёй (или над водой) в точке.</summary>
+        private float BodyY(Vector3 p)
+        {
+            return _grid.SurfaceHeight(p) + _bodyHeight * _cellSize;
         }
 
         /// <summary>Сразу задать длину тела (продолжение сохранённой партии).</summary>
@@ -376,7 +388,8 @@ namespace Snake3D
         /// <summary>Заползти в нору: змея прячется целиком, стоит и не видна ни добыче, ни хищникам.</summary>
         public void EnterBurrow(Vector3 burrowPosition)
         {
-            _headPos = new Vector3(burrowPosition.x, _groundY, burrowPosition.z);
+            _headPos = new Vector3(burrowPosition.x, 0f, burrowPosition.z);
+            _headPos.y = BodyY(_headPos);
             _speed = 0f;
             _strikeTimer = 0f;
             _coiled = false;
@@ -389,7 +402,8 @@ namespace Snake3D
         public void ExitBurrow(Vector3 exitPosition, float yaw)
         {
             _yaw = yaw;
-            _headPos = new Vector3(exitPosition.x, _groundY, exitPosition.z);
+            _headPos = new Vector3(exitPosition.x, 0f, exitPosition.z);
+            _headPos.y = BodyY(_headPos);
             LayStraightPath();
             ComputeSpine();
             SetInBurrow(false);
@@ -650,7 +664,8 @@ namespace Snake3D
             // В воде тело чуть погружается — видно, что змея плывёт.
             _inWater = _grounded && _grid.IsWaterAt(_headPos);
             _sink = Mathf.MoveTowards(_sink, _inWater ? 0.14f * _cellSize : 0f, dt * 0.8f);
-            _headPos.y = _groundY + _height - _sink;
+            _headPos.y = BodyY(_headPos) + _height - _sink;
+            UpdateSlope(dt);
             _lengthCells = Mathf.MoveTowards(_lengthCells, _targetLengthCells, _lengthChangeSpeed * dt);
 
             bool blocked = ClampToArena(out Vector3 normal) | HitsObstacle(out Vector3 obstacleNormal);
@@ -696,6 +711,7 @@ namespace Snake3D
                 if (IsExposed) target *= _config.MissSlowdown;
                 target *= _digestion.SpeedMultiplier * _temperature.SpeedMultiplier;
                 if (_inWater) target *= _config.SwimSpeed;
+                else target *= SlopeSpeedMultiplier();
                 // Крутой разворот — сбавляем ход, иначе дуга вышла бы слишком широкой.
                 float turnAbs = Mathf.Abs(delta);
                 if (turnAbs > 90f) target *= Mathf.Lerp(1f, 0.55f, Mathf.InverseLerp(90f, 170f, turnAbs));
@@ -703,6 +719,22 @@ namespace Snake3D
 
             float rate = target > _speed ? _config.Acceleration : _config.Deceleration;
             _speed = Mathf.MoveTowards(_speed, target, rate * dt);
+        }
+
+        /// <summary>Наклон головы по склону: голова смотрит вверх на подъёме и вниз на спуске.</summary>
+        private void UpdateSlope(float dt)
+        {
+            float ahead = _grid.SurfaceHeight(_headPos + Forward * (0.4f * _cellSize));
+            float behind = _grid.SurfaceHeight(_headPos - Forward * (0.4f * _cellSize));
+            float angle = -Mathf.Atan2(ahead - behind, 0.8f * _cellSize) * Mathf.Rad2Deg;
+            _slopePitch = Mathf.Lerp(_slopePitch, angle, 1f - Mathf.Exp(-10f * dt));
+        }
+
+        /// <summary>Подъём замедляет: чем круче склон впереди, тем медленнее змея ползёт вверх.</summary>
+        private float SlopeSpeedMultiplier()
+        {
+            float rise = _grid.SurfaceHeight(_headPos + Forward * (0.5f * _cellSize)) - _grid.SurfaceHeight(_headPos);
+            return rise <= 0f ? 1f : Mathf.Max(0.55f, 1f - rise / (0.5f * _cellSize) * 0.6f);
         }
 
         /// <summary>Выдохшаяся змея быстро ползти не может — переходит на шаг.</summary>
@@ -763,7 +795,7 @@ namespace Snake3D
                 _verticalSpeed = 0f;
                 _grounded = true;
                 _squashTimer = 0f;
-                Landed?.Invoke(new Vector3(_headPos.x, _grid.Center.y, _headPos.z));
+                Landed?.Invoke(new Vector3(_headPos.x, _grid.SurfaceHeight(_headPos), _headPos.z));
             }
         }
 
@@ -884,7 +916,8 @@ namespace Snake3D
         {
             float lift = _coilBlend * _coilLift * _cellSize;
             _head.position = _headPos + Vector3.up * lift;
-            float pitch = Mathf.Clamp(-_verticalSpeed / _cellSize * _pitchPerSpeed, -35f, 35f) - _coilBlend * _coilPitch;
+            float pitch = Mathf.Clamp(-_verticalSpeed / _cellSize * _pitchPerSpeed, -35f, 35f) - _coilBlend * _coilPitch
+                          + (_grounded ? _slopePitch : 0f);
             float roll = -_turn01 * _bankAngle;
             _head.rotation = Quaternion.Euler(pitch, _yaw, roll);
 

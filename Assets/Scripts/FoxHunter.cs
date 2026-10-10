@@ -177,7 +177,7 @@ namespace Snake3D
             _timer -= dt * (IsNight ? 1.6f : 1f);
             if (_timer > 0f) return;
 
-            // Приходит из угла поля, дальнего от змеи.
+            // Приходит издалека — из свободной точки подальше от змеи.
             _pos = FarCorner(_target.HeadPosition);
             _exit = _pos;
             _yaw = Mathf.Atan2(_grid.Center.x - _pos.x, _grid.Center.z - _pos.z) * Mathf.Rad2Deg;
@@ -311,14 +311,23 @@ namespace Snake3D
             return TargetPresent() ? _target.HeadPosition : _grid.Center;
         }
 
+        /// <summary>Свободная точка подальше от змеи (несколько случайных проб, берём самую дальнюю).</summary>
         private Vector3 FarCorner(Vector3 from)
         {
-            Vector2 half = _grid.ArenaHalfExtents;
-            float inset = 1.5f * _grid.CellSize;
-            Vector3 c = _grid.Center;
-            float sx = from.x > c.x ? -1f : 1f;
-            float sz = from.z > c.z ? -1f : 1f;
-            return new Vector3(c.x + sx * (half.x - inset), c.y, c.z + sz * (half.y - inset));
+            Vector3 best = _grid.Center;
+            float bestDist = -1f;
+            for (int i = 0; i < 12; i++)
+            {
+                if (!_grid.TryGetRandomFreeCell(out Vector2Int cell)) break;
+                Vector3 p = _grid.CellToWorld(cell);
+                Vector3 d = p - from;
+                d.y = 0f;
+                float dist = d.sqrMagnitude;
+                if (dist <= bestDist) continue;
+                bestDist = dist;
+                best = p;
+            }
+            return best;
         }
 
         // ---------------- Движение и вид ----------------
@@ -356,7 +365,7 @@ namespace Snake3D
             _yaw = Mathf.MoveTowardsAngle(_yaw, targetYaw, _turnSpeed * dt);
             _speed = speedCells;
             _pos += dir * (speedCells * cs * dt);
-            _pos.y = _grid.Center.y;
+            _pos.y = _grid.GroundHeight(_pos);
         }
 
         private bool IsBlocked(Vector3 point, bool ignoreWater)

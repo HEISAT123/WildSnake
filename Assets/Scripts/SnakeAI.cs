@@ -348,7 +348,7 @@ namespace Snake3D
                 {
                     int i = y * _width + x;
                     ObstacleType type = _grid.GetObstacle(new Vector2Int(x, y));
-                    if (type == ObstacleType.Pillar || type == ObstacleType.Block)
+                    if (type == ObstacleType.Pillar || type == ObstacleType.Block || type == ObstacleType.Mountain)
                     {
                         _baseCost[i] = BLOCKED;
                         continue;
@@ -374,7 +374,8 @@ namespace Snake3D
                 int x = cx + DirX[d], y = cy + DirY[d];
                 if (x < 0 || y < 0 || x >= _width || y >= _height) continue;
                 ObstacleType t = _grid.GetObstacle(new Vector2Int(x, y));
-                if (t == ObstacleType.Pillar || t == ObstacleType.Block || (t == ObstacleType.LowWall && !_canJump)) return true;
+                if (t == ObstacleType.Pillar || t == ObstacleType.Block || t == ObstacleType.Mountain
+                    || (t == ObstacleType.LowWall && !_canJump)) return true;
             }
             return false;
         }

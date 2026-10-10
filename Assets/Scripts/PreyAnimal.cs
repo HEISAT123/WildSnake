@@ -19,7 +19,8 @@ namespace Snake3D
             Flee,
             Rest,
             FlyAway,
-            Held
+            Held,
+            Curled
         }
 
         private static readonly float[] AvoidAngles = { 40f, -40f, 85f, -85f, 130f, -130f };
@@ -39,6 +40,12 @@ namespace Snake3D
 
         [Tooltip("Светящаяся метка, видная, пока змея нюхает")]
         [SerializeField] private GameObject _scentMark;
+
+        [Tooltip("Что прячется, когда ёж сворачивается в шар (мордочка и лапы)")]
+        [SerializeField] private GameObject _curlHide;
+
+        [Tooltip("Сколько секунд ёж остаётся свёрнутым")]
+        [SerializeField, Min(0.5f)] private float _curlTime = 4f;
 
         [Header("Поведение")]
         [Tooltip("Задержка между «заметил змею» и бегством, сек")]
@@ -84,6 +91,9 @@ namespace Snake3D
         /// <summary>Схвачен змеёй и бьётся в её кольцах.</summary>
         public bool IsHeld => _mode == Mode.Held;
 
+        /// <summary>Ёж свернулся колючим шаром: кусать нельзя — уколешься.</summary>
+        public bool IsCurled => _mode == Mode.Curled;
+
         /// <summary>Передвигается прыжками (лягушка, кролик).</summary>
         private bool Hops => _kind == PreyKind.Frog || _kind == PreyKind.Rabbit;
 
@@ -124,7 +134,8 @@ namespace Snake3D
         public void Spawn(Vector3 groundPosition, float yaw)
         {
             IsActive = true;
-            _pos = new Vector3(groundPosition.x, _grid.Center.y, groundPosition.z);
+            _pos = new Vector3(groundPosition.x, 0f, groundPosition.z);
+            _pos.y = Surface(_pos);
             _yaw = yaw;
             _moveDir = Quaternion.Euler(0f, yaw, 0f) * Vector3.forward;
             _velocity = Vector3.zero;
@@ -162,7 +173,8 @@ namespace Snake3D
         /// <summary>Положение в кольцах змеи (вызывается каждый кадр, пока животное схвачено).</summary>
         public void HoldAt(Vector3 groundPosition, float yaw)
         {
-            _pos = new Vector3(groundPosition.x, _grid.Center.y, groundPosition.z);
+            _pos = new Vector3(groundPosition.x, 0f, groundPosition.z);
+            _pos.y = Surface(_pos);
             _yaw = yaw;
         }
 
@@ -179,6 +191,11 @@ namespace Snake3D
         {
             if (!IsActive || _mode == Mode.FlyAway || _mode == Mode.Held) return;
             _threatPos = threatPosition;
+            if (_kind == PreyKind.Hedgehog)
+            {
+                SetMode(Mode.Curled, _curlTime);
+                return;
+            }
             _speedBoost = 0.25f;
             if (_kind == PreyKind.Bird) SetMode(Mode.FlyAway, _flyAwayTime);
             else if (_stats.FleeSpeed > 0f) SetMode(Mode.Flee, _stats.FleeTime);
@@ -199,7 +216,11 @@ namespace Snake3D
             {
                 float radius = _stats.AwareRadius * _grid.CellSize * (sleeping ? _sleepAwareness : 1f);
                 if (Notices(a, radius) || Notices(b, radius))
-                    SetMode(Mode.Alert, sleeping ? _reactionTime * 2f : _reactionTime);
+                {
+                    // Ёж не бежит — сразу сворачивается в колючий шар.
+                    if (_kind == PreyKind.Hedgehog) SetMode(Mode.Curled, _curlTime);
+                    else SetMode(Mode.Alert, sleeping ? _reactionTime * 2f : _reactionTime);
+                }
             }
 
             _velocity = Vector3.zero;
@@ -234,6 +255,10 @@ namespace Snake3D
                     break;
 
                 case Mode.Held:
+                    break;
+
+                case Mode.Curled:
+                    if (_stateTimer <= 0f) SetMode(Mode.Idle, Random.Range(0.5f, 1.2f));
                     break;
 
                 case Mode.FlyAway:
@@ -423,8 +448,16 @@ namespace Snake3D
 
         // ---------------- Визуал ----------------
 
+        /// <summary>По чему идёт животное: лягушка держится на воде, остальные — по земле.</summary>
+        private float Surface(Vector3 p)
+        {
+            return _kind == PreyKind.Frog ? _grid.SurfaceHeight(p) : _grid.GroundHeight(p);
+        }
+
         private void ApplyVisual()
         {
+            // Шаги идут по горизонтали, а высоту берём у рельефа под ногами.
+            _pos.y = Surface(_pos);
             float k = Mathf.Clamp01(_appear / _appearTime);
             // Появление с лёгким перелётом масштаба (easeOutBack).
             float s = 1f + 2.2f * Mathf.Pow(k - 1f, 3f) + 1.2f * Mathf.Pow(k - 1f, 2f);
@@ -452,6 +485,14 @@ namespace Snake3D
                     if (moving) bob = Mathf.Abs(Mathf.Sin(_animTime * 30f)) * 0.015f;
                     break;
             }
+            if (_kind == PreyKind.Hedgehog)
+            {
+                bool curled = _mode == Mode.Curled;
+                if (_curlHide != null && _curlHide.activeSelf == curled) _curlHide.SetActive(!curled);
+                Vector3 target = curled ? new Vector3(1.12f, 0.82f, 0.82f) : Vector3.one;
+                _body.localScale = Vector3.Lerp(_body.localScale, target, 0.25f);
+            }
+
             if (_mode == Mode.Held)
             {
                 // Бьётся в кольцах: частая неровная дрожь.

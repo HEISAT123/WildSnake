@@ -59,6 +59,22 @@ namespace Snake3D.Tests
         }
 
         [Test]
+        public void Rain_Chills_ButNotInBurrow()
+        {
+            var dry = new BodyTemperature();
+            var wet = new BodyTemperature { Chill = 0.3f };
+            var burrow = new BodyTemperature { Chill = 0.3f };
+            for (int i = 0; i < 60; i++)
+            {
+                dry.Tick(1f, 1f, TemperatureSpot.Open);
+                wet.Tick(1f, 1f, TemperatureSpot.Open);
+                burrow.Tick(1f, 1f, TemperatureSpot.Burrow);
+            }
+            Assert.Less(wet.Value01, dry.Value01 - 0.2f, "Под дождём змея должна мёрзнуть");
+            Assert.AreEqual(BodyTemperature.SpotTarget(TemperatureSpot.Burrow, 1f), burrow.Value01, 1e-3f, "В норе дождь не страшен");
+        }
+
+        [Test]
         public void NeverOvershootsTarget()
         {
             var t = new BodyTemperature();

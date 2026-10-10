@@ -16,9 +16,8 @@ public static class EnvironmentBuilder
     private const string MESH_FOLDER = "Assets/Meshes";
 
     private const float TERRAIN_SIZE = 360f;
-    private const int TERRAIN_RESOLUTION = 181;
-    private const float FLAT_HEIGHT = -0.22f;
-    private const float WATER_HEIGHT = -0.75f;
+    // Шаг вершин — ровно клетка: внутри поля меш совпадает с картой высот логики.
+    private const int TERRAIN_RESOLUTION = 361;
 
     /// <summary>Материалы и меши арены для BoardView.</summary>
     public sealed class ArenaMaterials
@@ -37,6 +36,9 @@ public static class EnvironmentBuilder
         public Material Hole;
         public Material Leaves;
         public Material LeavesFade;
+        public Material BarkFade;
+        public Material StumpTopFade;
+        public Material BlockFade;
         public Material Pine;
         public Material PineFade;
         public Material Litter;
@@ -49,9 +51,7 @@ public static class EnvironmentBuilder
     }
 
     private static Vector3 _center;
-    private static float _arenaHalf;
-    private static Vector3 _lakeCenter;
-    private static float _lakeRadius;
+    private static GridManager _grid;
 
     // ===================== Материалы арены =====================
 
@@ -103,6 +103,9 @@ public static class EnvironmentBuilder
         // Полупрозрачные копии крон: на них CanopyFader меняет крону между камерой и змеёй.
         m.LeavesFade = FadeCopy("ArenaLeavesFade", m.Leaves);
         m.PineFade = FadeCopy("ArenaPineFade", m.Pine);
+        m.BarkFade = FadeCopy("BarkFade", m.Bark);
+        m.StumpTopFade = FadeCopy("StumpTopFade", m.StumpTop);
+        m.BlockFade = FadeCopy("ObstacleBlockFade", m.Block);
         m.Litter = SnakeSceneBuilder.CreateLitMaterial("LeafLitter", Color.white, 0.05f);
         m.Litter.mainTexture = Save(ProceduralTextures.LeafLitter(256));
         SnakeSceneBuilder.MakeTransparent(m.Litter);
@@ -138,15 +141,15 @@ public static class EnvironmentBuilder
         RenderSettings.fog = true;
         RenderSettings.fogMode = FogMode.Linear;
         RenderSettings.fogColor = new Color(0.72f, 0.8f, 0.88f);
-        RenderSettings.fogStartDistance = 60f;
-        RenderSettings.fogEndDistance = 260f;
+        RenderSettings.fogStartDistance = 70f;
+        RenderSettings.fogEndDistance = 330f;
 
         sun.color = new Color(1f, 0.93f, 0.8f);
         sun.intensity = 1.25f;
         sun.transform.rotation = Quaternion.Euler(42f, -38f, 0f);
 
         camera.clearFlags = CameraClearFlags.Skybox;
-        camera.farClipPlane = 500f;
+        camera.farClipPlane = 700f;
     }
 
     // ===================== Окружение =====================
@@ -156,20 +159,16 @@ public static class EnvironmentBuilder
     {
         EnsureFolders();
         _center = grid.Center;
-        _arenaHalf = Mathf.Max(grid.Width, grid.Height) * grid.CellSize * 0.5f;
-        _lakeCenter = _center + new Vector3(-(_arenaHalf + 17f), 0f, _arenaHalf * 0.6f);
-        _lakeRadius = 13f;
+        _grid = grid;
 
         var root = new GameObject("Environment").transform;
         var rng = new System.Random(4242);
 
         BuildTerrain(root);
-        BuildWater(root);
         BuildForest(root, rng);
         BuildRocks(root, rng);
         BuildBushes(root, rng);
         BuildGrassAndFlowers(root, rng);
-        BuildLanterns(root, grid);
         clouds = BuildClouds(root, rng);
         pollen = BuildPollen(root, particleMaterial);
         stars = BuildStars(root, rng);
@@ -238,36 +237,17 @@ public static class EnvironmentBuilder
         return renderer;
     }
 
-    /// <summary>
-    /// Высота рельефа: ровная площадка вокруг арены, дальше холмы, ещё дальше хребты гор, сбоку озеро.
-    /// Расстояние считается от скруглённого квадрата арены, чтобы углы не торчали.
-    /// </summary>
+    /// <summary>Высота рельефа: внутри поля — карта высот GridManager (холмы, чаши водоёмов), дальше — горы TerrainShape.</summary>
     private static float TerrainHeight(float x, float z)
     {
-        float dx = Mathf.Max(Mathf.Abs(x - _center.x) - _arenaHalf, 0f);
-        float dz = Mathf.Max(Mathf.Abs(z - _center.z) - _arenaHalf, 0f);
-        float d = Mathf.Sqrt(dx * dx + dz * dz) - 1.5f;
-        if (d <= 0f) return FLAT_HEIGHT;
-
-        float ramp = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(3f, 32f, d));
-        float hills = Mathf.Max(0f, ProceduralTextures.Fbm(x * 0.022f, z * 0.022f, 4, 3.3f) - 0.3f) * 16f * ramp;
-        float mountainMask = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(45f, 110f, d));
-        float mountains = ProceduralTextures.RidgedFbm(x * 0.011f, z * 0.011f, 5, 9.1f) * 55f * mountainMask;
-        float h = FLAT_HEIGHT + ramp * 0.6f + hills + mountains;
-
-        float lake = new Vector2(x - _lakeCenter.x, z - _lakeCenter.z).magnitude;
-        if (lake < _lakeRadius * 1.6f)
-        {
-            float k = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(_lakeRadius * 1.6f, _lakeRadius * 0.5f, lake));
-            h = Mathf.Lerp(h, -2.6f, k);
-        }
-        return h;
+        return _grid.GroundHeight(new Vector3(x, 0f, z));
     }
 
+    /// <summary>Один рельеф на весь мир: по нему ходит змея, и он же поднимается в горы-границу.</summary>
     private static void BuildTerrain(Transform root)
     {
         Mesh mesh = SaveMesh(ProceduralMeshes.Terrain(TERRAIN_RESOLUTION, TERRAIN_SIZE, _center, TerrainHeight), "Terrain");
-        Texture2D color = Save(ProceduralTextures.Terrain(1024, TerrainHeight, TERRAIN_SIZE, _center));
+        Texture2D color = Save(ProceduralTextures.Terrain(2048, TerrainHeight, TERRAIN_SIZE, _center));
         Texture2D detail = Save(ProceduralTextures.Detail(256));
 
         Material mat = SnakeSceneBuilder.CreateLitMaterial("Terrain", Color.white, 0.08f);
@@ -285,23 +265,9 @@ public static class EnvironmentBuilder
         go.AddComponent<MeshFilter>().sharedMesh = mesh;
         var r = go.AddComponent<MeshRenderer>();
         r.sharedMaterial = mat;
-        r.shadowCastingMode = ShadowCastingMode.Off;
+        // Холмы отбрасывают тень друг на друга — рельеф читается лучше.
+        r.shadowCastingMode = ShadowCastingMode.On;
         MarkStatic(go);
-    }
-
-    private static void BuildWater(Transform root)
-    {
-        Material water = SnakeSceneBuilder.CreateLitMaterial("Water", new Color(0.16f, 0.38f, 0.5f, 0.78f), 0.95f);
-        Texture2D normal = Save(ProceduralTextures.WaterNormal(256));
-        SetNormalMap(water, normal, 0.6f);
-        water.SetTextureScale("_BumpMap", new Vector2(6f, 6f));
-        SnakeSceneBuilder.MakeTransparent(water);
-
-        GameObject plane = SnakeSceneBuilder.CreatePrimitive(PrimitiveType.Plane, "Lake", root, water);
-        float size = _lakeRadius * 3.4f / 10f; // Plane — 10x10 при единичном масштабе
-        plane.transform.position = new Vector3(_lakeCenter.x, WATER_HEIGHT, _lakeCenter.z);
-        plane.transform.localScale = new Vector3(size, 1f, size);
-        plane.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
     }
 
     private static void BuildForest(Transform root, System.Random rng)
@@ -310,8 +276,8 @@ public static class EnvironmentBuilder
         Mesh crownA = SaveMesh(ProceduralMeshes.Blob("CrownA", 2, 0.45f, 11), "CrownA");
         Mesh crownB = SaveMesh(ProceduralMeshes.Blob("CrownB", 2, 0.5f, 23), "CrownB");
 
-        Material bark = SnakeSceneBuilder.CreateLitMaterial("Bark", Color.white, 0.05f);
-        bark.mainTexture = Save(ProceduralTextures.Bark(128));
+        // Кора уже создана для поля (CreateArenaMaterials): пересохранение текстуры оборвало бы ссылку прозрачной копии.
+        Material bark = AssetDatabase.LoadAssetAtPath<Material>("Assets/Materials/Bark.mat");
         Material pine = FoliageMaterial("PineFoliage", new Color(0.08f, 0.24f, 0.12f), new Color(0.2f, 0.42f, 0.2f));
         Material leaves = FoliageMaterial("LeafFoliage", new Color(0.18f, 0.4f, 0.12f), new Color(0.45f, 0.68f, 0.22f));
         Material autumn = FoliageMaterial("AutumnFoliage", new Color(0.55f, 0.22f, 0.06f), new Color(0.95f, 0.62f, 0.15f));
@@ -320,10 +286,9 @@ public static class EnvironmentBuilder
         forest.SetParent(root, false);
 
         int placed = 0;
-        for (int attempt = 0; attempt < 1400 && placed < 230; attempt++)
+        for (int attempt = 0; attempt < 6000 && placed < 320; attempt++)
         {
-            if (!TryScatter(rng, 5f, 150f, 0.45f, 0.12f, out Vector3 pos)) continue;
-            if (pos.y > 20f) continue;
+            if (!TryScatter(rng, false, 0.4f, 0.12f, 30f, out Vector3 pos)) continue;
 
             float scale = Lerp(rng, 0.8f, 1.6f);
             float yaw = Lerp(rng, 0f, 360f);
@@ -364,9 +329,9 @@ public static class EnvironmentBuilder
         var parent = new GameObject("Rocks").transform;
         parent.SetParent(root, false);
         int placed = 0;
-        for (int attempt = 0; attempt < 800 && placed < 90; attempt++)
+        for (int attempt = 0; attempt < 4000 && placed < 140; attempt++)
         {
-            if (!TryScatter(rng, 3f, 140f, 0f, 1f, out Vector3 pos)) continue;
+            if (!TryScatter(rng, false, 0f, 1f, 60f, out Vector3 pos)) continue;
             float s = Lerp(rng, 0.6f, 3.2f);
             if (rng.NextDouble() < 0.15) s *= 2f; // изредка — большие глыбы
             var scale = new Vector3(s * Lerp(rng, 0.8f, 1.3f), s * Lerp(rng, 0.55f, 0.9f), s * Lerp(rng, 0.8f, 1.3f));
@@ -385,9 +350,9 @@ public static class EnvironmentBuilder
         var parent = new GameObject("Bushes").transform;
         parent.SetParent(root, false);
         int placed = 0;
-        for (int attempt = 0; attempt < 900 && placed < 140; attempt++)
+        for (int attempt = 0; attempt < 5000 && placed < 160; attempt++)
         {
-            if (!TryScatter(rng, 1.5f, 60f, 0.3f, 0.6f, out Vector3 pos)) continue;
+            if (!TryScatter(rng, false, 0.3f, 0.6f, 26f, out Vector3 pos)) continue;
             float s = Lerp(rng, 0.7f, 1.5f);
             var cluster = new GameObject("BushCluster").transform;
             cluster.SetParent(parent, false);
@@ -417,9 +382,10 @@ public static class EnvironmentBuilder
     {
         Mesh tuft = ProceduralMeshes.GrassTuft("GrassTuft");
         var grassTransforms = new List<Matrix4x4>();
-        for (int attempt = 0; attempt < 6000 && grassTransforms.Count < 2600; attempt++)
+        // Низкая трава — по равнине мира: только украшение, змее не мешает и не прячет.
+        for (int attempt = 0; attempt < 30000 && grassTransforms.Count < 9000; attempt++)
         {
-            if (!TryScatter(rng, 1.2f, 45f, 0f, 0.7f, out Vector3 pos)) continue;
+            if (!TryScatter(rng, true, 0f, 0.7f, 100f, out Vector3 pos)) continue;
             var scale = new Vector3(Lerp(rng, 0.5f, 0.95f), Lerp(rng, 0.3f, 0.65f), Lerp(rng, 0.5f, 0.95f));
             grassTransforms.Add(Matrix4x4.TRS(pos + Vector3.down * 0.03f, Quaternion.Euler(0f, Lerp(rng, 0f, 360f), 0f), scale));
         }
@@ -435,9 +401,9 @@ public static class EnvironmentBuilder
         for (int c = 0; c < colors.Length; c++)
         {
             var flowers = new List<Matrix4x4>();
-            for (int attempt = 0; attempt < 1500 && flowers.Count < 160; attempt++)
+            for (int attempt = 0; attempt < 6000 && flowers.Count < 480; attempt++)
             {
-                if (!TryScatter(rng, 1.5f, 40f, 0.35f, 0.5f, out Vector3 pos)) continue;
+                if (!TryScatter(rng, true, 0.35f, 0.5f, 100f, out Vector3 pos)) continue;
                 // Цветы растут полянками: группа из нескольких головок.
                 for (int k = 0; k < 4; k++)
                 {
@@ -449,42 +415,6 @@ public static class EnvironmentBuilder
             SnakeSceneBuilder.SetEmission(mat, colors[c] * 0.15f);
             CreateCombined(root, names[c], SaveMesh(ProceduralMeshes.Combine(names[c] + "Field", head, flowers), names[c] + "Field"), mat, false);
         }
-    }
-
-    /// <summary>Фонари вдоль стен арены: столбик и светящийся плафон (без источников света — дёшево).</summary>
-    private static void BuildLanterns(Transform root, GridManager grid)
-    {
-        Material post = SnakeSceneBuilder.CreateLitMaterial("LanternPost", new Color(0.18f, 0.16f, 0.15f), 0.5f);
-        Material lamp = SnakeSceneBuilder.CreateLitMaterial("LanternLamp", new Color(1f, 0.85f, 0.55f), 0.9f);
-        SnakeSceneBuilder.SetEmission(lamp, new Color(1.6f, 1.1f, 0.5f));
-
-        var parent = new GameObject("Lanterns").transform;
-        parent.SetParent(root, false);
-        float half = _arenaHalf + 1.6f;
-        const float spacing = 11f;
-        for (float t = -half; t <= half + 0.01f; t += spacing)
-        {
-            AddLantern(parent, post, lamp, new Vector3(t, 0f, half));
-            AddLantern(parent, post, lamp, new Vector3(t, 0f, -half));
-            if (Mathf.Abs(t) < half - 0.5f)
-            {
-                AddLantern(parent, post, lamp, new Vector3(half, 0f, t));
-                AddLantern(parent, post, lamp, new Vector3(-half, 0f, t));
-            }
-        }
-        MarkStatic(parent.gameObject);
-    }
-
-    private static void AddLantern(Transform parent, Material post, Material lamp, Vector3 local)
-    {
-        var lantern = new GameObject("Lantern").transform;
-        lantern.SetParent(parent, false);
-        lantern.position = _center + local + Vector3.up * FLAT_HEIGHT;
-        AddPart(lantern, SnakeSceneBuilder.CreatePrimitive(PrimitiveType.Cylinder, "Post", lantern, post), new Vector3(0f, 0.9f, 0f), new Vector3(0.14f, 0.9f, 0.14f));
-        AddPart(lantern, SnakeSceneBuilder.CreatePrimitive(PrimitiveType.Cube, "Cap", lantern, post), new Vector3(0f, 2.05f, 0f), new Vector3(0.45f, 0.08f, 0.45f));
-        GameObject glow = SnakeSceneBuilder.CreatePrimitive(PrimitiveType.Sphere, "Lamp", lantern, lamp);
-        AddPart(lantern, glow, new Vector3(0f, 1.85f, 0f), Vector3.one * 0.38f);
-        glow.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
     }
 
     private static Transform BuildClouds(Transform root, System.Random rng)
@@ -542,7 +472,8 @@ public static class EnvironmentBuilder
 
         ParticleSystem.ShapeModule shape = ps.shape;
         shape.shapeType = ParticleSystemShapeType.Box;
-        shape.scale = new Vector3(_arenaHalf * 2.6f, 2.5f, _arenaHalf * 2.6f);
+        // Пыльца летает вокруг змеи (SnakeSceneBuilder вешает FollowTarget), а не по всему огромному миру.
+        shape.scale = new Vector3(44f, 2.5f, 44f);
 
         ParticleSystem.NoiseModule noise = ps.noise;
         noise.enabled = true;
@@ -566,29 +497,35 @@ public static class EnvironmentBuilder
     // ===================== Утилиты =====================
 
     /// <summary>
-    /// Случайная точка на рельефе вне арены: на расстоянии [minDist, maxDist] от её края, не в озере,
-    /// не на крутом склоне. density/threshold — «полянки»: точка принимается, если шум выше порога.
+    /// Случайная точка для украшений. plains — равнина мира (свободная клетка: не препятствие, не вода,
+    /// не высокая трава), иначе — склоны гор за границей мира. threshold > 0 — растёт пятнами по шуму.
     /// </summary>
-    private static bool TryScatter(System.Random rng, float minDist, float maxDist, float threshold, float noiseScale, out Vector3 pos)
+    private static bool TryScatter(System.Random rng, bool plains, float threshold, float noiseScale, float maxHeight, out Vector3 pos)
     {
-        float angle = Lerp(rng, 0f, Mathf.PI * 2f);
-        // Квадрат расстояния делает распределение равномерным по площади, а не густым у арены.
-        float d = Mathf.Sqrt(Lerp(rng, 0f, 1f)) * (maxDist - minDist) + minDist;
-        var dir = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
-        // Луч от центра до края арены (квадрат) плюс d.
-        float toEdge = _arenaHalf / Mathf.Max(Mathf.Abs(dir.x), Mathf.Abs(dir.y));
-        float r = toEdge + 1.5f + d;
-        float x = _center.x + dir.x * r;
-        float z = _center.z + dir.y * r;
-
         pos = default;
-        if (Mathf.Abs(x - _center.x) > TERRAIN_SIZE * 0.48f || Mathf.Abs(z - _center.z) > TERRAIN_SIZE * 0.48f) return false;
-        if (new Vector2(x - _lakeCenter.x, z - _lakeCenter.z).magnitude < _lakeRadius * 1.3f) return false;
+        float x, z;
+        if (plains)
+        {
+            float angle = Lerp(rng, 0f, Mathf.PI * 2f);
+            float r = Mathf.Sqrt(Lerp(rng, 0f, 1f)) * (TerrainShape.PlayRadius - 2f);
+            x = _center.x + Mathf.Cos(angle) * r;
+            z = _center.z + Mathf.Sin(angle) * r;
+            Vector2Int cell = _grid.WorldToCell(new Vector3(x, 0f, z));
+            if (!_grid.IsInside(cell) || _grid.GetObstacle(cell) != ObstacleType.None) return false;
+            if (_grid.IsWater(cell) || _grid.IsCover(cell) || _grid.IsBurrowCell(cell)) return false;
+        }
+        else
+        {
+            x = _center.x + Lerp(rng, -TERRAIN_SIZE * 0.48f, TERRAIN_SIZE * 0.48f);
+            z = _center.z + Lerp(rng, -TERRAIN_SIZE * 0.48f, TERRAIN_SIZE * 0.48f);
+            if (TerrainShape.MountainFactor(x, z, _center) < 0.3f) return false;
+        }
         if (threshold > 0f && ProceduralTextures.Fbm(x * 0.04f * noiseScale + 50f, z * 0.04f * noiseScale + 50f, 3, 1.9f) < threshold) return false;
 
         float h = TerrainHeight(x, z);
+        if (h - _center.y > maxHeight) return false;
         float slope = Mathf.Abs(TerrainHeight(x + 1f, z) - h) + Mathf.Abs(TerrainHeight(x, z + 1f) - h);
-        if (slope > 1.1f) return false;
+        if (slope > (plains ? 0.8f : 1.6f)) return false;
 
         pos = new Vector3(x, h, z);
         return true;

@@ -73,7 +73,7 @@ namespace Snake3D.Tests
         {
             GridManager grid = CreateGrid();
             Assert.Greater(grid.WaterCellCount, 10, "На поле должен быть пруд");
-            Assert.AreEqual(5, grid.BurrowCount, "По умолчанию на поле пять нор");
+            Assert.AreEqual(10, grid.BurrowCount, "По умолчанию в мире десять нор");
             Assert.IsTrue(grid.HasNest, "На поле должно быть гнездо");
             Assert.AreEqual(ObstacleType.None, grid.GetObstacle(grid.NestCell));
             Assert.Greater(grid.SunStoneCount, 0, "Нет солнечных камней");
@@ -122,12 +122,12 @@ namespace Snake3D.Tests
         }
 
         [Test]
-        public void Defaults_Are72x72()
+        public void Defaults_Are180x180()
         {
             GridManager grid = CreateGrid();
-            Assert.AreEqual(72, grid.Width);
-            Assert.AreEqual(72, grid.Height);
-            Assert.AreEqual(72 * 72, grid.CellCount);
+            Assert.AreEqual(180, grid.Width);
+            Assert.AreEqual(180, grid.Height);
+            Assert.AreEqual(180 * 180, grid.CellCount);
         }
 
         [Test]
@@ -195,14 +195,48 @@ namespace Snake3D.Tests
         }
 
         [Test]
-        public void Obstacles_KeepTwoCellPassageAlongEdges()
+        public void Mountains_CloseTheWorld_AndStartIsOpen()
         {
             GridManager grid = CreateGrid();
             foreach (Vector2Int c in AllCells(grid))
             {
                 bool nearEdge = c.x < 2 || c.y < 2 || c.x >= grid.Width - 2 || c.y >= grid.Height - 2;
-                if (nearEdge)
-                    Assert.AreEqual(ObstacleType.None, grid.GetObstacle(c), $"Препятствие у края поля: {c}");
+                if (nearEdge) Assert.IsTrue(grid.IsMountain(c), $"Край мира должен быть горой: {c}");
+            }
+            var center = new Vector2Int(grid.Width / 2, grid.Height / 2);
+            Assert.IsFalse(grid.IsMountain(center), "Старт — на равнине");
+            Assert.Greater(grid.GetObstacleHeight(new Vector2Int(0, 0)), 10f, "Гору не перепрыгнуть");
+        }
+
+        [Test]
+        public void Terrain_IsUneven_ButStartIsFlat()
+        {
+            GridManager grid = CreateGrid();
+            Vector3 c = grid.Center;
+            Assert.AreEqual(c.y, grid.GroundHeight(c), 0.05f, "На старте ровно");
+            float min = float.MaxValue, max = float.MinValue;
+            for (int i = 0; i < 40; i++)
+            {
+                float a = i * 0.7f;
+                Vector3 p = c + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * (20f + i);
+                if (grid.IsMountain(grid.WorldToCell(p)) || grid.IsWater(grid.WorldToCell(p))) continue;
+                float h = grid.GroundHeight(p);
+                min = Mathf.Min(min, h);
+                max = Mathf.Max(max, h);
+            }
+            Assert.Greater(max - min, 0.8f, "Равнина должна быть холмистой");
+        }
+
+        [Test]
+        public void Water_SurfaceIsAboveBed()
+        {
+            GridManager grid = CreateGrid();
+            Assert.Greater(grid.PondCount, 1, "Нужны озеро и пруды");
+            for (int p = 0; p < grid.PondCount; p++)
+            {
+                Vector3 center = grid.GetPondCenter(p);
+                Assert.Less(grid.GroundHeight(center), grid.GetPondLevel(p), "Дно водоёма должно быть ниже воды");
+                Assert.AreEqual(grid.GetPondLevel(p), grid.SurfaceHeight(center), 1e-4f);
             }
         }
 
@@ -244,8 +278,9 @@ namespace Snake3D.Tests
             Vector3 b = grid.CellToWorld(new Vector2Int(grid.Width - 1, grid.Height - 1));
             Vector3 mid = (a + b) * 0.5f;
             Assert.AreEqual(5f, mid.x, 1e-4f);
-            Assert.AreEqual(1f, mid.y, 1e-4f);
             Assert.AreEqual(5f, mid.z, 1e-4f);
+            // Высота клетки — рельеф; на ровном старте она совпадает с высотой поля.
+            Assert.AreEqual(1f, grid.CellToWorld(new Vector2Int(grid.Width / 2, grid.Height / 2)).y, 0.05f);
         }
 
         [Test]

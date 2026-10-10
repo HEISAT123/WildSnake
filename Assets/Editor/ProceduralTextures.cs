@@ -403,7 +403,7 @@ public static class ProceduralTextures
                 float n = Fbm(wx * 0.05f, wz * 0.05f, 4, 2.2f);
                 Color c = Color.Lerp(grassA, grassB, n);
                 c = Color.Lerp(c, dirt, Mathf.Clamp01((Fbm(wx * 0.02f, wz * 0.02f, 3, 8.1f) - 0.62f) * 4f));
-                c = Color.Lerp(c, sand, Mathf.Clamp01((-h - 0.6f) * 1.5f)); // берег озера
+                c = Color.Lerp(c, sand, Mathf.Clamp01((-h - 2.2f) * 1.5f)); // дно водоёмов, а не каждая низина
                 c = Color.Lerp(c, rock, Mathf.Clamp01((slope - 0.55f) * 3f));
                 // Скала темнеет с высотой, снег — только на вершинах и пологих местах.
                 c = Color.Lerp(c, rock * 0.85f, Mathf.Clamp01((h - 12f) * 0.08f));

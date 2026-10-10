@@ -49,6 +49,9 @@ namespace Snake3D
         [Tooltip("Смена дня и ночи")]
         [SerializeField] private DayNightCycle _dayNight;
 
+        [Tooltip("Погода: дождь")]
+        [SerializeField] private WeatherSystem _weather;
+
         [Tooltip("Нюх")]
         [SerializeField] private ScentTracker _scent;
 
@@ -148,6 +151,12 @@ namespace Snake3D
 
         /// <summary>Лиса отпугнута броском.</summary>
         public event Action FoxScared;
+
+        /// <summary>Змея укусила свернувшегося ежа и укололась.</summary>
+        public event Action HedgehogPricked;
+
+        /// <summary>Пошёл дождь (true) или кончился (false).</summary>
+        public event Action<bool> RainChanged;
 
         /// <summary>Главная цель перешла на новый этап.</summary>
         public event Action<QuestStage> QuestAdvanced;
@@ -262,6 +271,9 @@ namespace Snake3D
             }
             _wildlife.Caught += OnPreyCaught;
             _wildlife.Grabbed += OnPreyGrabbed;
+            _wildlife.Pricked += OnPricked;
+            _weather.RainStarted += OnRainStarted;
+            _weather.RainStopped += OnRainStopped;
             _eagle.Screeched += OnEagleScreeched;
             _eagle.DiveStarted += OnEagleDive;
             _eagle.Struck += OnEagleStruck;
@@ -287,6 +299,9 @@ namespace Snake3D
             }
             _wildlife.Caught -= OnPreyCaught;
             _wildlife.Grabbed -= OnPreyGrabbed;
+            _wildlife.Pricked -= OnPricked;
+            _weather.RainStarted -= OnRainStarted;
+            _weather.RainStopped -= OnRainStopped;
             _eagle.Screeched -= OnEagleScreeched;
             _eagle.DiveStarted -= OnEagleDive;
             _eagle.Struck -= OnEagleStruck;
@@ -356,6 +371,7 @@ namespace Snake3D
             _eagle.Ambient = false;
             _eagle.ResetHunter(_config.EagleFirstDelay);
             _fox.ResetHunter(_config.FoxFirstDelay);
+            _weather.ResetWeather(_config.FirstRainDelay);
             PrepareRound(!fromMenu);
             _goals.Roll(_dayNight.Day, _rng);
             _nightOutside = false;
@@ -382,6 +398,7 @@ namespace Snake3D
             _eagle.Ambient = true;
             _eagle.ResetHunter(_menuEagleDelay);
             _fox.ResetHunter(_config.FoxFirstDelay);
+            _weather.ResetWeather(_config.FirstRainDelay);
             _goals.Clear();
             PrepareRound(true);
             SetState(GameState.Menu);
@@ -458,6 +475,7 @@ namespace Snake3D
             _dayNight.Running = running;
             _eagle.HuntingAllowed = running && !_dayNight.IsNight;
             _fox.HuntingAllowed = running;
+            _weather.Running = running;
             Time.timeScale = frozen ? 0f : 1f;
             _audio.SetPaused(frozen);
             StateChanged?.Invoke(state);
@@ -467,6 +485,9 @@ namespace Snake3D
         {
             if (GameInput.Interact) Interact();
             _snake.Daylight01 = _dayNight.Daylight01;
+            // Дождь остужает; под кронами меньше, в норе не действует вовсе (это решает BodyTemperature).
+            _snake.Temperature.Chill = _weather.Rain01 * _config.RainChill * (_snake.UnderCanopy ? 0.35f : 1f);
+            _wildlife.Rain01 = _weather.Rain01;
 
             _stats.Time += dt;
             _stats.Days = _stats.Time / DayLengthSeconds;
@@ -950,6 +971,23 @@ namespace Snake3D
             if (State != GameState.Playing) return;
             _stats.EaglesEvaded++;
             ReportGoal(GoalType.EvadeEagle);
+        }
+
+        // ---------------- Погода и ёж ----------------
+
+        private void OnPricked()
+        {
+            if (State == GameState.Playing) HedgehogPricked?.Invoke();
+        }
+
+        private void OnRainStarted()
+        {
+            if (State == GameState.Playing) RainChanged?.Invoke(true);
+        }
+
+        private void OnRainStopped()
+        {
+            if (State == GameState.Playing) RainChanged?.Invoke(false);
         }
 
         // ---------------- Лиса ----------------

@@ -134,10 +134,9 @@ public static class SnakeSceneBuilder
         // ================= Поле =================
         var grid = new GameObject("Grid").AddComponent<GridManager>();
         var board = new GameObject("Board").AddComponent<BoardView>();
-        Wire(board, ("_grid", grid), ("_floorMaterial", arena.Floor), ("_wallMaterial", arena.Wall),
-            ("_lowWallMaterial", arena.LowWall), ("_barkMaterial", arena.Bark), ("_stumpTopMaterial", arena.StumpTop),
+        Wire(board, ("_grid", grid), ("_barkMaterial", arena.Bark), ("_stumpTopMaterial", arena.StumpTop),
             ("_blockMaterial", arena.Block), ("_tallGrassMaterial", arena.TallGrass),
-            ("_waterMaterial", arena.PondWater), ("_pondBedMaterial", arena.PondBed), ("_sunStoneMaterial", arena.SunStone),
+            ("_waterMaterial", arena.PondWater), ("_sunStoneMaterial", arena.SunStone),
             ("_dirtMaterial", arena.Dirt), ("_holeMaterial", arena.Hole),
             ("_leavesMaterial", arena.Leaves), ("_pineMaterial", arena.Pine), ("_litterMaterial", arena.Litter),
             ("_crownMesh", arena.CrownMesh), ("_pineMesh", arena.PineMesh), ("_eggMaterial", arena.Egg), ("_beaconMaterial", arena.Beacon),
@@ -233,8 +232,13 @@ public static class SnakeSceneBuilder
 
         // Кроны, заслоняющие змею, становятся полупрозрачными.
         var fader = board.gameObject.AddComponent<CanopyFader>();
-        Wire(fader, ("_board", board), ("_camera", camGo.transform), ("_snake", player.Controller),
-            ("_leaves", arena.Leaves), ("_leavesFade", arena.LeavesFade), ("_pine", arena.Pine), ("_pineFade", arena.PineFade));
+        Wire(fader, ("_board", board), ("_camera", camGo.transform), ("_snake", player.Controller));
+        WireArray(fader, "_opaque", new Object[] { arena.Leaves, arena.Pine, arena.Bark, arena.StumpTop, arena.Block });
+        WireArray(fader, "_faded", new Object[] { arena.LeavesFade, arena.PineFade, arena.BarkFade, arena.StumpTopFade, arena.BlockFade });
+
+        // Пыльца и светлячки — вокруг змеи.
+        var pollenFollow = pollen.gameObject.AddComponent<FollowTarget>();
+        Wire(pollenFollow, ("_target", player.Controller.Head));
 
         // Ввод игрока — на самой змее; в меню выключен, змею ведёт автопилот через то же «намерение».
         var playerInput = player.Controller.gameObject.AddComponent<PlayerSnakeInput>();
@@ -243,6 +247,18 @@ public static class SnakeSceneBuilder
 
         var dayNight = new GameObject("DayNight").AddComponent<DayNightCycle>();
         Wire(dayNight, ("_config", config), ("_sun", light), ("_moon", moon), ("_stars", stars), ("_fireflies", pollen), ("_clouds", clouds));
+
+        var weather = new GameObject("Weather").AddComponent<WeatherSystem>();
+        ParticleSystem rain = CreateRain(particles);
+        rain.transform.SetParent(weather.transform, false);
+        Wire(weather, ("_config", config), ("_dayNight", dayNight), ("_rain", rain), ("_camera", camGo.transform));
+
+        var ambienceGo = new GameObject("Ambience");
+        var ambienceSources = new Object[4];
+        for (int i = 0; i < ambienceSources.Length; i++) ambienceSources[i] = ambienceGo.AddComponent<AudioSource>();
+        var ambience = ambienceGo.AddComponent<AmbienceService>();
+        WireArray(ambience, "_sources", ambienceSources);
+        Wire(ambience, ("_settings", settings), ("_dayNight", dayNight), ("_weather", weather), ("_snake", player.Controller));
 
         // Карта показывается на весь экран по Tab — текстура покрупнее.
         RenderTexture minimapTexture = LoadOrCreateRenderTexture(SETTINGS_FOLDER + "/Minimap.renderTexture", 1024);
@@ -260,14 +276,16 @@ public static class SnakeSceneBuilder
         if (canopyLayer > 0) miniCam.cullingMask = ~(1 << canopyLayer);
         // Камеру карты включает журнал (Tab), пока он открыт.
         miniCam.enabled = false;
-        miniGo.transform.SetPositionAndRotation(grid.Center + Vector3.up * 20f, Quaternion.Euler(90f, 0f, 0f));
+        // Камера карты выше самых высоких гор поля.
+        miniCam.farClipPlane = 260f;
+        miniGo.transform.SetPositionAndRotation(grid.Center + Vector3.up * 140f, Quaternion.Euler(90f, 0f, 0f));
 
         // ================= GameManager =================
         var game = new GameObject("GameManager").AddComponent<GameManager>();
         Wire(game,
             ("_config", config), ("_grid", grid),
             ("_snake", player.Controller), ("_headAnimator", player.Animator), ("_rival", rival.Controller), ("_playerAutopilot", playerAi), ("_playerInput", playerInput),
-            ("_wildlife", wildlife), ("_eagle", eagle), ("_fox", fox), ("_dayNight", dayNight), ("_scent", scent), ("_skinShed", shed),
+            ("_wildlife", wildlife), ("_eagle", eagle), ("_fox", fox), ("_dayNight", dayNight), ("_weather", weather), ("_scent", scent), ("_skinShed", shed),
             ("_nestEggs", board.NestEggs), ("_nestBeacon", board.NestBeacon),
             ("_leaderboard", leaderboard), ("_settings", settings), ("_audio", audio), ("_cameraRig", rig),
             ("_eatParticles", eatFx), ("_deathParticles", deathFx), ("_dustParticles", dustFx), ("_moltParticles", moltFx));
@@ -276,9 +294,11 @@ public static class SnakeSceneBuilder
         UIBuilder.Build(new UIBuilder.Refs
         {
             Game = game, Config = config, Player = player.Controller, Settings = settings, Audio = audio, Leaderboard = leaderboard,
-            Wildlife = wildlife, Eagle = eagle, Fox = fox, DayNight = dayNight, Scent = scent, Grid = grid,
+            Wildlife = wildlife, Eagle = eagle, Fox = fox, DayNight = dayNight, Scent = scent, Grid = grid, Weather = weather,
             CameraTransform = camGo.transform, MinimapCamera = miniCam, MinimapTexture = minimapTexture
         });
+
+        Wire(ambience, ("_game", game));
 
         // ================= Сохранение =================
         AssetDatabase.SaveAssets();
@@ -306,6 +326,9 @@ public static class SnakeSceneBuilder
         Material beak = CreateLitMaterial("PreyBeak", new Color(1f, 0.7f, 0.15f), 0.5f);
         Material rabbitFur = CreateLitMaterial("PreyRabbit", new Color(0.6f, 0.5f, 0.4f), 0.1f);
         Material rabbitWhite = CreateLitMaterial("PreyRabbitWhite", new Color(0.93f, 0.91f, 0.87f), 0.1f);
+        Material hedgehogBody = CreateLitMaterial("PreyHedgehog", new Color(0.5f, 0.42f, 0.33f), 0.2f);
+        Material hedgehogSpikes = CreateLitMaterial("PreyHedgehogSpikes", new Color(0.24f, 0.18f, 0.13f), 0.3f);
+        Material hedgehogFace = CreateLitMaterial("PreyHedgehogFace", new Color(0.82f, 0.72f, 0.58f), 0.2f);
         Material scent = CreateLitMaterial("ScentMark", new Color(0.8f, 1f, 0.3f, 0.35f), 0f);
         SetEmission(scent, new Color(0.6f, 0.9f, 0.15f));
         MakeTransparent(scent);
@@ -325,12 +348,14 @@ public static class SnakeSceneBuilder
                 var body = new GameObject("Body").transform;
                 body.SetParent(root.transform, false);
                 Transform leftWing = null, rightWing = null;
+                GameObject curlHide = null;
                 switch (kind)
                 {
                     case PreyKind.Beetle: BuildBeetle(body, beetleShell, dark); break;
                     case PreyKind.Mouse: BuildMouse(body, mouseFur, pink, dark); break;
                     case PreyKind.Frog: BuildFrog(body, frogSkin, frogBelly, dark); break;
                     case PreyKind.Rabbit: BuildRabbit(body, rabbitFur, rabbitWhite, pink, dark); break;
+                    case PreyKind.Hedgehog: curlHide = BuildHedgehog(body, hedgehogBody, hedgehogSpikes, hedgehogFace, dark); break;
                     default: BuildBird(body, birdFeather, birdChest, beak, dark, out leftWing, out rightWing); break;
                 }
 
@@ -349,6 +374,7 @@ public static class SnakeSceneBuilder
                 SetEnum(animal, "_kind", k);
                 Wire(animal, ("_body", body), ("_scentMark", mark));
                 if (leftWing != null) Wire(animal, ("_leftWing", leftWing), ("_rightWing", rightWing));
+                if (curlHide != null) Wire(animal, ("_curlHide", curlHide));
                 if (kind == PreyKind.Frog) SetFloat(animal, "_reactionTime", 0.25f);
                 if (kind == PreyKind.Bird) SetFloat(animal, "_reactionTime", 0.2f);
                 if (kind == PreyKind.Rabbit)
@@ -407,6 +433,40 @@ public static class SnakeSceneBuilder
             GameObject leg = Part(PrimitiveType.Sphere, "Leg", body, skin, new Vector3(0.22f * side, 0.08f, -0.12f), new Vector3(0.16f, 0.12f, 0.32f));
             leg.transform.localRotation = Quaternion.Euler(0f, 20f * side, 0f);
         }
+    }
+
+    /// <summary>
+    /// Ёж: округлое тело, шубка из тёмных иголок по спине, светлая мордочка с носом-бусинкой и лапки.
+    /// Мордочка и лапки — отдельный узел: свернувшись, ёж их прячет. Возвращает этот узел.
+    /// </summary>
+    private static GameObject BuildHedgehog(Transform body, Material fur, Material spikes, Material face, Material dark)
+    {
+        Part(PrimitiveType.Sphere, "Torso", body, fur, new Vector3(0f, 0.2f, 0f), new Vector3(0.5f, 0.36f, 0.6f));
+        // Иголки торчат из спины во все стороны, сильнее — назад.
+        for (int i = 0; i < 26; i++)
+        {
+            float a = i * 2.39996f; // золотой угол — равномерно по полусфере
+            float h = 0.2f + 0.75f * ((i + 0.5f) / 26f);
+            float ring = Mathf.Sqrt(1f - h * h);
+            var dir = new Vector3(Mathf.Cos(a) * ring, h, Mathf.Sin(a) * ring);
+            dir.z -= 0.35f;
+            dir.Normalize();
+            Vector3 pos = new Vector3(dir.x * 0.22f, 0.22f + dir.y * 0.15f, dir.z * 0.27f - 0.02f);
+            GameObject spike = Part(PrimitiveType.Cube, "Spike", body, spikes, pos, new Vector3(0.035f, 0.035f, 0.2f));
+            spike.transform.localRotation = Quaternion.LookRotation(dir);
+        }
+
+        var faceRoot = new GameObject("Face");
+        faceRoot.transform.SetParent(body, false);
+        Part(PrimitiveType.Sphere, "Snout", faceRoot.transform, face, new Vector3(0f, 0.16f, 0.3f), new Vector3(0.22f, 0.17f, 0.26f));
+        Part(PrimitiveType.Sphere, "Nose", faceRoot.transform, dark, new Vector3(0f, 0.17f, 0.44f), Vector3.one * 0.055f);
+        for (int side = -1; side <= 1; side += 2)
+        {
+            Part(PrimitiveType.Sphere, "Eye", faceRoot.transform, dark, new Vector3(0.07f * side, 0.22f, 0.36f), Vector3.one * 0.04f);
+            Part(PrimitiveType.Sphere, "FrontLeg", faceRoot.transform, face, new Vector3(0.13f * side, 0.04f, 0.16f), new Vector3(0.08f, 0.07f, 0.1f));
+            Part(PrimitiveType.Sphere, "BackLeg", faceRoot.transform, face, new Vector3(0.14f * side, 0.04f, -0.18f), new Vector3(0.08f, 0.07f, 0.1f));
+        }
+        return faceRoot;
     }
 
     /// <summary>Кролик: крупное тело, длинные уши с розовой изнанкой, белый хвостик-помпон.</summary>
@@ -789,6 +849,47 @@ public static class SnakeSceneBuilder
         var renderer = go.GetComponent<ParticleSystemRenderer>();
         renderer.renderMode = ParticleSystemRenderMode.Billboard;
         renderer.sharedMaterial = mat;
+        return ps;
+    }
+
+    /// <summary>
+    /// Дождь: вытянутые по скорости светлые штрихи, падающие из широкого квадрата над камерой.
+    /// Эмиссию включает и регулирует WeatherSystem.
+    /// </summary>
+    private static ParticleSystem CreateRain(Material mat)
+    {
+        var go = new GameObject("Rain");
+        var ps = go.AddComponent<ParticleSystem>();
+        ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+        ParticleSystem.MainModule main = ps.main;
+        main.loop = true;
+        main.playOnAwake = false;
+        main.duration = 5f;
+        main.startLifetime = new ParticleSystem.MinMaxCurve(0.7f, 0.9f);
+        main.startSpeed = new ParticleSystem.MinMaxCurve(16f, 20f);
+        main.startSize = new ParticleSystem.MinMaxCurve(0.025f, 0.04f);
+        main.startColor = new ParticleSystem.MinMaxGradient(new Color(0.75f, 0.82f, 0.9f, 0.45f), new Color(0.85f, 0.9f, 1f, 0.3f));
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.maxParticles = 5000;
+
+        ParticleSystem.EmissionModule emission = ps.emission;
+        emission.rateOverTime = 0f;
+
+        // Плоский квадрат над камерой, капли летят вниз с лёгким косым ветром.
+        ParticleSystem.ShapeModule shape = ps.shape;
+        shape.enabled = true;
+        shape.shapeType = ParticleSystemShapeType.Box;
+        shape.scale = new Vector3(34f, 34f, 0.1f);
+        go.transform.rotation = Quaternion.Euler(95f, 0f, 0f);
+
+        var renderer = go.GetComponent<ParticleSystemRenderer>();
+        renderer.renderMode = ParticleSystemRenderMode.Stretch;
+        renderer.velocityScale = 0.05f;
+        renderer.lengthScale = 2f;
+        renderer.sharedMaterial = mat;
+        renderer.shadowCastingMode = ShadowCastingMode.Off;
+        renderer.receiveShadows = false;
         return ps;
     }
 

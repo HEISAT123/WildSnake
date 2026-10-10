@@ -4,8 +4,8 @@ using UnityEngine.Rendering;
 namespace Snake3D
 {
     /// <summary>
-    /// Визуал поля: пол одним объектом, стены по периметру и «дикие» препятствия из раскладки GridManager:
-    /// низкие стенки — поваленные брёвна, колонны — сломанные пни и стоячие камни, блоки — валуны;
+    /// Визуал мира поверх рельефа (сам рельеф с горами-границей строит EnvironmentBuilder) — «дикие» препятствия
+    /// из раскладки GridManager: низкие стенки — поваленные брёвна, колонны — сломанные пни и стоячие камни, блоки — валуны;
     /// в рощах колонны — деревья с кронами и лесная подстилка; плюс заросли высокой травы, пруд, плоские солнечные камни,
     /// норы и гнездо (кладка — главная цель; яйца и маяк над гнездом включает GameManager).
     /// Строится один раз (в редакторе SnakeSceneBuilder'ом или в Start, если раскладку поменяли в инспекторе).
@@ -17,18 +17,6 @@ namespace Snake3D
         [SerializeField] private GridManager _grid;
 
         [Header("Материалы")]
-        [Tooltip("Пол с шахматной текстурой 2x2 (повторяется по размеру поля)")]
-        [SerializeField] private Material _floorMaterial;
-
-        [Tooltip("Земля вокруг поля (необязательно — если есть рельеф окружения, оставьте пустым)")]
-        [SerializeField] private Material _groundMaterial;
-
-        [Tooltip("Стены по периметру")]
-        [SerializeField] private Material _wallMaterial;
-
-        [Tooltip("Парапет стен")]
-        [SerializeField] private Material _lowWallMaterial;
-
         [Tooltip("Кора: брёвна и пни")]
         [SerializeField] private Material _barkMaterial;
 
@@ -41,11 +29,8 @@ namespace Snake3D
         [Tooltip("Высокая трава (укрытия)")]
         [SerializeField] private Material _tallGrassMaterial;
 
-        [Tooltip("Вода пруда (полупрозрачная)")]
+        [Tooltip("Вода озера и прудов (полупрозрачная)")]
         [SerializeField] private Material _waterMaterial;
-
-        [Tooltip("Илистое дно и берег пруда")]
-        [SerializeField] private Material _pondBedMaterial;
 
         [Tooltip("Солнечные камни")]
         [SerializeField] private Material _sunStoneMaterial;
@@ -92,18 +77,6 @@ namespace Snake3D
 
 
         [Header("Размеры")]
-        [Tooltip("Толщина пола")]
-        [SerializeField, Min(0.01f)] private float _floorThickness = 0.2f;
-
-        [Tooltip("Высота стен по периметру над поверхностью поля")]
-        [SerializeField, Min(0.05f)] private float _wallHeight = 0.8f;
-
-        [Tooltip("Толщина стен (доля клетки)")]
-        [SerializeField, Min(0.05f)] private float _wallThickness = 0.5f;
-
-        [Tooltip("Насколько земля выходит за поле, клеток")]
-        [SerializeField, Min(0f)] private float _groundPadding = 40f;
-
         [Tooltip("Высота пня, клеток")]
         [SerializeField, Min(0.5f)] private float _stumpHeight = 1.5f;
 
@@ -116,13 +89,16 @@ namespace Snake3D
         // Запоминаем, для какой раскладки построено поле, чтобы не пересоздавать его без нужды.
         [SerializeField, HideInInspector] private int _builtLayoutVersion;
         [SerializeField, HideInInspector] private bool _isBuilt;
-        [SerializeField, HideInInspector] private Renderer _floorRenderer;
         [SerializeField, HideInInspector] private Renderer[] _crowns = new Renderer[0];
+        [SerializeField, HideInInspector] private Renderer[] _occluders = new Renderer[0];
         [SerializeField, HideInInspector] private GameObject _nestEggs;
         [SerializeField, HideInInspector] private GameObject _nestBeacon;
 
         /// <summary>Кроны деревьев рощ — их прячет CanopyFader, когда они заслоняют змею.</summary>
         public Renderer[] Crowns => _crowns;
+
+        /// <summary>Стволы, пни, камни и брёвна — их CanopyFader прячет, когда они перед самой камерой или заслоняют змею.</summary>
+        public Renderer[] Occluders => _occluders;
 
         /// <summary>Яйца в гнезде (скрыты, пока змея их не отложит).</summary>
         public GameObject NestEggs => _nestEggs;
@@ -131,15 +107,11 @@ namespace Snake3D
         public GameObject NestBeacon => _nestBeacon;
 
         private readonly System.Collections.Generic.List<Renderer> _crownList = new System.Collections.Generic.List<Renderer>();
-
-        private static readonly int MainTexStId = Shader.PropertyToID("_MainTex_ST");
-        private static readonly int BaseMapStId = Shader.PropertyToID("_BaseMap_ST");
+        private readonly System.Collections.Generic.List<Renderer> _occluderList = new System.Collections.Generic.List<Renderer>();
 
         private void Start()
         {
             if (!_isBuilt || _builtLayoutVersion != _grid.LayoutVersion || transform.childCount == 0) Build();
-            // MaterialPropertyBlock не сохраняется в сцене, поэтому повторение текстуры пола ставим при каждом запуске.
-            else ApplyFloorTiling();
         }
 
         [ContextMenu("Rebuild Board")]
@@ -153,10 +125,10 @@ namespace Snake3D
 
             float cs = _grid.CellSize;
             _crownList.Clear();
-            BuildFloor(cs);
-            BuildWalls(cs);
+            _occluderList.Clear();
             BuildObstacles(cs);
             _crowns = _crownList.ToArray();
+            _occluders = _occluderList.ToArray();
             BuildForestFloor(cs);
             BuildNest(cs);
             BuildPond(cs);
@@ -166,59 +138,6 @@ namespace Snake3D
 
             _builtLayoutVersion = _grid.LayoutVersion;
             _isBuilt = true;
-        }
-
-        /// <summary>Один куб вместо сотен плиток: шахматку даёт текстура 2x2, повторённая на половину размеров поля.</summary>
-        private void BuildFloor(float cs)
-        {
-            float w = _grid.Width * cs;
-            float h = _grid.Height * cs;
-            Renderer floor = CreateShape(PrimitiveType.Cube, "Floor",
-                _grid.Center + Vector3.down * (_floorThickness * 0.5f), new Vector3(w, _floorThickness, h), _floorMaterial);
-            floor.shadowCastingMode = ShadowCastingMode.Off;
-            _floorRenderer = floor;
-            ApplyFloorTiling();
-
-            // Земля вокруг — только если нет отдельного рельефа (материал не задан).
-            if (_groundMaterial == null) return;
-            float pad = _groundPadding * cs * 2f;
-            Renderer ground = CreateShape(PrimitiveType.Cube, "Ground",
-                _grid.Center + Vector3.down * (_floorThickness + 0.05f), new Vector3(w + pad, 0.1f, h + pad), _groundMaterial);
-            ground.shadowCastingMode = ShadowCastingMode.Off;
-        }
-
-        /// <summary>Текстура пола покрывает 2x2 клетки — повторяем её на половину размеров поля.</summary>
-        private void ApplyFloorTiling()
-        {
-            if (_floorRenderer == null) return;
-            var block = new MaterialPropertyBlock();
-            var tiling = new Vector4(_grid.Width * 0.5f, _grid.Height * 0.5f, 0f, 0f);
-            block.SetVector(MainTexStId, tiling);
-            block.SetVector(BaseMapStId, tiling);
-            _floorRenderer.SetPropertyBlock(block);
-        }
-
-        private void BuildWalls(float cs)
-        {
-            float halfW = _grid.Width * cs * 0.5f;
-            float halfH = _grid.Height * cs * 0.5f;
-            float t = _wallThickness * cs;
-            float wallY = (_wallHeight - _floorThickness) * 0.5f;
-            float wallH = _wallHeight + _floorThickness;
-            Vector3 c = _grid.Center;
-
-            CreateShape(PrimitiveType.Cube, "Wall_North", c + new Vector3(0f, wallY, halfH + t * 0.5f), new Vector3(halfW * 2f + t * 2f, wallH, t), _wallMaterial);
-            CreateShape(PrimitiveType.Cube, "Wall_South", c + new Vector3(0f, wallY, -halfH - t * 0.5f), new Vector3(halfW * 2f + t * 2f, wallH, t), _wallMaterial);
-            CreateShape(PrimitiveType.Cube, "Wall_East", c + new Vector3(halfW + t * 0.5f, wallY, 0f), new Vector3(t, wallH, halfH * 2f), _wallMaterial);
-            CreateShape(PrimitiveType.Cube, "Wall_West", c + new Vector3(-halfW - t * 0.5f, wallY, 0f), new Vector3(t, wallH, halfH * 2f), _wallMaterial);
-
-            // Парапет — чуть более широкий каменный край поверх стен.
-            float capY = _wallHeight + 0.05f;
-            float capT = t * 1.3f;
-            CreateShape(PrimitiveType.Cube, "Coping_North", c + new Vector3(0f, capY, halfH + t * 0.5f), new Vector3(halfW * 2f + t * 2.6f, 0.1f, capT), _lowWallMaterial);
-            CreateShape(PrimitiveType.Cube, "Coping_South", c + new Vector3(0f, capY, -halfH - t * 0.5f), new Vector3(halfW * 2f + t * 2.6f, 0.1f, capT), _lowWallMaterial);
-            CreateShape(PrimitiveType.Cube, "Coping_East", c + new Vector3(halfW + t * 0.5f, capY, 0f), new Vector3(capT, 0.1f, halfH * 2f), _lowWallMaterial);
-            CreateShape(PrimitiveType.Cube, "Coping_West", c + new Vector3(-halfW - t * 0.5f, capY, 0f), new Vector3(capT, 0.1f, halfH * 2f), _lowWallMaterial);
         }
 
         private void BuildObstacles(float cs)
@@ -257,13 +176,13 @@ namespace Snake3D
             float yaw = Hash(cell.x, cell.y) * 360f;
             Quaternion turn = Quaternion.Euler(0f, yaw, 0f);
 
-            CreateShape(PrimitiveType.Cylinder, "Stump", basePos + Vector3.up * (h * 0.5f), new Vector3(d * 0.95f, h * 0.5f, d * 0.95f), _barkMaterial);
-            CreateShape(PrimitiveType.Cylinder, "StumpTop", basePos + Vector3.up * h, new Vector3(d * 0.86f, 0.012f * cs, d * 0.86f), _stumpTopMaterial);
+            Occlude(CreateShape(PrimitiveType.Cylinder, "Stump", basePos + Vector3.up * (h * 0.5f), new Vector3(d * 0.95f, h * 0.5f, d * 0.95f), _barkMaterial));
+            Occlude(CreateShape(PrimitiveType.Cylinder, "StumpTop", basePos + Vector3.up * h, new Vector3(d * 0.86f, 0.012f * cs, d * 0.86f), _stumpTopMaterial));
 
             // Обломок ствола торчит над спилом — силуэт сломанного дерева, а не ровного столба.
             float shard = h * 0.5f;
-            Renderer s = CreateShape(PrimitiveType.Cylinder, "Shard", basePos + turn * new Vector3(d * 0.2f, 0f, 0f) + Vector3.up * (h + shard * 0.35f),
-                new Vector3(d * 0.5f, shard * 0.5f, d * 0.38f), _barkMaterial);
+            Renderer s = Occlude(CreateShape(PrimitiveType.Cylinder, "Shard", basePos + turn * new Vector3(d * 0.2f, 0f, 0f) + Vector3.up * (h + shard * 0.35f),
+                new Vector3(d * 0.5f, shard * 0.5f, d * 0.38f), _barkMaterial));
             s.transform.rotation = turn * Quaternion.Euler(0f, 0f, -12f);
 
             for (int i = 0; i < 4; i++)
@@ -289,14 +208,9 @@ namespace Snake3D
             bool pine = Hash(cell.x + 7, cell.y + 3) < 0.4f && _pineMesh != null;
 
             float trunk = (pine ? 3.2f : 3.6f) * cs * s;
-            CreateShape(PrimitiveType.Cylinder, "Trunk", basePos + Vector3.up * (trunk * 0.5f), new Vector3(d, trunk * 0.5f, d), _barkMaterial);
-            for (int i = 0; i < 4; i++)
-            {
-                Quaternion around = turn * Quaternion.Euler(0f, i * 90f + 20f * Hash(cell.x + i, cell.y), 0f);
-                Renderer root = CreateShape(PrimitiveType.Sphere, "Root", basePos + around * new Vector3(0f, 0.05f * cs, d * 0.5f),
-                    new Vector3(d * 0.3f, 0.2f * cs, d * 0.55f), _barkMaterial);
-                root.transform.rotation = around * Quaternion.Euler(18f, 0f, 0f);
-            }
+            // Ствол чуть уходит в землю — на склоне не висит в воздухе.
+            Occlude(CreateShape(PrimitiveType.Cylinder, "Trunk", basePos + Vector3.up * (trunk * 0.5f - 0.3f * cs),
+                new Vector3(d, trunk * 0.5f + 0.3f * cs, d), _barkMaterial));
 
             if (pine)
             {
@@ -313,6 +227,20 @@ namespace Snake3D
             Vector3[] sizes = { new Vector3(3.6f, 2.7f, 3.6f), new Vector3(2.5f, 2f, 2.5f), new Vector3(2.3f, 1.9f, 2.3f) };
             for (int t = 0; t < 3; t++)
                 AddCrown(CreateMesh("Crown", _crownMesh, _leavesMaterial, basePos + turn * (offsets[t] * (cs * s)), sizes[t] * (cs * s), yaw + t * 60f));
+        }
+
+        private Renderer Occlude(Renderer r)
+        {
+            _occluderList.Add(r);
+            return r;
+        }
+
+        /// <summary>Нормаль рельефа в точке — по разности высот вокруг.</summary>
+        private Vector3 GroundNormal(Vector3 p, float cs)
+        {
+            float hx = _grid.GroundHeight(p + Vector3.right * (0.5f * cs)) - _grid.GroundHeight(p - Vector3.right * (0.5f * cs));
+            float hz = _grid.GroundHeight(p + Vector3.forward * (0.5f * cs)) - _grid.GroundHeight(p - Vector3.forward * (0.5f * cs));
+            return new Vector3(-hx, cs, -hz).normalized;
         }
 
         private void AddCrown(Renderer crown)
@@ -336,9 +264,12 @@ namespace Snake3D
                 {
                     var cell = new Vector2Int(x, y);
                     if (!_grid.IsForest(cell) || _grid.IsWater(cell) || Hash(x * 3, y * 5) > 0.8f) continue;
-                    Vector3 c = _grid.CellToWorld(cell) - origin + new Vector3(0f, 0.012f + Hash(x, y) * 0.004f, 0f);
+                    Vector3 world = _grid.CellToWorld(cell);
+                    Vector3 normal = GroundNormal(world, cs);
+                    Vector3 c = world - origin + normal * (0.03f + Hash(x, y) * 0.006f);
                     float size = (1.7f + 0.6f * Hash(y, x)) * cs;
-                    Quaternion rot = Quaternion.Euler(90f, Hash(x + 11, y) * 360f, 0f);
+                    // Пятно листвы лежит по склону.
+                    Quaternion rot = Quaternion.FromToRotation(Vector3.up, normal) * Quaternion.Euler(90f, Hash(x + 11, y) * 360f, 0f);
                     quads.Add(new CombineInstance { mesh = quad, transform = Matrix4x4.TRS(c, rot, new Vector3(size, size, 1f)) });
                 }
             }
@@ -419,10 +350,10 @@ namespace Snake3D
             float yaw = Hash(cell.x, cell.y) * 360f;
             if (_rockMesh == null)
             {
-                CreateShape(PrimitiveType.Cube, "Stone", basePos + Vector3.up * (h * 0.5f), new Vector3(d, h, d), _blockMaterial);
+                Occlude(CreateShape(PrimitiveType.Cube, "Stone", basePos + Vector3.up * (h * 0.5f), new Vector3(d, h, d), _blockMaterial));
                 return;
             }
-            CreateMesh("StandingStone", _rockMesh, _blockMaterial, basePos + Vector3.up * (h * 0.45f), new Vector3(d * 1.35f, h, d * 1.15f), yaw);
+            Occlude(CreateMesh("StandingStone", _rockMesh, _blockMaterial, basePos + Vector3.up * (h * 0.45f), new Vector3(d * 1.35f, h, d * 1.15f), yaw));
         }
 
         private void BuildBoulder(Vector2Int cell, float cs)
@@ -432,11 +363,11 @@ namespace Snake3D
             float yaw = Hash(cell.x, cell.y) * 360f;
             if (_rockMesh == null)
             {
-                CreateShape(PrimitiveType.Cube, "Block", center + Vector3.up * (h * 0.5f), new Vector3(2f * cs, h, 2f * cs), _blockMaterial);
+                Occlude(CreateShape(PrimitiveType.Cube, "Block", center + Vector3.up * (h * 0.5f), new Vector3(2f * cs, h, 2f * cs), _blockMaterial));
                 return;
             }
             // Чуть шире квадрата 2x2, чтобы углы столкновения не торчали из камня.
-            CreateMesh("Boulder", _rockMesh, _blockMaterial, center + Vector3.up * (h * 0.42f), new Vector3(2.5f * cs, h * 1.25f, 2.5f * cs), yaw);
+            Occlude(CreateMesh("Boulder", _rockMesh, _blockMaterial, center + Vector3.up * (h * 0.42f), new Vector3(2.5f * cs, h * 1.25f, 2.5f * cs), yaw));
         }
 
         /// <summary>Бревно на всю длину стенки: строим только от её начала (слева или снизу).</summary>
@@ -452,27 +383,30 @@ namespace Snake3D
             var last = alongX ? new Vector2Int(x + length - 1, y) : new Vector2Int(x, y + length - 1);
             Vector3 center = (_grid.CellToWorld(first) + _grid.CellToWorld(last)) * 0.5f;
             float diameter = Mathf.Max(_grid.GetObstacleHeight(first), 0.3f * cs) * 1.1f;
-            // Цилиндр Unity вытянут по Y: кладём его на бок вдоль X или Z и чуть поворачиваем вокруг оси (кора не повторяется).
-            Quaternion lay = alongX ? Quaternion.Euler(0f, 0f, 90f) : Quaternion.Euler(90f, 0f, 0f);
-            Renderer log = CreateShape(PrimitiveType.Cylinder, "Log", center + Vector3.up * (diameter * 0.5f),
-                new Vector3(diameter, length * cs * 0.5f, diameter), _barkMaterial);
+            // Цилиндр Unity вытянут по Y: кладём его вдоль бревна — с наклоном по склону — и чуть поворачиваем вокруг оси.
+            Vector3 along = _grid.CellToWorld(last) - _grid.CellToWorld(first);
+            if (along.sqrMagnitude < 1e-4f) along = alongX ? Vector3.right : Vector3.forward;
+            Quaternion lay = Quaternion.FromToRotation(Vector3.up, along.normalized);
+            Renderer log = Occlude(CreateShape(PrimitiveType.Cylinder, "Log", center + Vector3.up * (diameter * 0.45f),
+                new Vector3(diameter, (along.magnitude + cs) * 0.5f, diameter), _barkMaterial));
             log.transform.rotation = lay * Quaternion.Euler(0f, Hash(x, y) * 360f, 0f);
         }
 
         /// <summary>
-        /// Пруд — два «веера» по форме берега из GridManager: широкое тёмное дно-берег и над ним
-        /// полупрозрачная вода. Форма берега совпадает с водными клетками логики.
+        /// Озеро и пруды — «веер» воды по форме берега из GridManager на уровне воды водоёма;
+        /// дно-чашу уже вырезал рельеф. Форма берега совпадает с водными клетками логики.
         /// </summary>
         private void BuildPond(float cs)
         {
-            if (!_grid.HasPond || _waterMaterial == null) return;
-            Vector3 center = _grid.PondCenter - transform.position;
-            if (_pondBedMaterial != null)
-                CreateFan("PondBed", center + Vector3.up * 0.006f, 0.55f * cs, 1.06f, _pondBedMaterial);
-            CreateFan("PondWater", center + Vector3.up * 0.04f, 0.25f * cs, 1f, _waterMaterial);
+            if (_waterMaterial == null) return;
+            for (int p = 0; p < _grid.PondCount; p++)
+            {
+                Vector3 center = _grid.GetPondCenter(p) - transform.position;
+                CreateFan("Water_" + p, p, center + Vector3.up * 0.02f, 0.6f * cs, 1.08f, _waterMaterial);
+            }
         }
 
-        private void CreateFan(string objectName, Vector3 localCenter, float pad, float scale, Material mat)
+        private void CreateFan(string objectName, int pond, Vector3 localCenter, float pad, float scale, Material mat)
         {
             const int segments = 64;
             var vertices = new Vector3[segments + 1];
@@ -483,7 +417,7 @@ namespace Snake3D
             for (int i = 0; i < segments; i++)
             {
                 float a = i * Mathf.PI * 2f / segments;
-                float r = _grid.PondEdgeWorld(a) * scale + pad;
+                float r = _grid.PondEdgeWorld(pond, a) * scale + pad;
                 var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
                 vertices[i + 1] = localCenter + dir * r;
                 uvs[i + 1] = new Vector2(0.5f + dir.x * r * 0.25f, 0.5f + dir.z * r * 0.25f);

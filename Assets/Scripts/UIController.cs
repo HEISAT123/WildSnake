@@ -116,6 +116,8 @@ namespace Snake3D
             _game.GoalCompleted += OnGoalCompleted;
             _game.FoxScared += OnFoxScared;
             _game.QuestAdvanced += OnQuestAdvanced;
+            _game.HedgehogPricked += OnHedgehogPricked;
+            _game.RainChanged += OnRainChanged;
             _game.NestBlocked += OnNestBlocked;
             _eagle.Missed += OnEagleMissed;
             _dayNight.DayStarted += OnDayStarted;
@@ -149,6 +151,8 @@ namespace Snake3D
             _game.GoalCompleted -= OnGoalCompleted;
             _game.FoxScared -= OnFoxScared;
             _game.QuestAdvanced -= OnQuestAdvanced;
+            _game.HedgehogPricked -= OnHedgehogPricked;
+            _game.RainChanged -= OnRainChanged;
             _game.NestBlocked -= OnNestBlocked;
             _eagle.Missed -= OnEagleMissed;
             _dayNight.DayStarted -= OnDayStarted;
@@ -270,6 +274,7 @@ namespace Snake3D
         private void OnPreyCaught(PreyKind kind)
         {
             if (kind == PreyKind.Rabbit) ShowBanner("+ КРОЛИК");
+            else if (kind == PreyKind.Hedgehog) ShowBanner("+ ЁЖ");
             else if (kind == PreyKind.Bird) ShowBanner("+ ПТИЦА");
         }
 
@@ -297,6 +302,16 @@ namespace Snake3D
         private void OnQuestAdvanced(QuestStage stage)
         {
             if (stage == QuestStage.Nest) ShowBanner("ВЗРОСЛАЯ ЗМЕЯ · ГНЕЗДО ОТМЕЧЕНО НА КАРТЕ");
+        }
+
+        private void OnHedgehogPricked()
+        {
+            ShowBanner("ЁЖ КОЛЮЧИЙ — ЖДИТЕ, ПОКА РАЗВЕРНЁТСЯ");
+        }
+
+        private void OnRainChanged(bool raining)
+        {
+            ShowBanner(raining ? "ДОЖДЬ · УКРОЙТЕСЬ ПОД КРОНАМИ" : "ДОЖДЬ ПРОШЁЛ");
         }
 
         private void OnNestBlocked(NestCheck check)
@@ -399,6 +414,7 @@ namespace Snake3D
                 case DamageSource.Starvation: return "ГОЛОД ВЗЯЛ СВОЁ";
                 case DamageSource.Eagle: return "ДОБЫЧА ОРЛА";
                 case DamageSource.Fox: return "ДОБЫЧА ЛИСЫ";
+                case DamageSource.Hedgehog: return "ИСКОЛОТА ЁЖИКОМ";
                 case DamageSource.Rival: return "ПОБЕЖДЕНА СОПЕРНИЦЕЙ";
                 default: return "СМЕРТЕЛЬНАЯ РАНА";
             }

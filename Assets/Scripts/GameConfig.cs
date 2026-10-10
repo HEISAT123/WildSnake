@@ -199,7 +199,10 @@ namespace Snake3D
         [SerializeField] private PreyStats[] _prey = CreateDefaultPrey();
 
         [Tooltip("Размер бугра при переваривании по видам (порядок как в PreyKind; 0 — бугра нет, 1 — кролик)")]
-        [SerializeField] private float[] _digestSize = { 0f, 0.3f, 0.3f, 0.45f, 1f };
+        [SerializeField] private float[] _digestSize = { 0f, 0.3f, 0.3f, 0.45f, 1f, 0.5f };
+
+        [Tooltip("Урон от колючек свернувшегося ежа")]
+        [SerializeField, Min(0f)] private float _hedgehogDamage = 14f;
 
         [Tooltip("За сколько секунд бугор размера 1 проходит всё тело")]
         [SerializeField, Min(1f)] private float _digestSeconds = 28f;
@@ -270,6 +273,19 @@ namespace Snake3D
 
         [Tooltip("Отпугнуть лису броском можно, только если здоровья больше этой доли")]
         [SerializeField, Range(0f, 1f)] private float _foxScareHealth = 0.5f;
+
+        [Header("Погода")]
+        [Tooltip("Через сколько секунд после старта может пойти первый дождь")]
+        [SerializeField, Min(0f)] private float _firstRainDelay = 100f;
+
+        [Tooltip("Пауза между дождями, сек (мин, макс)")]
+        [SerializeField] private Vector2 _rainInterval = new Vector2(120f, 220f);
+
+        [Tooltip("Сколько длится дождь, сек (мин, макс)")]
+        [SerializeField] private Vector2 _rainDuration = new Vector2(50f, 100f);
+
+        [Tooltip("Насколько дождь остужает змею (снижение «температуры места»); под кронами и в норе — слабее")]
+        [SerializeField, Range(0f, 1f)] private float _rainChill = 0.3f;
 
         [Header("Главная цель")]
         [Tooltip("Какой длины должна стать змея, чтобы повзрослеть, клеток")]
@@ -398,6 +414,11 @@ namespace Snake3D
         public float FoxDamage => _foxDamage;
         public float FoxScareHealth => _foxScareHealth;
         public float GoalMoltReward => _goalMoltReward;
+        public float HedgehogDamage => _hedgehogDamage;
+        public float FirstRainDelay => _firstRainDelay;
+        public Vector2 RainInterval => _rainInterval;
+        public Vector2 RainDuration => _rainDuration;
+        public float RainChill => _rainChill;
         public float QuestLength => _questLength;
         public int QuestMolts => _questMolts;
         public float NestSatiety => _nestSatiety;
@@ -447,18 +468,19 @@ namespace Snake3D
             return true;
         }
 
-        private const int DefaultPreyCount = 5;
+        private const int DefaultPreyCount = 6;
         private PreyStats[] _fallbackPrey;
 
         private static PreyStats[] CreateDefaultPrey()
         {
             return new[]
             {
-                new PreyStats(7f, 0.25f, 0.6f, 0f, 0f, 1f, false, 14, 10),     // Жук
-                new PreyStats(22f, 0.7f, 1.4f, 5.6f, 4.5f, 2.2f, true, 6, 11), // Мышь
-                new PreyStats(26f, 0.8f, 0f, 4.4f, 3.5f, 2.4f, true, 6, 7),    // Лягушка
-                new PreyStats(40f, 1.2f, 0.9f, 7f, 6f, 3f, true, 6, 4),        // Птица
-                new PreyStats(70f, 1.8f, 1.6f, 6.4f, 5f, 3.2f, true, 4, 2)     // Кролик
+                new PreyStats(7f, 0.25f, 0.6f, 0f, 0f, 1f, false, 40, 30),      // Жук
+                new PreyStats(22f, 0.7f, 1.4f, 5.6f, 4.5f, 2.2f, true, 18, 32), // Мышь
+                new PreyStats(26f, 0.8f, 0f, 4.4f, 3.5f, 2.4f, true, 18, 22),   // Лягушка
+                new PreyStats(40f, 1.2f, 0.9f, 7f, 6f, 3f, true, 18, 12),       // Птица
+                new PreyStats(70f, 1.8f, 1.6f, 6.4f, 5f, 3.2f, true, 12, 6),    // Кролик
+                new PreyStats(38f, 1f, 0.7f, 0f, 3f, 1f, true, 4, 10)            // Ёж
             };
         }
     }
