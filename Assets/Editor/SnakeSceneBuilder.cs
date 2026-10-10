@@ -74,6 +74,8 @@ public static class SnakeSceneBuilder
         DeleteObsoleteAssets();
 
         GameConfig config = LoadOrCreateAsset<GameConfig>(SETTINGS_FOLDER + "/GameConfig.asset");
+        // Новые виды добычи дописываем в старый ассет, не трогая настроенные значения.
+        if (config.EnsurePreyDefaults()) EditorUtility.SetDirty(config);
 
         // ================= Материалы =================
         Texture2D skin = SaveTexture(CreateSkinTexture(), MATERIALS_FOLDER + "/SnakeSkin.asset");
@@ -282,13 +284,16 @@ public static class SnakeSceneBuilder
         Material birdFeather = CreateLitMaterial("PreyBird", new Color(0.56f, 0.38f, 0.22f), 0.2f);
         Material birdChest = CreateLitMaterial("PreyBirdChest", new Color(0.86f, 0.74f, 0.58f), 0.2f);
         Material beak = CreateLitMaterial("PreyBeak", new Color(1f, 0.7f, 0.15f), 0.5f);
+        Material rabbitFur = CreateLitMaterial("PreyRabbit", new Color(0.6f, 0.5f, 0.4f), 0.1f);
+        Material rabbitWhite = CreateLitMaterial("PreyRabbitWhite", new Color(0.93f, 0.91f, 0.87f), 0.1f);
         Material scent = CreateLitMaterial("ScentMark", new Color(0.8f, 1f, 0.3f, 0.35f), 0f);
         SetEmission(scent, new Color(0.6f, 0.9f, 0.15f));
         MakeTransparent(scent);
         Material marker = CreateUnlitMaterial("MarkerPrey", new Color(1f, 0.92f, 0.55f));
 
         var list = new List<Object>();
-        for (int k = 0; k < 4; k++)
+        int kinds = System.Enum.GetValues(typeof(PreyKind)).Length;
+        for (int k = 0; k < kinds; k++)
         {
             var kind = (PreyKind)k;
             PreyStats stats = config.GetPrey(kind);
@@ -305,6 +310,7 @@ public static class SnakeSceneBuilder
                     case PreyKind.Beetle: BuildBeetle(body, beetleShell, dark); break;
                     case PreyKind.Mouse: BuildMouse(body, mouseFur, pink, dark); break;
                     case PreyKind.Frog: BuildFrog(body, frogSkin, frogBelly, dark); break;
+                    case PreyKind.Rabbit: BuildRabbit(body, rabbitFur, rabbitWhite, pink, dark); break;
                     default: BuildBird(body, birdFeather, birdChest, beak, dark, out leftWing, out rightWing); break;
                 }
 
@@ -325,6 +331,13 @@ public static class SnakeSceneBuilder
                 if (leftWing != null) Wire(animal, ("_leftWing", leftWing), ("_rightWing", rightWing));
                 if (kind == PreyKind.Frog) SetFloat(animal, "_reactionTime", 0.25f);
                 if (kind == PreyKind.Bird) SetFloat(animal, "_reactionTime", 0.2f);
+                if (kind == PreyKind.Rabbit)
+                {
+                    SetFloat(animal, "_hopHeight", 0.38f);
+                    SetFloat(animal, "_hopDuration", 0.3f);
+                    SetFloat(animal, "_hopPause", 0.08f);
+                    SetFloat(animal, "_restTime", 2.2f);
+                }
                 root.SetActive(false);
                 list.Add(animal);
             }
@@ -373,6 +386,26 @@ public static class SnakeSceneBuilder
             Part(PrimitiveType.Sphere, "Pupil", body, dark, new Vector3(0.13f * side, 0.31f, 0.17f), Vector3.one * 0.06f);
             GameObject leg = Part(PrimitiveType.Sphere, "Leg", body, skin, new Vector3(0.22f * side, 0.08f, -0.12f), new Vector3(0.16f, 0.12f, 0.32f));
             leg.transform.localRotation = Quaternion.Euler(0f, 20f * side, 0f);
+        }
+    }
+
+    /// <summary>Кролик: крупное тело, длинные уши с розовой изнанкой, белый хвостик-помпон.</summary>
+    private static void BuildRabbit(Transform body, Material fur, Material white, Material pink, Material dark)
+    {
+        Part(PrimitiveType.Sphere, "Torso", body, fur, new Vector3(0f, 0.3f, -0.05f), new Vector3(0.5f, 0.46f, 0.68f));
+        Part(PrimitiveType.Sphere, "Chest", body, white, new Vector3(0f, 0.27f, 0.18f), new Vector3(0.36f, 0.32f, 0.3f));
+        Part(PrimitiveType.Sphere, "Head", body, fur, new Vector3(0f, 0.5f, 0.32f), new Vector3(0.32f, 0.3f, 0.36f));
+        Part(PrimitiveType.Sphere, "Nose", body, pink, new Vector3(0f, 0.5f, 0.5f), Vector3.one * 0.06f);
+        Part(PrimitiveType.Sphere, "Tail", body, white, new Vector3(0f, 0.36f, -0.42f), Vector3.one * 0.17f);
+        for (int side = -1; side <= 1; side += 2)
+        {
+            GameObject ear = Part(PrimitiveType.Sphere, "Ear", body, fur, new Vector3(0.07f * side, 0.8f, 0.24f), new Vector3(0.1f, 0.38f, 0.06f));
+            ear.transform.localRotation = Quaternion.Euler(-12f, 0f, -10f * side);
+            GameObject inner = Part(PrimitiveType.Sphere, "EarInner", body, pink, new Vector3(0.07f * side, 0.8f, 0.265f), new Vector3(0.06f, 0.3f, 0.02f));
+            inner.transform.localRotation = Quaternion.Euler(-12f, 0f, -10f * side);
+            Part(PrimitiveType.Sphere, "Eye", body, dark, new Vector3(0.12f * side, 0.56f, 0.42f), Vector3.one * 0.055f);
+            GameObject foot = Part(PrimitiveType.Sphere, "Foot", body, fur, new Vector3(0.16f * side, 0.07f, -0.12f), new Vector3(0.13f, 0.1f, 0.34f));
+            foot.transform.localRotation = Quaternion.Euler(0f, 8f * side, 0f);
         }
     }
 

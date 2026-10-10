@@ -118,9 +118,18 @@ namespace Snake3D
         /// <summary>Линька завершена, взято улучшение.</summary>
         public event Action<UpgradeType> MoltCompleted;
 
+        /// <summary>Змея схватила крупную добычу и начала её душить.</summary>
+        public event Action<PreyKind> ConstrictionStarted;
+
+        /// <summary>Обвивание закончилось: true — задушила, false — добыча вырвалась.</summary>
+        public event Action<bool> ConstrictionEnded;
+
         public GameState State { get; private set; } = GameState.Menu;
         public RunStats Stats => _stats;
         public SurvivalStats Survival => _survival;
+
+        /// <summary>Шкала борьбы при обвивании.</summary>
+        public Constriction Constriction => _constriction;
         public UpgradeSet Upgrades => _upgrades;
 
         /// <summary>Место последней жизни в таблице (0 — первое, -1 — не попала).</summary>
@@ -141,6 +150,8 @@ namespace Snake3D
         private readonly System.Random _rng = new System.Random();
         private SurvivalStats _survival;
         private readonly UpgradeSet _upgrades = new UpgradeSet();
+        private readonly Constriction _constriction = new Constriction();
+        private PreyAnimal _heldPrey;
         private RunStats _stats;
         private float _moltProgress;
         private bool _moltPending;
@@ -157,6 +168,8 @@ namespace Snake3D
                 RegenPerSecond = _config.RegenPerSecond,
                 WellFedThreshold = _config.WellFedThreshold
             };
+            _constriction.Duration = _config.ConstrictDuration;
+            _constriction.Patience = _config.ConstrictPatience;
         }
 
         private void OnEnable()
@@ -172,6 +185,7 @@ namespace Snake3D
                 _rival.Died += OnRivalDied;
             }
             _wildlife.Caught += OnPreyCaught;
+            _wildlife.Grabbed += OnPreyGrabbed;
             _eagle.Screeched += OnEagleScreeched;
             _eagle.DiveStarted += OnEagleDive;
             _eagle.Struck += OnEagleStruck;
@@ -194,6 +208,7 @@ namespace Snake3D
                 _rival.Died -= OnRivalDied;
             }
             _wildlife.Caught -= OnPreyCaught;
+            _wildlife.Grabbed -= OnPreyGrabbed;
             _eagle.Screeched -= OnEagleScreeched;
             _eagle.DiveStarted -= OnEagleDive;
             _eagle.Struck -= OnEagleStruck;
@@ -310,6 +325,7 @@ namespace Snake3D
             }
 
             // Состав живности зависит от времени суток — оно уже выставлено.
+            EndConstriction(false, false);
             _wildlife.IsNight = _dayNight.IsNight;
             _wildlife.ResetAll();
             _scent.ResetScent();
@@ -355,6 +371,7 @@ namespace Snake3D
 
             TickHunger(dt);
             if (State != GameState.Playing) return;
+            TickConstriction(dt);
             // Голодная змея медленнее восстанавливает силы.
             _snake.Stamina.RegenMultiplier = Mathf.Lerp(_config.HungryStaminaRegen, 1f, Mathf.Clamp01(_survival.Satiety01 * 2f));
 
@@ -364,8 +381,8 @@ namespace Snake3D
                 else TickRivalRespawn(dt);
             }
 
-            // Линька начинается на земле и не посреди атаки орла — чтобы пауза не спасала от удара.
-            if (_moltPending && _snake.IsAlive && _snake.IsGrounded && !_eagle.IsDiving) BeginMolt();
+            // Линька начинается на земле, не посреди атаки орла и не во время борьбы с добычей.
+            if (_moltPending && _snake.IsAlive && _snake.IsGrounded && !_eagle.IsDiving && !_constriction.IsActive) BeginMolt();
         }
 
         /// <summary>Голод: сытость убывает (ночью быстрее); на нуле худеет тело, а потом идёт урон.</summary>
@@ -509,6 +526,8 @@ namespace Snake3D
         {
             // В меню змея только отскакивает — живой фон не умирает.
             if (State != GameState.Playing) return;
+            // Раненая змея разжимает кольца.
+            EndConstriction(false, true);
             Emit(_deathParticles, position, _deathParticleCount / 4);
             _audio.Play(SoundId.Hurt);
             _cameraRig.Shake(0.25f, 0.35f);
@@ -582,6 +601,8 @@ namespace Snake3D
 
             _survival.Feed(prey.Satiety * _upgrades.FeedMultiplier);
             _snake.Grow(prey.Growth);
+            float digest = _config.DigestSize(kind);
+            _snake.Digestion.Add(digest, _config.DigestSeconds * Mathf.Max(0.35f, digest));
             _moltProgress += prey.Growth;
             if (_moltProgress >= _config.MoltGrowth) _moltPending = true;
             _stats.Prey++;
@@ -590,6 +611,66 @@ namespace Snake3D
             _audio.Play(big ? SoundId.Feast : SoundId.Catch);
             if (big) _cameraRig.Shake(0.08f, 0.2f);
             PreyCaught?.Invoke(kind);
+        }
+
+        // ---------------- Обвивание ----------------
+
+        private void OnPreyGrabbed(PreyAnimal animal)
+        {
+            // На фоне меню душить некому — добыча сразу вырывается.
+            if (State != GameState.Playing || _constriction.IsActive)
+            {
+                animal.Release(_snake.HeadPosition);
+                return;
+            }
+            _heldPrey = animal;
+            _constriction.Begin();
+            _playerInput.MovementLocked = true;
+            _snake.IsConstricting = true;
+            _audio.Play(SoundId.Catch);
+            _cameraRig.Shake(0.12f, 0.25f);
+            ConstrictionStarted?.Invoke(animal.Kind);
+        }
+
+        /// <summary>Добыча в кольцах: держать F — шкала растёт и тратятся силы; кончились силы или отпустил надолго — вырвалась.</summary>
+        private void TickConstriction(float dt)
+        {
+            if (!_constriction.IsActive) return;
+            if (_heldPrey == null || !_heldPrey.IsActive || !_snake.IsAlive)
+            {
+                EndConstriction(false, false);
+                return;
+            }
+
+            bool squeezing = GameInput.ConstrictHeld;
+            if (squeezing)
+            {
+                _snake.Stamina.Drain(_config.ConstrictStaminaDrain * dt);
+                _cameraRig.Shake(0.03f, 0.1f);
+            }
+            bool hasStamina = !_snake.Stamina.IsExhausted;
+            Vector3 forward = _snake.Forward;
+            _heldPrey.HoldAt(_snake.HeadPosition + forward * (0.75f * _grid.CellSize), _snake.Yaw + 180f);
+
+            ConstrictResult result = _constriction.Tick(dt, squeezing, hasStamina);
+            if (result == ConstrictResult.Won) EndConstriction(true, false);
+            else if (result == ConstrictResult.Escaped) EndConstriction(false, true);
+        }
+
+        /// <summary>Конец борьбы: задушила — поимка как обычно, иначе добыча вырывается и убегает.</summary>
+        private void EndConstriction(bool won, bool notify)
+        {
+            PreyAnimal prey = _heldPrey;
+            _heldPrey = null;
+            bool wasActive = prey != null;
+            _constriction.Cancel();
+            _playerInput.MovementLocked = false;
+            _snake.IsConstricting = false;
+            if (!wasActive) return;
+
+            if (won) _wildlife.CompleteCatch(prey, _snake);
+            else prey.Release(_snake.HeadPosition);
+            if (notify || won) ConstrictionEnded?.Invoke(won);
         }
 
         // ---------------- Орёл ----------------

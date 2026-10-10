@@ -128,6 +128,9 @@ namespace Snake3D
         /// <summary>Засада: неподвижная змея сливается с местностью.</summary>
         public AmbushTracker Ambush => _ambush;
 
+        /// <summary>Переваривание: бугры по телу замедляют и тяжелят прыжок.</summary>
+        public Digestion Digestion => _digestion;
+
         /// <summary>После промаха змея на секунду медленнее и заметнее.</summary>
         public bool IsExposed => _exposedTimer > 0f;
 
@@ -179,6 +182,9 @@ namespace Snake3D
         /// <summary>Множитель цены броска в выносливости от улучшений.</summary>
         public float StrikeCostScale { get; set; } = 1f;
 
+        /// <summary>Змея душит добычу (ставит GameManager): тело сжимается кольцами.</summary>
+        public bool IsConstricting { get; set; }
+
         /// <summary>Автопилот: змея игрока управляется ИИ (живой фон главного меню).</summary>
         public bool AutoPilot { get; set; }
 
@@ -224,6 +230,7 @@ namespace Snake3D
 
         private readonly Stamina _stamina = new Stamina();
         private readonly AmbushTracker _ambush = new AmbushTracker();
+        private readonly Digestion _digestion = new Digestion();
         private float _exposedTimer;
         private bool _strikeHit;
         private float _strikeTimer;
@@ -288,6 +295,7 @@ namespace Snake3D
             _strikeHit = false;
             _stamina.Reset(_config.MaxStamina);
             _ambush.Break();
+            _digestion.Reset();
             IsAlive = true;
             IsRunning = false;
 
@@ -530,6 +538,7 @@ namespace Snake3D
             if (_strikeCooldownTimer > 0f) _strikeCooldownTimer -= dt;
             if (_invulnerableTimer > 0f) _invulnerableTimer -= dt;
             if (_exposedTimer > 0f) _exposedTimer -= dt;
+            _digestion.Tick(dt);
             UpdateJump(dt);
 
             float previousYaw = _yaw;
@@ -587,6 +596,7 @@ namespace Snake3D
 
                 target = _config.PaceSpeed(EffectivePace) * _moveAmount * _speedScale * ExternalSpeedMultiplier;
                 if (IsExposed) target *= _config.MissSlowdown;
+                target *= _digestion.SpeedMultiplier;
                 // Крутой разворот — сбавляем ход, иначе дуга вышла бы слишком широкой.
                 float turnAbs = Mathf.Abs(delta);
                 if (turnAbs > 90f) target *= Mathf.Lerp(1f, 0.55f, Mathf.InverseLerp(90f, 170f, turnAbs));
@@ -637,7 +647,8 @@ namespace Snake3D
 
             if (_grounded && wantJump && !_coiled)
             {
-                _verticalSpeed = Mathf.Sqrt(2f * _config.Gravity * _config.JumpHeight) * _cellSize;
+                // Сытая змея с бугром прыгает ниже.
+                _verticalSpeed = Mathf.Sqrt(2f * _config.Gravity * _config.JumpHeight * _digestion.JumpMultiplier) * _cellSize;
                 _grounded = false;
                 _ambush.Break();
                 Jumped?.Invoke();

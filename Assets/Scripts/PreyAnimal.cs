@@ -3,8 +3,9 @@ using UnityEngine;
 namespace Snake3D
 {
     /// <summary>
-    /// Одно животное-добыча: жук, мышь, лягушка или птица. Бродит, замечает змею (если та не в траве),
+    /// Одно животное-добыча: жук, мышь, лягушка, птица или кролик. Бродит, замечает змею (если та не в траве),
     /// после короткой реакции убегает, а устав — замирает. Птица не бегает, а улетает и исчезает.
+    /// Кролик скачет; схваченный броском, он бьётся в кольцах змеи (Held), пока та его душит или он не вырвется.
     /// Логика в данных (позиция, курс, высота прыжка), Transform только показывает результат.
     /// Обновляет животных WildlifeManager — экземпляры берутся из пула, Instantiate/Destroy нет.
     /// </summary>
@@ -17,7 +18,8 @@ namespace Snake3D
             Alert,
             Flee,
             Rest,
-            FlyAway
+            FlyAway,
+            Held
         }
 
         private static readonly float[] AvoidAngles = { 40f, -40f, 85f, -85f, 130f, -130f };
@@ -78,6 +80,12 @@ namespace Snake3D
 
         /// <summary>Устал после бегства и не может сорваться с места.</summary>
         public bool IsResting => _mode == Mode.Rest;
+
+        /// <summary>Схвачен змеёй и бьётся в её кольцах.</summary>
+        public bool IsHeld => _mode == Mode.Held;
+
+        /// <summary>Передвигается прыжками (лягушка, кролик).</summary>
+        private bool Hops => _kind == PreyKind.Frog || _kind == PreyKind.Rabbit;
 
         private GridManager _grid;
         private PreyStats _stats;
@@ -143,10 +151,33 @@ namespace Snake3D
             if (_scentMark != null && _scentMark.activeSelf != on) _scentMark.SetActive(on);
         }
 
+        /// <summary>Схватить: животное перестаёт бегать, его положение задаёт змея (HoldAt).</summary>
+        public void Grab()
+        {
+            SetMode(Mode.Held, 0f);
+            _velocity = Vector3.zero;
+            SetScent(false);
+        }
+
+        /// <summary>Положение в кольцах змеи (вызывается каждый кадр, пока животное схвачено).</summary>
+        public void HoldAt(Vector3 groundPosition, float yaw)
+        {
+            _pos = new Vector3(groundPosition.x, _grid.Center.y, groundPosition.z);
+            _yaw = yaw;
+        }
+
+        /// <summary>Вырвался: сразу бежит прочь от змеи.</summary>
+        public void Release(Vector3 threatPosition)
+        {
+            if (_mode != Mode.Held) return;
+            SetMode(Mode.Idle, 0f);
+            Startle(threatPosition);
+        }
+
         /// <summary>Змея коснулась без броска: добыча срывается сразу, без задержки реакции, и отскакивает.</summary>
         public void Startle(Vector3 threatPosition)
         {
-            if (!IsActive || _mode == Mode.FlyAway) return;
+            if (!IsActive || _mode == Mode.FlyAway || _mode == Mode.Held) return;
             _threatPos = threatPosition;
             _speedBoost = 0.25f;
             if (_kind == PreyKind.Bird) SetMode(Mode.FlyAway, _flyAwayTime);
@@ -180,6 +211,7 @@ namespace Snake3D
 
                 case Mode.Wander:
                     if (_kind == PreyKind.Frog) HopMove(_moveDir, _stats.FleeSpeed * 0.35f, dt);
+                    else if (_kind == PreyKind.Rabbit) HopMove(_moveDir, _stats.WalkSpeed, dt);
                     else if (!TryMove(_moveDir, _stats.WalkSpeed, dt)) _stateTimer = 0f;
                     if (_stateTimer <= 0f && _height <= 0f) SetMode(Mode.Idle, Random.Range(0.8f, 3f));
                     break;
@@ -199,6 +231,9 @@ namespace Snake3D
 
                 case Mode.Rest:
                     if (_stateTimer <= 0f) SetMode(Mode.Idle, Random.Range(0.5f, 1.5f));
+                    break;
+
+                case Mode.Held:
                     break;
 
                 case Mode.FlyAway:
@@ -266,6 +301,7 @@ namespace Snake3D
             }
             _moveDir = dir.normalized;
             float duration = _kind == PreyKind.Frog ? _hopDuration + _hopPause : Random.Range(0.8f, 2.4f);
+            if (_kind == PreyKind.Rabbit) duration = (_hopDuration + _hopPause) * Random.Range(2, 5);
             _hopPhase = 0f;
             SetMode(Mode.Wander, duration);
         }
@@ -282,7 +318,7 @@ namespace Snake3D
             _moveDir = Vector3.Slerp(_moveDir, away, 1f - Mathf.Exp(-8f * dt));
 
             float speed = _stats.FleeSpeed * (_speedBoost > 0f ? 1.6f : 1f);
-            if (_kind == PreyKind.Frog) HopMove(_moveDir, speed, dt);
+            if (Hops) HopMove(_moveDir, speed, dt);
             else if (_kind == PreyKind.Beetle) TryMove(_moveDir, _stats.WalkSpeed, dt);
             else TryMove(_moveDir, speed, dt);
 
@@ -406,11 +442,19 @@ namespace Snake3D
                     if (moving) bob = Mathf.Abs(Mathf.Sin(_animTime * 26f)) * 0.04f;
                     break;
                 case PreyKind.Frog:
+                case PreyKind.Rabbit:
                     pitch = _height > 0f ? -18f : 0f;
                     break;
                 case PreyKind.Beetle:
                     if (moving) bob = Mathf.Abs(Mathf.Sin(_animTime * 30f)) * 0.015f;
                     break;
+            }
+            if (_mode == Mode.Held)
+            {
+                // Бьётся в кольцах: частая неровная дрожь.
+                _body.localRotation = Quaternion.Euler(Mathf.Sin(_animTime * 41f) * 14f, Mathf.Sin(_animTime * 23f) * 10f, Mathf.Sin(_animTime * 33f) * 16f);
+                _body.localPosition = new Vector3(0f, Mathf.Abs(Mathf.Sin(_animTime * 29f)) * 0.05f, 0f);
+                return;
             }
             _body.localRotation = Quaternion.Euler(pitch, 0f, 0f);
             _body.localPosition = new Vector3(0f, bob, 0f);

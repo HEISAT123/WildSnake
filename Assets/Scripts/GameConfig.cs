@@ -173,13 +173,23 @@ namespace Snake3D
         [SerializeField, Min(0.1f)] private float _strikeCatchRadius = 1.3f;
 
         [Tooltip("Параметры видов добычи (порядок как в PreyKind)")]
-        [SerializeField] private PreyStats[] _prey =
-        {
-            new PreyStats(7f, 0.25f, 0.6f, 0f, 0f, 1f, false, 7, 5),     // Жук
-            new PreyStats(22f, 0.7f, 1.4f, 5.6f, 4.5f, 2.2f, true, 3, 6), // Мышь
-            new PreyStats(26f, 0.8f, 0f, 4.4f, 3.5f, 2.4f, true, 3, 4),   // Лягушка
-            new PreyStats(40f, 1.2f, 0.9f, 7f, 6f, 3f, true, 3, 2)        // Птица
-        };
+        [SerializeField] private PreyStats[] _prey = CreateDefaultPrey();
+
+        [Tooltip("Размер бугра при переваривании по видам (порядок как в PreyKind; 0 — бугра нет, 1 — кролик)")]
+        [SerializeField] private float[] _digestSize = { 0f, 0.3f, 0.3f, 0.45f, 1f };
+
+        [Tooltip("За сколько секунд бугор размера 1 проходит всё тело")]
+        [SerializeField, Min(1f)] private float _digestSeconds = 28f;
+
+        [Header("Обвивание")]
+        [Tooltip("Сколько секунд держать F, чтобы задушить крупную добычу")]
+        [SerializeField, Min(0.2f)] private float _constrictDuration = 2.6f;
+
+        [Tooltip("Расход выносливости в секунду, пока змея сжимает добычу")]
+        [SerializeField, Min(0f)] private float _constrictStaminaDrain = 22f;
+
+        [Tooltip("Сколько секунд добыча терпит без сжатия, прежде чем вырваться")]
+        [SerializeField, Min(0.1f)] private float _constrictPatience = 1.5f;
 
         [Tooltip("Насколько хуже замечают змею в высокой траве (множитель радиуса)")]
         [SerializeField, Range(0.05f, 1f)] private float _coverAwareness = 0.45f;
@@ -290,7 +300,21 @@ namespace Snake3D
         public float SneakAwareness => _sneakAwareness;
         public float SprintAwareness => _sprintAwareness;
         public float SleepAwareness => _sleepAwareness;
-        public int PreyKindCount => _prey.Length;
+        public int PreyKindCount => Mathf.Max(_prey.Length, DefaultPreyCount);
+        public float DigestSeconds => _digestSeconds;
+        public float ConstrictDuration => _constrictDuration;
+        public float ConstrictStaminaDrain => _constrictStaminaDrain;
+        public float ConstrictPatience => _constrictPatience;
+
+        /// <summary>Крупную добычу (кролика) берут только обвиванием: бросок лишь хватает её.</summary>
+        public bool RequiresConstrict(PreyKind kind) => kind == PreyKind.Rabbit;
+
+        /// <summary>Размер бугра при переваривании (0 — без бугра).</summary>
+        public float DigestSize(PreyKind kind)
+        {
+            int i = (int)kind;
+            return i < _digestSize.Length ? _digestSize[i] : 0f;
+        }
 
         public float DaySeconds => _daySeconds;
         public float NightSeconds => _nightSeconds;
@@ -322,9 +346,42 @@ namespace Snake3D
             return distance / _strikeDuration;
         }
 
+        /// <summary>Параметры вида. Если ассет старый и вида в нём ещё нет — значения по умолчанию.</summary>
         public PreyStats GetPrey(PreyKind kind)
         {
-            return _prey[(int)kind];
+            int i = (int)kind;
+            if (i < _prey.Length) return _prey[i];
+            if (_fallbackPrey == null) _fallbackPrey = CreateDefaultPrey();
+            return _fallbackPrey[i];
+        }
+
+        /// <summary>
+        /// Дописать в ассет виды добычи, появившиеся после его создания (вызывает SnakeSceneBuilder).
+        /// Уже настроенные значения не трогаются. Возвращает true, если ассет изменился.
+        /// </summary>
+        public bool EnsurePreyDefaults()
+        {
+            PreyStats[] defaults = CreateDefaultPrey();
+            if (_prey.Length >= defaults.Length) return false;
+            var merged = new PreyStats[defaults.Length];
+            for (int i = 0; i < merged.Length; i++) merged[i] = i < _prey.Length ? _prey[i] : defaults[i];
+            _prey = merged;
+            return true;
+        }
+
+        private const int DefaultPreyCount = 5;
+        private PreyStats[] _fallbackPrey;
+
+        private static PreyStats[] CreateDefaultPrey()
+        {
+            return new[]
+            {
+                new PreyStats(7f, 0.25f, 0.6f, 0f, 0f, 1f, false, 7, 5),      // Жук
+                new PreyStats(22f, 0.7f, 1.4f, 5.6f, 4.5f, 2.2f, true, 3, 6),  // Мышь
+                new PreyStats(26f, 0.8f, 0f, 4.4f, 3.5f, 2.4f, true, 3, 4),    // Лягушка
+                new PreyStats(40f, 1.2f, 0.9f, 7f, 6f, 3f, true, 3, 2),        // Птица
+                new PreyStats(70f, 1.8f, 1.6f, 6.4f, 5f, 3.2f, true, 2, 1)     // Кролик
+            };
         }
     }
 }

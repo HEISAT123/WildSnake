@@ -9,7 +9,7 @@ namespace Snake3D
     /// (тонкая шея → толстое тело → острый хвост), сечение слегка приплюснуто, как у настоящей змеи.
     /// Поверх траектории — боковая волна: она привязана к пройденному пути (одометру), поэтому тело
     /// скользит по неподвижной на земле «S», как настоящая змея, а при остановке замирает.
-    /// При замахе шея складывается в тугую S.
+    /// При замахе шея складывается в тугую S. Проглоченная добыча — бугор, который ползёт к хвосту.
     /// Все буферы выделяются один раз, каждый кадр только перезаписываются.
     /// </summary>
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
@@ -57,6 +57,13 @@ namespace Snake3D
 
         [Tooltip("Размах подрагивания кончика хвоста в засаде, клеток")]
         [SerializeField, Min(0f)] private float _lureAmplitude = 0.14f;
+
+        [Header("Переваривание")]
+        [Tooltip("Насколько толще тело в бугре размера 1 (кролик), доля радиуса")]
+        [SerializeField, Min(0f)] private float _bulgeScale = 0.8f;
+
+        [Tooltip("Полуширина бугра, клеток")]
+        [SerializeField, Min(0.05f)] private float _bulgeWidth = 0.45f;
 
         private Mesh _mesh;
         private MeshRenderer _renderer;
@@ -164,6 +171,25 @@ namespace Snake3D
             Rebuild();
         }
 
+        /// <summary>Сумма бугров в точке тела d (мировые единицы от головы): колокол вокруг каждого бугра.</summary>
+        private float Bulge(float d, float length, float cs)
+        {
+            Digestion digestion = _snake.Digestion;
+            int count = digestion.Count;
+            if (count == 0) return 0f;
+            float width = _bulgeWidth * cs;
+            float sum = 0f;
+            for (int i = 0; i < count; i++)
+            {
+                digestion.GetMeal(i, out float pos, out float size);
+                // Бугор не заходит в шею и тает у хвоста.
+                float center = Mathf.Lerp(0.6f * cs, length * 0.92f, pos);
+                float k = (d - center) / width;
+                sum += size * (1f - pos * 0.6f) * Mathf.Exp(-k * k);
+            }
+            return sum * _bulgeScale;
+        }
+
         /// <summary>Амплитуда меняется только на ходу: остановилась — волна застыла в том виде, в каком была.</summary>
         private void UpdateWave()
         {
@@ -172,7 +198,7 @@ namespace Snake3D
             _lastOdometer = odometer;
             float target = _snake.IsStriking ? 0f : _waveAmplitude * Mathf.Clamp(_snake.Speed / _snake.WalkSpeed, 0f, 1.3f);
             _waveAmp = Mathf.MoveTowards(_waveAmp, target, _waveResponse * moved);
-            _coilBlend = Mathf.MoveTowards(_coilBlend, _snake.IsCoiled ? 1f : 0f, Time.deltaTime * 5f);
+            _coilBlend = Mathf.MoveTowards(_coilBlend, _snake.IsCoiled || _snake.IsConstricting ? 1f : 0f, Time.deltaTime * 5f);
         }
 
         private void Rebuild()
@@ -217,7 +243,9 @@ namespace Snake3D
                 if (lure > 0f && t > 0.8f) lateral += lure * Mathf.Sin(lurePhase - t * 6f) * ((t - 0.8f) * 5f);
                 center += right * lateral;
 
-                float radius = baseRadius * _radiusProfile.Evaluate(t);
+                float radius = baseRadius * _radiusProfile.Evaluate(t) * (1f + Bulge(d, length, cs));
+                // Сжимая добычу, тело ходит волнами — видно, что змея душит.
+                if (_snake.IsConstricting) radius *= 1f + 0.08f * Mathf.Sin(Time.time * 14f - d * 5f);
                 float radiusV = radius * _verticalScale;
                 // Брюхо остаётся у земли, поэтому приплюснутое сечение сдвигаем вниз.
                 center -= up * (radius - radiusV);

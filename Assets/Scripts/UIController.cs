@@ -30,7 +30,7 @@ namespace Snake3D
             "Добыча насыщает на 20% сильнее"
         };
 
-        private static readonly string[] PreyNames = { "ЖУК", "МЫШЬ", "ЛЯГУШКА", "ПТИЦА" };
+        private static readonly string[] PreyNames = { "ЖУК", "МЫШЬ", "ЛЯГУШКА", "ПТИЦА", "КРОЛИК" };
 
         // Подписи HUD разрежены тонким пробелом, как в разметке UIBuilder.
         private const string SatietyCaption = "С Ы Т О С Т Ь";
@@ -160,6 +160,8 @@ namespace Snake3D
             _game.PreyCaught += OnPreyCaught;
             _game.PlayerDamaged += OnPlayerDamaged;
             _game.MoltCompleted += OnMoltCompleted;
+            _game.ConstrictionStarted += OnConstrictionStarted;
+            _game.ConstrictionEnded += OnConstrictionEnded;
             _wildlife.Startled += OnPreyStartled;
             _eagle.Missed += OnEagleMissed;
             _dayNight.DayStarted += OnDayStarted;
@@ -189,6 +191,8 @@ namespace Snake3D
             _game.PreyCaught -= OnPreyCaught;
             _game.PlayerDamaged -= OnPlayerDamaged;
             _game.MoltCompleted -= OnMoltCompleted;
+            _game.ConstrictionStarted -= OnConstrictionStarted;
+            _game.ConstrictionEnded -= OnConstrictionEnded;
             _wildlife.Startled -= OnPreyStartled;
             _eagle.Missed -= OnEagleMissed;
             _dayNight.DayStarted -= OnDayStarted;
@@ -414,6 +418,16 @@ namespace Snake3D
         private void OnMoltCompleted(UpgradeType type)
         {
             ShowBanner(UpgradeNames[(int)type]);
+        }
+
+        private void OnConstrictionStarted(PreyKind kind)
+        {
+            ShowBanner("ДЕРЖИТЕ F — ОБВИТЬ");
+        }
+
+        private void OnConstrictionEnded(bool won)
+        {
+            if (!won) ShowBanner("ВЫРВАЛСЯ");
         }
 
         private void OnPreyStartled(PreyKind kind, Vector3 position)

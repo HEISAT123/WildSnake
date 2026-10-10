@@ -62,6 +62,28 @@ namespace Snake3D.Tests
         }
 
         [Test]
+        public void Rabbit_NeedsConstriction_AndIsHeaviestMeal()
+        {
+            Assert.IsTrue(_config.RequiresConstrict(PreyKind.Rabbit));
+            Assert.IsFalse(_config.RequiresConstrict(PreyKind.Bird));
+            Assert.Greater(_config.GetPrey(PreyKind.Rabbit).Satiety, _config.GetPrey(PreyKind.Bird).Satiety, "Кролик должен быть сытнее птицы");
+            Assert.Greater(_config.DigestSize(PreyKind.Rabbit), _config.DigestSize(PreyKind.Mouse));
+            Assert.AreEqual(0f, _config.DigestSize(PreyKind.Beetle), "От жука бугра нет");
+        }
+
+        [Test]
+        public void EnsurePreyDefaults_ExtendsOldAsset_KeepsValues()
+        {
+            var field = typeof(GameConfig).GetField("_prey", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            var old = new[] { new PreyStats(1f, 1f, 1f, 1f, 1f, 1f, false, 1, 1) };
+            field.SetValue(_config, old);
+            Assert.IsTrue(_config.EnsurePreyDefaults());
+            Assert.AreEqual(1f, _config.GetPrey(PreyKind.Beetle).Satiety, "Настроенное значение не должно сбрасываться");
+            Assert.Greater(_config.GetPrey(PreyKind.Rabbit).Satiety, 1f);
+            Assert.IsFalse(_config.EnsurePreyDefaults());
+        }
+
+        [Test]
         public void FleeingPrey_IsFasterThanSnake_ButSlowerThanStrike()
         {
             float strike = _config.StrikeSpeed(0f);

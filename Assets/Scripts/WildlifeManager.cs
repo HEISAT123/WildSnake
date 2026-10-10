@@ -7,11 +7,13 @@ namespace Snake3D
     /// Живность на арене: держит численность каждого вида (днём и ночью разную), подселяет новых
     /// животных подальше от змей, обновляет их поведение и проверяет поимку.
     /// Мелочь ловится касанием; крупную добычу — только броском, касание её лишь спугивает.
+    /// Кролика бросок только хватает (событие Grabbed) — душит его змея игрока обвиванием, и поимку
+    /// завершает GameManager через CompleteCatch.
     /// Все животные заранее созданы в пуле (SnakeSceneBuilder), в игре нет Instantiate/Destroy.
     /// </summary>
     public class WildlifeManager : MonoBehaviour
     {
-        private const int KIND_COUNT = 4;
+        private const int KIND_COUNT = 5;
 
         [Header("Ссылки")]
         [Tooltip("Параметры баланса")]
@@ -47,6 +49,9 @@ namespace Snake3D
 
         /// <summary>Змея игрока коснулась крупной добычи без броска и спугнула её.</summary>
         public event Action<PreyKind, Vector3> Startled;
+
+        /// <summary>Змея игрока схватила броском добычу, которую нужно задушить (кролик).</summary>
+        public event Action<PreyAnimal> Grabbed;
 
         /// <summary>Ночью меняется состав и птицы спят.</summary>
         public bool IsNight { get; set; }
@@ -94,6 +99,17 @@ namespace Snake3D
             }
         }
 
+        /// <summary>Задушенная добыча съедена: убрать её и сообщить о поимке, как при обычной охоте.</summary>
+        public void CompleteCatch(PreyAnimal animal, SnakeController snake)
+        {
+            if (animal == null || !animal.IsActive) return;
+            Vector3 pos = animal.Position;
+            PreyKind kind = animal.Kind;
+            animal.Despawn();
+            ScheduleRespawn(kind);
+            Caught?.Invoke(snake, kind, pos);
+        }
+
         /// <summary>Подсветить (или погасить) метки запаха у всей добычи в радиусе.</summary>
         public void SetScentMarks(bool on, Vector3 center, float radius)
         {
@@ -116,7 +132,7 @@ namespace Snake3D
             for (int i = 0; i < _animals.Length; i++)
             {
                 PreyAnimal a = _animals[i];
-                if (!a.IsActive || a.IsFlying) continue;
+                if (!a.IsActive || a.IsFlying || a.IsHeld) continue;
                 Vector3 d = a.Position - from;
                 d.y = 0f;
                 float dist = d.sqrMagnitude;
@@ -138,7 +154,8 @@ namespace Snake3D
             for (int i = 0; i < _animals.Length; i++)
             {
                 PreyAnimal a = _animals[i];
-                if (!a.IsActive || a.IsFlying) continue;
+                // Кролика ИИ не душит — не гоняется за ним зря.
+                if (!a.IsActive || a.IsFlying || a.IsHeld || _config.RequiresConstrict(a.Kind)) continue;
                 Vector3 d = a.Position - from;
                 d.y = 0f;
                 float dist = d.magnitude / cs;
@@ -214,13 +231,28 @@ namespace Snake3D
             for (int i = 0; i < _animals.Length; i++)
             {
                 PreyAnimal a = _animals[i];
-                if (!a.IsActive) continue;
+                if (!a.IsActive || a.IsHeld) continue;
                 if (Mathf.Abs(a.HeightAboveGround - headBottom) > maxDy) continue;
                 Vector3 d = a.Position - head;
                 d.y = 0f;
                 if (d.sqrMagnitude > rSqr) continue;
 
                 PreyStats stats = _config.GetPrey(a.Kind);
+                if (_config.RequiresConstrict(a.Kind))
+                {
+                    // Крупную добычу бросок только хватает — и только змея игрока умеет её задушить.
+                    if (strike && snake == _player && Grabbed != null && snake.IsRunning)
+                    {
+                        a.Grab();
+                        snake.NotifyStrikeHit();
+                        snake.CancelStrike();
+                        Grabbed.Invoke(a);
+                        return;
+                    }
+                    a.Startle(head);
+                    continue;
+                }
+
                 // Уставшая добыча не успевает увернуться — её можно взять и касанием.
                 if (stats.RequiresStrike && !strike && !a.IsResting)
                 {
