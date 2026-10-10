@@ -33,6 +33,9 @@ namespace Snake3D
         [Tooltip("ИИ-автопилот змеи игрока: ведёт её на живом фоне главного меню")]
         [SerializeField] private SnakeAI _playerAutopilot;
 
+        [Tooltip("Ввод игрока: включается только во время партии")]
+        [SerializeField] private PlayerSnakeInput _playerInput;
+
         [Header("Природа")]
         [Tooltip("Живность-добыча")]
         [SerializeField] private WildlifeManager _wildlife;
@@ -162,7 +165,7 @@ namespace Snake3D
             _snake.Died += OnPlayerDied;
             _snake.Jumped += OnJumped;
             _snake.Landed += OnLanded;
-            _snake.Dashed += OnDashed;
+            _snake.StrikeStarted += OnStrikeStarted;
             if (_rival != null)
             {
                 _rival.Hurt += OnRivalHurt;
@@ -184,7 +187,7 @@ namespace Snake3D
             _snake.Died -= OnPlayerDied;
             _snake.Jumped -= OnJumped;
             _snake.Landed -= OnLanded;
-            _snake.Dashed -= OnDashed;
+            _snake.StrikeStarted -= OnStrikeStarted;
             if (_rival != null)
             {
                 _rival.Hurt -= OnRivalHurt;
@@ -326,7 +329,9 @@ namespace Snake3D
             _snake.IsRunning = running || menu;
             if (RivalActive) _rival.IsRunning = running || menu;
             SetAutopilot(menu);
+            _playerInput.enabled = running;
             _cameraRig.Showcase = menu;
+            _cameraRig.OrbitInput = running;
             _wildlife.IsRunning = running || menu;
             _dayNight.Running = running;
             _eagle.HuntingAllowed = running && !_dayNight.IsNight;
@@ -337,7 +342,7 @@ namespace Snake3D
 
         private void TickPlaying(float dt)
         {
-            if (GameInput.Smell && _scent.TrySniff())
+            if (GameInput.Interact && _scent.TrySniff())
             {
                 _headAnimator.Flick();
                 _audio.Play(SoundId.Sniff);
@@ -410,8 +415,7 @@ namespace Snake3D
         private void ApplyUpgrades()
         {
             _snake.ExternalSpeedMultiplier = _upgrades.SpeedMultiplier;
-            _snake.DashDurationScale = _upgrades.DashDurationMultiplier;
-            _snake.DashCooldownScale = _upgrades.DashCooldownMultiplier;
+            _snake.StrikeDistanceScale = _upgrades.StrikeDistanceMultiplier;
             _scent.RadiusMultiplier = _upgrades.SmellRadiusMultiplier;
             _scent.CooldownMultiplier = _upgrades.SmellCooldownMultiplier;
             _wildlife.PlayerAwarenessMultiplier = _upgrades.AwarenessMultiplier;
@@ -434,14 +438,27 @@ namespace Snake3D
             SetState(GameState.Molting);
         }
 
-        /// <summary>Голова одной змеи о тело другой: удар с отскоком (урон считает обработчик Hurt).</summary>
+        /// <summary>
+        /// Голова одной змеи о тело другой. Броском — это укус: ранена та, в чьё тело попали.
+        /// На шагу змеи просто упираются друг в друга и расходятся.
+        /// </summary>
         private void CheckSnakeCollisions()
         {
             if (!_snake.IsAlive || !_rival.IsAlive) return;
             if (_rival.BodyHits(_snake.HeadPosition, _snake.HeadRadiusWorld, 0, out Vector3 hitOnRival))
-                _snake.TakeHit(_config.BodyDamage, DamageSource.Rival, _snake.HeadPosition - hitOnRival);
+                Bump(_snake, _rival, _snake.HeadPosition - hitOnRival);
             if (_snake.BodyHits(_rival.HeadPosition, _rival.HeadRadiusWorld, 0, out Vector3 hitOnPlayer))
-                _rival.TakeHit(_config.BodyDamage, DamageSource.Rival, _rival.HeadPosition - hitOnPlayer);
+                Bump(_rival, _snake, _rival.HeadPosition - hitOnPlayer);
+        }
+
+        private void Bump(SnakeController attacker, SnakeController victim, Vector3 away)
+        {
+            if (attacker.IsStriking)
+            {
+                attacker.CancelStrike();
+                victim.TakeHit(_config.BodyDamage, DamageSource.Rival, -away);
+            }
+            attacker.PushAway(away, 0.12f * _grid.CellSize);
         }
 
         private void SpawnRival()
@@ -627,17 +644,18 @@ namespace Snake3D
             Emit(_dustParticles, position, _dustParticleCount);
         }
 
-        private void OnDashed()
+        private void OnStrikeStarted(float charge)
         {
             if (State != GameState.Playing) return;
-            _survival.Spend(_config.DashHungerCost);
+            _survival.Spend(_config.DashHungerCost * (1f + charge));
             _audio.Play(SoundId.Dash);
-            _cameraRig.Shake(0.08f, 0.2f);
+            _cameraRig.Shake(0.05f + 0.06f * charge, 0.2f);
         }
 
         private void ApplySettings()
         {
-            _snake.SteerSensitivity = _settings.SteerSensitivity;
+            _cameraRig.Sensitivity = _settings.MouseSensitivity;
+            _cameraRig.InvertY = _settings.InvertY;
         }
 
         private static void Emit(ParticleSystem ps, Vector3 position, int count)

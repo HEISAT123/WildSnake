@@ -4,11 +4,13 @@ using UnityEngine;
 namespace Snake3D
 {
     /// <summary>
-    /// Логика змейки: непрерывное движение, руль, прыжок, бросок, рост и столкновения.
-    /// Голова пишет траекторию в кольцевой буфер точек с равным шагом; тело (меш и точки
-    /// позвоночника для столкновений) строится по этой траектории, поэтому повторяет
-    /// и повороты, и прыжки. Удары не убивают сразу: змея отскакивает и сообщает об уроне
-    /// (событие Hurt), а жива ли она — решает GameManager. Управляется игроком или ИИ (AiSteer/AiJump).
+    /// Логика змейки: движение по желаемому направлению и темпу, прыжок, замах и бросок, рост и столкновения.
+    /// Управляет ею «намерение» (SetMoveIntent, SetCoil, TryStrike, RequestJump) — его выдают и игрок
+    /// (PlayerSnakeInput), и ИИ (SnakeAI). Без намерения змея стоит. Голова поворачивается с ограниченной
+    /// скоростью, поэтому разворот идёт дугой, а тело повторяет траекторию головы.
+    /// Голова пишет траекторию в кольцевой буфер точек с равным шагом; тело (меш и точки позвоночника
+    /// для столкновений) строится по этой траектории. Удары не убивают сразу: змея сообщает об уроне
+    /// (событие Hurt), а жива ли она — решает GameManager.
     /// </summary>
     public class SnakeController : MonoBehaviour
     {
@@ -23,7 +25,7 @@ namespace Snake3D
         [SerializeField] private Transform _head;
 
         [Header("Роль")]
-        [Tooltip("Управляется игроком; иначе — ИИ через AiSteer и AiJump")]
+        [Tooltip("Змея игрока (её ведёт PlayerSnakeInput, а в меню — автопилот)")]
         [SerializeField] private bool _isPlayer = true;
 
         [Tooltip("Множитель скорости этой змейки (соперник чуть медленнее игрока)")]
@@ -43,12 +45,6 @@ namespace Snake3D
         [SerializeField, Min(0.1f)] private float _lengthChangeSpeed = 4f;
 
         [Header("Столкновения")]
-        [Tooltip("Участок тела за головой, который не проверяется на столкновение с собой (клеток вдоль тела)")]
-        [SerializeField, Min(0.5f)] private float _selfCollisionSkipDistance = 2.2f;
-
-        [Tooltip("Расстояние голова-позвоночник, при котором засчитывается удар о тело (доля клетки)")]
-        [SerializeField, Min(0.1f)] private float _selfCollisionRadius = 0.55f;
-
         [Tooltip("Радиус головы для препятствий и опасностей (доля клетки)")]
         [SerializeField, Min(0.1f)] private float _headRadius = 0.38f;
 
@@ -69,7 +65,13 @@ namespace Snake3D
         [SerializeField] private float _bodyHeight = 0.36f;
 
         [Tooltip("Крен головы в повороте, град")]
-        [SerializeField, Range(0f, 45f)] private float _bankAngle = 18f;
+        [SerializeField, Range(0f, 45f)] private float _bankAngle = 14f;
+
+        [Tooltip("На сколько свёрнутая для броска змея приподнимает голову (доля клетки)")]
+        [SerializeField, Min(0f)] private float _coilLift = 0.22f;
+
+        [Tooltip("Насколько задирает голову при замахе, град")]
+        [SerializeField, Range(0f, 40f)] private float _coilPitch = 14f;
 
         [Tooltip("Наклон головы в прыжке на единицу вертикальной скорости, град")]
         [SerializeField, Min(0f)] private float _pitchPerSpeed = 2.5f;
@@ -85,7 +87,12 @@ namespace Snake3D
         public event Action<Vector3> Died;
         public event Action Jumped;
         public event Action<Vector3> Landed;
-        public event Action Dashed;
+
+        /// <summary>Бросок начался; аргумент — сила замаха 0..1.</summary>
+        public event Action<float> StrikeStarted;
+
+        /// <summary>Бросок закончился (долетел или упёрся в препятствие).</summary>
+        public event Action StrikeEnded;
         public event Action Respawned;
 
         public bool IsRunning
@@ -93,7 +100,7 @@ namespace Snake3D
             get => _isRunning;
             set
             {
-                // Запоминаем кадр старта: Space, которым начали игру, не должен сразу стать прыжком.
+                // Запоминаем кадр старта: Space или клик, которым начали игру, не должен сразу стать прыжком или броском.
                 if (value && !_isRunning) _runStartFrame = Time.frameCount;
                 _isRunning = value;
             }
@@ -101,8 +108,14 @@ namespace Snake3D
 
         public bool IsAlive { get; private set; }
         public bool IsPlayer => _isPlayer;
-        public bool IsDashing => _dashTimer > 0f;
+        public bool IsStriking => _strikeTimer > 0f;
         public bool IsInvulnerable => _invulnerableTimer > 0f;
+
+        /// <summary>Змея свернулась для броска (замах).</summary>
+        public bool IsCoiled => _coiled;
+
+        /// <summary>Сила замаха 0..1 (растёт, пока змея свёрнута).</summary>
+        public float Coil01 => _coiled ? Mathf.Clamp01(_coilTime / _config.CoilChargeTime) : 0f;
 
         /// <summary>Змея лежит в высокой траве: добыча и орёл её почти не видят. В прыжке укрытия нет.</summary>
         public bool IsHidden => _hidden;
@@ -110,15 +123,27 @@ namespace Snake3D
         /// <summary>Тело уже минимальной длины — худеть от голода некуда.</summary>
         public bool IsAtMinLength => _targetLengthCells <= _config.StartLength + 0.01f;
 
-        /// <summary>Готовность рывка: 1 — можно использовать.</summary>
-        public float DashCharge01 => _dashCooldownTotal > 0f ? 1f - Mathf.Clamp01(_dashCooldownTimer / _dashCooldownTotal) : 1f;
+        /// <summary>Готовность броска: 1 — можно бросаться.</summary>
+        public float StrikeReady01 => _strikeCooldownTimer > 0f ? 1f - Mathf.Clamp01(_strikeCooldownTimer / Mathf.Max(0.01f, _config.StrikeCooldown)) : 1f;
 
-        /// <summary>Положение руля от -1 (влево) до 1 (вправо).</summary>
-        public float Steer => _steer;
+        /// <summary>Текущий темп (по намерению).</summary>
+        public SnakePace Pace => _pace;
+
+        /// <summary>Текущая скорость, клеток в секунду.</summary>
+        public float Speed => _speed;
+        public float WalkSpeed => _config.WalkSpeed;
+        public bool IsMoving => _speed > 0.05f;
+
+        /// <summary>Пройденный путь в мировых единицах: по нему тело «бежит» волной, а при остановке замирает.</summary>
+        public float Odometer => _odometer;
+
+        /// <summary>Скорость поворота относительно предельной, -1..1 (крен головы и тела).</summary>
+        public float Turn01 => _turn01;
 
         public Transform Head => _head;
         public Vector3 HeadPosition => _headPos;
         public Vector3 Forward => Quaternion.Euler(0f, _yaw, 0f) * Vector3.forward;
+        public float Yaw => _yaw;
         public float HeightAboveGround => _height;
         public float CellSize => _cellSize;
         public float BodyLengthCells => _lengthCells;
@@ -131,26 +156,11 @@ namespace Snake3D
         /// <summary>Множитель скорости от улучшений (ставит GameManager).</summary>
         public float ExternalSpeedMultiplier { get; set; } = 1f;
 
-        /// <summary>Множители длительности и перезарядки броска от улучшений.</summary>
-        public float DashDurationScale { get; set; } = 1f;
-        public float DashCooldownScale { get; set; } = 1f;
-
-        /// <summary>Чувствительность руля из настроек.</summary>
-        public float SteerSensitivity { get; set; } = 1f;
-
-        /// <summary>Руль от ИИ (-1..1), используется если змейка не игрока.</summary>
-        public float AiSteer { get; set; }
-
-        /// <summary>Запрос прыжка от ИИ, сбрасывается после обработки.</summary>
-        public bool AiJump { get; set; }
-
-        /// <summary>Запрос рывка от ИИ, сбрасывается после обработки.</summary>
-        public bool AiDash { get; set; }
+        /// <summary>Множитель дальности броска от улучшений.</summary>
+        public float StrikeDistanceScale { get; set; } = 1f;
 
         /// <summary>Автопилот: змея игрока управляется ИИ (живой фон главного меню).</summary>
         public bool AutoPilot { get; set; }
-
-        private bool UsesPlayerInput => _isPlayer && !AutoPilot;
 
         /// <summary>Сколько точек позвоночника сейчас активно ([0] — голова).</summary>
         public int SpineCount => _spineCount;
@@ -171,18 +181,30 @@ namespace Snake3D
 
         private Vector3 _headPos;
         private float _yaw;
-        private float _steer;
         private float _speed;
+        private float _turn01;
+        private float _odometer;
         private float _lengthCells;
         private float _targetLengthCells;
+
+        // Намерение: куда и как ползти, свёрнута ли, где прицел.
+        private Vector3 _moveDir;
+        private float _moveAmount;
+        private SnakePace _pace = SnakePace.Walk;
+        private bool _jumpRequested;
+        private bool _coiled;
+        private float _coilTime;
+        private float _coilBaseYaw;
+        private float _coilBlend;
+        private Vector3 _aimDir = Vector3.forward;
 
         private float _height;
         private float _verticalSpeed;
         private bool _grounded;
 
-        private float _dashTimer;
-        private float _dashCooldownTimer;
-        private float _dashCooldownTotal;
+        private float _strikeTimer;
+        private float _strikeSpeed;
+        private float _strikeCooldownTimer;
         private float _invulnerableTimer;
         private bool _hidden;
 
@@ -214,20 +236,23 @@ namespace Snake3D
             _lengthCells = _config.StartLength;
             _targetLengthCells = _lengthCells;
             _yaw = yaw;
-            _steer = 0f;
-            _speed = _config.MoveSpeed;
+            _speed = 0f;
+            _turn01 = 0f;
             _height = 0f;
             _verticalSpeed = 0f;
             _grounded = true;
-            _dashTimer = 0f;
-            _dashCooldownTimer = 0f;
-            _dashCooldownTotal = _config.DashCooldown;
+            _strikeTimer = 0f;
+            _strikeCooldownTimer = 0f;
             _invulnerableTimer = 0f;
             _hidden = false;
             _squashTimer = _squashDuration;
-            AiSteer = 0f;
-            AiJump = false;
-            AiDash = false;
+            _moveDir = Vector3.zero;
+            _moveAmount = 0f;
+            _pace = SnakePace.Walk;
+            _jumpRequested = false;
+            _coiled = false;
+            _coilTime = 0f;
+            _coilBlend = 0f;
             IsAlive = true;
             IsRunning = false;
 
@@ -246,6 +271,69 @@ namespace Snake3D
             Respawned?.Invoke();
         }
 
+        // ---------------- Намерение (игрок и ИИ) ----------------
+
+        /// <summary>
+        /// Куда ползти: направление в мире (длина 0..1 — сила, как наклон стика) и темп.
+        /// Нулевое направление — змея останавливается.
+        /// </summary>
+        public void SetMoveIntent(Vector3 direction, SnakePace pace)
+        {
+            direction.y = 0f;
+            float amount = Mathf.Min(1f, direction.magnitude);
+            _moveAmount = amount;
+            _moveDir = amount > 1e-4f ? direction / direction.magnitude : Vector3.zero;
+            _pace = pace;
+        }
+
+        /// <summary>Свернуться для броска (замах) и куда целиться. Свёрнутая змея стоит и копит силу броска.</summary>
+        public void SetCoil(bool coil, Vector3 aim)
+        {
+            aim.y = 0f;
+            if (aim.sqrMagnitude > 1e-6f) _aimDir = aim.normalized;
+            if (coil == _coiled) return;
+            if (coil && (!_grounded || IsStriking)) return;
+            _coiled = coil;
+            _coilTime = 0f;
+            _coilBaseYaw = _yaw;
+        }
+
+        /// <summary>
+        /// Бросок-укус в сторону прицела (в пределах угла от курса). Если змея свёрнута — летит дальше
+        /// на силу замаха. Возвращает false, если бросок сейчас невозможен.
+        /// </summary>
+        public bool TryStrike(Vector3 aim)
+        {
+            if (!IsAlive || !IsRunning || IsStriking || _strikeCooldownTimer > 0f || !_grounded) return false;
+            if (Time.frameCount - _runStartFrame < 2) return false;
+
+            float charge = Coil01;
+            float limit = _coiled ? _config.CoilAimLimit : _config.BiteAimLimit;
+            float baseYaw = _coiled ? _coilBaseYaw : _yaw;
+            aim.y = 0f;
+            if (aim.sqrMagnitude > 1e-6f)
+            {
+                float aimYaw = Mathf.Atan2(aim.x, aim.z) * Mathf.Rad2Deg;
+                _yaw = baseYaw + Mathf.Clamp(Mathf.DeltaAngle(baseYaw, aimYaw), -limit, limit);
+            }
+
+            _coiled = false;
+            _coilTime = 0f;
+            _strikeSpeed = _config.StrikeSpeed(charge) * StrikeDistanceScale;
+            _strikeTimer = _config.StrikeDuration;
+            _strikeCooldownTimer = _config.StrikeCooldown;
+            _squashTimer = 0f;
+            StrikeStarted?.Invoke(charge);
+            return true;
+        }
+
+        public void RequestJump()
+        {
+            if (Time.frameCount != _runStartFrame) _jumpRequested = true;
+        }
+
+        // ---------------- Рост и урон ----------------
+
         public void Grow(float cells)
         {
             _targetLengthCells = Mathf.Min(_config.MaxLength, _targetLengthCells + cells);
@@ -258,18 +346,36 @@ namespace Snake3D
         }
 
         /// <summary>
-        /// Удар извне (орёл, соперница) или о тело. awayDirection — куда отскочить (нулевой — не отскакивать).
-        /// После удара змея ненадолго неуязвима. Возвращает true, если удар засчитан.
+        /// Удар извне (орёл, соперница, препятствие на броске). awayDirection — куда оттолкнуть голову
+        /// (нулевой — не толкать). После удара змея ненадолго неуязвима. Возвращает true, если удар засчитан.
         /// </summary>
         public bool TakeHit(float damage, DamageSource source, Vector3 awayDirection)
         {
             if (!IsAlive || _invulnerableTimer > 0f) return false;
             _invulnerableTimer = _invulnerabilityTime;
-            awayDirection.y = 0f;
-            if (awayDirection.sqrMagnitude > 1e-6f) Deflect(awayDirection.normalized);
+            PushAway(awayDirection, 0.35f * _cellSize);
+            CancelStrike();
             _squashTimer = 0f;
             Hurt?.Invoke(_headPos, damage, source);
             return true;
+        }
+
+        /// <summary>Оттолкнуть голову по горизонтали (столкновение с чужим телом) и сбить скорость.</summary>
+        public void PushAway(Vector3 direction, float distance)
+        {
+            direction.y = 0f;
+            if (direction.sqrMagnitude < 1e-6f) return;
+            _headPos += direction.normalized * distance;
+            _speed *= 0.4f;
+        }
+
+        /// <summary>Оборвать бросок (упёрлась в препятствие, укусила тело).</summary>
+        public void CancelStrike()
+        {
+            if (_strikeTimer <= 0f) return;
+            _strikeTimer = 0f;
+            _speed = Mathf.Min(_speed, _config.WalkSpeed * 0.5f);
+            StrikeEnded?.Invoke();
         }
 
         /// <summary>Гибель (здоровье кончилось) — решает GameManager.</summary>
@@ -352,68 +458,108 @@ namespace Snake3D
             forward = a - b;
         }
 
+        // ---------------- Кадр ----------------
+
         private void Update()
         {
             if (!IsRunning || !IsAlive) return;
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
 
-            UpdateDash(dt);
-            UpdateSteer(dt);
-            UpdateJump(dt);
+            if (_strikeCooldownTimer > 0f) _strikeCooldownTimer -= dt;
             if (_invulnerableTimer > 0f) _invulnerableTimer -= dt;
+            UpdateJump(dt);
 
-            float speed = _speed * _speedScale * ExternalSpeedMultiplier * (IsDashing ? _config.DashMultiplier : 1f);
-            _headPos += Forward * (speed * _cellSize * dt);
+            float previousYaw = _yaw;
+            if (IsStriking) UpdateStrike(dt);
+            else if (_coiled) UpdateCoil(dt);
+            else UpdateCrawl(dt);
+            _turn01 = Mathf.Clamp(Mathf.DeltaAngle(previousYaw, _yaw) / (dt * _config.TurnRate), -1f, 1f);
+            _coilBlend = Mathf.MoveTowards(_coilBlend, _coiled ? 1f : 0f, dt * 5f);
+
+            float step = _speed * _cellSize * dt;
+            _headPos += Forward * step;
+            _odometer += step;
             _headPos.y = _groundY + _height;
             _lengthCells = Mathf.MoveTowards(_lengthCells, _targetLengthCells, _lengthChangeSpeed * dt);
 
-            bool hitWall = ClampToArena(out Vector3 wallNormal);
-            bool hitObstacle = !hitWall && HitsObstacle(out wallNormal);
-            RecordPath();
-            ComputeSpine();
-
-            // Стены и камни непроницаемы: от них отскакиваем всегда, а урон — только вне неуязвимости.
-            if (hitWall || hitObstacle)
+            bool blocked = ClampToArena(out Vector3 normal) | HitsObstacle(out Vector3 obstacleNormal);
+            if (blocked)
             {
-                Deflect(wallNormal);
-                TakeHit(_config.WallDamage, DamageSource.Collision, Vector3.zero);
-            }
-            else if (HitsSelf(out Vector3 selfNormal))
-            {
-                TakeHit(_config.BodyDamage, DamageSource.Collision, selfNormal);
+                // Камни и стены непроницаемы: на шагу змея скользит вдоль них, а с броска — бьётся головой.
+                if (IsStriking)
+                {
+                    CancelStrike();
+                    TakeHit(_config.WallDamage, DamageSource.Collision, Vector3.zero);
+                }
+                else
+                {
+                    Vector3 n = obstacleNormal.sqrMagnitude > 0f ? obstacleNormal : normal;
+                    float into = -Vector3.Dot(Forward, n);
+                    if (into > 0.7f) _speed *= 1f - Mathf.Clamp01(dt * 8f);
+                }
             }
             if (!IsAlive) return;
 
+            RecordPath();
+            ComputeSpine();
             _hidden = _grounded && _grid.IsCoverAt(_headPos);
             ApplyHeadVisual(dt);
         }
 
-        private void UpdateSteer(float dt)
+        /// <summary>
+        /// Обычное ползание: скорость тянется к скорости темпа, голова поворачивается к желаемому
+        /// направлению не быстрее TurnRate, а на малой скорости — ещё медленнее: разворот идёт дугой.
+        /// </summary>
+        private void UpdateCrawl(float dt)
         {
-            float target;
-            if (UsesPlayerInput)
+            float target = 0f;
+            if (_moveAmount > 1e-3f)
             {
-                target = 0f;
-                if (GameInput.LeftHeld) target -= 1f;
-                if (GameInput.RightHeld) target += 1f;
-            }
-            else
-            {
-                target = Mathf.Clamp(AiSteer, -1f, 1f);
+                float desiredYaw = Mathf.Atan2(_moveDir.x, _moveDir.z) * Mathf.Rad2Deg;
+                float delta = Mathf.DeltaAngle(_yaw, desiredYaw);
+                float walk = _config.WalkSpeed;
+                float turnRate = _config.TurnRate * Mathf.Clamp01(0.2f + _speed / (walk * 0.6f));
+                _yaw = Mathf.MoveTowardsAngle(_yaw, desiredYaw, turnRate * dt);
+
+                target = _config.PaceSpeed(_pace) * _moveAmount * _speedScale * ExternalSpeedMultiplier;
+                // Крутой разворот — сбавляем ход, иначе дуга вышла бы слишком широкой.
+                float turnAbs = Mathf.Abs(delta);
+                if (turnAbs > 90f) target *= Mathf.Lerp(1f, 0.55f, Mathf.InverseLerp(90f, 170f, turnAbs));
             }
 
-            // Руль не прыгает сразу в упор, а доворачивается — так поворот получается дугой.
-            _steer = Mathf.MoveTowards(_steer, target, _config.SteerResponse * dt);
-            _yaw += _steer * _config.TurnSpeed * SteerSensitivity * dt;
+            float rate = target > _speed ? _config.Acceleration : _config.Deceleration;
+            _speed = Mathf.MoveTowards(_speed, target, rate * dt);
+        }
+
+        /// <summary>Замах: змея быстро гасит ход, приподнимает голову и поворачивает её к прицелу в пределах угла.</summary>
+        private void UpdateCoil(float dt)
+        {
+            _coilTime += dt;
+            _speed = Mathf.MoveTowards(_speed, 0f, _config.Deceleration * 2f * dt);
+            float aimYaw = Mathf.Atan2(_aimDir.x, _aimDir.z) * Mathf.Rad2Deg;
+            float limit = _config.CoilAimLimit;
+            float wanted = _coilBaseYaw + Mathf.Clamp(Mathf.DeltaAngle(_coilBaseYaw, aimYaw), -limit, limit);
+            _yaw = Mathf.MoveTowardsAngle(_yaw, wanted, 420f * dt);
+        }
+
+        private void UpdateStrike(float dt)
+        {
+            _speed = _strikeSpeed;
+            _strikeTimer -= dt;
+            if (_strikeTimer > 0f) return;
+            _strikeTimer = 0f;
+            // После броска змея не стоит как вкопанная, а дотягивается по инерции.
+            _speed = _config.WalkSpeed * 0.5f;
+            StrikeEnded?.Invoke();
         }
 
         private void UpdateJump(float dt)
         {
-            bool wantJump = UsesPlayerInput ? GameInput.Jump && Time.frameCount != _runStartFrame : AiJump;
-            AiJump = false;
+            bool wantJump = _jumpRequested;
+            _jumpRequested = false;
 
-            if (_grounded && wantJump)
+            if (_grounded && wantJump && !_coiled)
             {
                 _verticalSpeed = Mathf.Sqrt(2f * _config.Gravity * _config.JumpHeight) * _cellSize;
                 _grounded = false;
@@ -434,39 +580,7 @@ namespace Snake3D
             }
         }
 
-        private void UpdateDash(float dt)
-        {
-            if (_dashTimer > 0f) _dashTimer -= dt;
-            if (_dashCooldownTimer > 0f) _dashCooldownTimer -= dt;
-
-            bool wantDash = UsesPlayerInput ? GameInput.Dash : AiDash;
-            AiDash = false;
-            if (wantDash && _dashCooldownTimer <= 0f)
-            {
-                _dashTimer = _config.DashDuration * DashDurationScale;
-                _dashCooldownTotal = _config.DashCooldown * DashCooldownScale;
-                _dashCooldownTimer = _dashCooldownTotal;
-                Dashed?.Invoke();
-            }
-        }
-
-        /// <summary>
-        /// Отскок от поверхности с нормалью normal: змея скользит вдоль неё и немного отходит,
-        /// а не разворачивается на 180° (иначе врезалась бы в собственную шею).
-        /// </summary>
-        private void Deflect(Vector3 normal)
-        {
-            Vector3 f = Forward;
-            float into = Vector3.Dot(f, normal);
-            if (into >= 0f) return;
-            Vector3 tangent = f - normal * into;
-            if (tangent.sqrMagnitude < 0.04f) tangent = Vector3.Cross(Vector3.up, normal) * (_steer >= 0f ? 1f : -1f);
-            Vector3 dir = tangent.normalized * 0.8f + normal * 0.6f;
-            _yaw = Mathf.Atan2(dir.x, dir.z) * Mathf.Rad2Deg;
-            _steer *= 0.3f;
-        }
-
-        /// <summary>Не выпускаем голову за арену; возвращает true и нормаль стены, если был удар.</summary>
+        /// <summary>Не выпускаем голову за арену; возвращает true и нормаль стены, если упёрлась.</summary>
         private bool ClampToArena(out Vector3 normal)
         {
             normal = Vector3.zero;
@@ -570,40 +684,21 @@ namespace Snake3D
             return false;
         }
 
-        /// <summary>Точка тела мешает, только если она близко по горизонтали и примерно на той же высоте — так прыжок спасает.</summary>
-        private bool HitsSelf(out Vector3 normal)
-        {
-            normal = Vector3.zero;
-            float radius = _selfCollisionRadius * _cellSize;
-            float radiusSqr = radius * radius;
-            float clearance = _jumpClearance * _cellSize;
-            int skip = Mathf.Max(1, Mathf.CeilToInt(_selfCollisionSkipDistance / _spineSpacing));
-            for (int i = skip; i < _spineCount; i++)
-            {
-                Vector3 d = _spine[i] - _headPos;
-                if (Mathf.Abs(d.y) >= clearance) continue;
-                d.y = 0f;
-                if (d.sqrMagnitude < radiusSqr)
-                {
-                    normal = -d;
-                    return true;
-                }
-            }
-            return false;
-        }
-
         private void Die()
         {
             IsAlive = false;
+            _strikeTimer = 0f;
+            _coiled = false;
             ApplyHeadVisual(0f);
             Died?.Invoke(_headPos);
         }
 
         private void ApplyHeadVisual(float dt)
         {
-            _head.position = _headPos;
-            float pitch = Mathf.Clamp(-_verticalSpeed / _cellSize * _pitchPerSpeed, -35f, 35f);
-            float roll = -_steer * _bankAngle;
+            float lift = _coilBlend * _coilLift * _cellSize;
+            _head.position = _headPos + Vector3.up * lift;
+            float pitch = Mathf.Clamp(-_verticalSpeed / _cellSize * _pitchPerSpeed, -35f, 35f) - _coilBlend * _coilPitch;
+            float roll = -_turn01 * _bankAngle;
             _head.rotation = Quaternion.Euler(pitch, _yaw, roll);
 
             if (_squashTimer < _squashDuration)

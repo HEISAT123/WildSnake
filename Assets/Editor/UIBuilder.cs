@@ -129,7 +129,7 @@ internal static class UIBuilder
 
         var settingsComp = settings.AddComponent<SettingsPanel>();
         SnakeSceneBuilder.Wire(settingsComp, ("_settings", r.Settings), ("_audio", r.Audio), ("_tutorial", tutorial),
-            ("_masterSlider", sp.Master), ("_musicSlider", sp.Music), ("_sfxSlider", sp.Sfx), ("_steerSlider", sp.Steer),
+            ("_masterSlider", sp.Master), ("_musicSlider", sp.Music), ("_sfxSlider", sp.Sfx), ("_mouseSlider", sp.Mouse), ("_invertYToggle", sp.InvertY),
             ("_fullscreenToggle", sp.Fullscreen), ("_minimapToggle", sp.Minimap), ("_rivalToggle", sp.Rival),
             ("_qualityButton", sp.Quality), ("_qualityLabel", sp.QualityLabel), ("_tutorialButton", sp.Tutorial), ("_backButton", sp.Back));
 
@@ -337,8 +337,8 @@ internal static class UIBuilder
 
     private sealed class SettingsParts
     {
-        public Slider Master, Music, Sfx, Steer;
-        public Toggle Fullscreen, Minimap, Rival;
+        public Slider Master, Music, Sfx, Mouse;
+        public Toggle Fullscreen, Minimap, Rival, InvertY;
         public Button Quality, Tutorial, Back;
         public Text QualityLabel;
     }
@@ -356,22 +356,23 @@ internal static class UIBuilder
         p.Sfx = SliderAt(screen, SettingRow(screen, "Звуки", -440f), right, 0f, 1f);
 
         Section(screen, "УПРАВЛЕНИЕ", -522f);
-        p.Steer = SliderAt(screen, SettingRow(screen, "Чувствительность руля", -546f), right, 0.5f, 1.5f);
+        p.Mouse = SliderAt(screen, SettingRow(screen, "Чувствительность мыши", -546f), right, 0.2f, 3f);
+        p.InvertY = SwitchAt(screen, SettingRow(screen, "Инверсия оси Y", -604f), right);
 
-        Section(screen, "ЭКРАН И ИГРА", -628f);
-        p.Fullscreen = SwitchAt(screen, SettingRow(screen, "Полный экран   <size=18><color=#757A7A>F11</color></size>", -652f), right);
-        p.Minimap = SwitchAt(screen, SettingRow(screen, "Мини-карта", -710f), right);
-        p.Rival = SwitchAt(screen, SettingRow(screen, "Змея-соперница   <size=18><color=#757A7A>со следующей жизни</color></size>", -768f), right);
+        Section(screen, "ЭКРАН И ИГРА", -686f);
+        p.Fullscreen = SwitchAt(screen, SettingRow(screen, "Полный экран   <size=18><color=#757A7A>F11</color></size>", -710f), right);
+        p.Minimap = SwitchAt(screen, SettingRow(screen, "Мини-карта", -768f), right);
+        p.Rival = SwitchAt(screen, SettingRow(screen, "Змея-соперница   <size=18><color=#757A7A>со следующей жизни</color></size>", -826f), right);
 
-        float qualityY = SettingRow(screen, "Качество графики", -826f);
+        float qualityY = SettingRow(screen, "Качество графики", -884f);
         p.Quality = LinkButton(screen, "Quality", "ULTRA   ›", 24, out p.QualityLabel);
         Anchor((RectTransform)p.Quality.transform, new Vector2(0f, 1f), new Vector2(1f, 0.5f), new Vector2(right, qualityY), new Vector2(300f, 44f));
         p.QualityLabel.alignment = TextAnchor.MiddleRight;
 
         p.Back = PrimaryButton(screen, "Done", "ГОТОВО");
-        TopLeft(p.Back, LEFT, -918f, 220f, 60f);
+        TopLeft(p.Back, LEFT, -970f, 220f, 60f);
         p.Tutorial = LinkButton(screen, "Tutorial", "ПОКАЗАТЬ ОБУЧЕНИЕ", 22, out Text tutorialLabel);
-        TopLeft(p.Tutorial, LEFT + 252f, -918f, 360f, 60f);
+        TopLeft(p.Tutorial, LEFT + 252f, -970f, 360f, 60f);
         tutorialLabel.alignment = TextAnchor.MiddleLeft;
         return screen.gameObject;
     }
@@ -614,7 +615,7 @@ internal static class UIBuilder
         Anchor(p.ThreatHint.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -58f), new Vector2(1000f, 30f));
 
         // Бросок и нюх — слева снизу: подпись, клавиша и полоса готовности.
-        p.DashFill = Ability(hud, "Dash", "БРОСОК", "SHIFT", 44f);
+        p.DashFill = Ability(hud, "Dash", "БРОСОК", "ЛКМ", 44f);
         p.SmellFill = Ability(hud, "Smell", "НЮХ", "E", 324f);
 
         // Метка укрытия — лаймовая плашка над способностями.
@@ -627,7 +628,7 @@ internal static class UIBuilder
         p.Hidden = hidden.gameObject;
 
         HintRow(hud, new Vector2(0.5f, 0f), new Vector2(0f, 44f), new Vector2(0.5f, 0.5f),
-            ("A D", "руль"), ("SPACE", "прыжок"), ("SHIFT", "бросок"), ("E", "нюх"), ("ESC", "пауза"));
+            ("WASD", "ползти"), ("CTRL", "красться"), ("ЛКМ", "укус"), ("ПКМ", "замах"), ("E", "нюх"), ("ESC", "пауза"));
         // Подсказки поверх светлой травы: подписи светлее, чем в меню.
         foreach (Text t in hud.Find("Hints").GetComponentsInChildren<Text>(true)) t.color = HudCaption;
 

@@ -312,7 +312,7 @@ namespace Snake3D
 
         private void UpdateAbilities()
         {
-            _dashFill.fillAmount = _snake.DashCharge01;
+            _dashFill.fillAmount = _snake.StrikeReady01;
             _smellFill.fillAmount = _scent.Charge01;
             bool hidden = _snake.IsHidden;
             if (_hiddenBadge.activeSelf != hidden) _hiddenBadge.SetActive(hidden);
@@ -418,7 +418,7 @@ namespace Snake3D
         {
             if (_game.State != GameState.Playing || _startleBannerTimer > 0f) return;
             _startleBannerTimer = 8f;
-            ShowBanner("НУЖЕН БРОСОК  ·  SHIFT");
+            ShowBanner("НУЖЕН БРОСОК  ·  ЛКМ");
         }
 
         private void OnEagleMissed()

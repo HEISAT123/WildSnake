@@ -40,8 +40,8 @@ namespace Snake3D.Tests
             foreach (UpgradeType t in System.Enum.GetValues(typeof(UpgradeType))) set.Apply(t);
             Assert.Less(set.DamageTakenMultiplier, 1f);
             Assert.Less(set.HungerMultiplier, 1f);
-            Assert.Greater(set.DashDurationMultiplier, 1f);
-            Assert.Less(set.DashCooldownMultiplier, 1f);
+            Assert.Greater(set.StrikeDistanceMultiplier, 1f);
+            Assert.Less(set.StrikeCostMultiplier, 1f);
             Assert.Greater(set.SmellRadiusMultiplier, 1f);
             Assert.Less(set.SmellCooldownMultiplier, 1f);
             Assert.Less(set.AwarenessMultiplier, 1f);

@@ -15,7 +15,8 @@ namespace Snake3D
         [SerializeField] private Slider _masterSlider;
         [SerializeField] private Slider _musicSlider;
         [SerializeField] private Slider _sfxSlider;
-        [SerializeField] private Slider _steerSlider;
+        [SerializeField] private Slider _mouseSlider;
+        [SerializeField] private Toggle _invertYToggle;
         [SerializeField] private Toggle _fullscreenToggle;
         [SerializeField] private Toggle _minimapToggle;
         [SerializeField] private Toggle _rivalToggle;
@@ -30,7 +31,8 @@ namespace Snake3D
             _masterSlider.onValueChanged.AddListener(OnMasterChanged);
             _musicSlider.onValueChanged.AddListener(OnMusicChanged);
             _sfxSlider.onValueChanged.AddListener(OnSfxChanged);
-            _steerSlider.onValueChanged.AddListener(OnSteerChanged);
+            _mouseSlider.onValueChanged.AddListener(OnMouseChanged);
+            _invertYToggle.onValueChanged.AddListener(OnInvertYChanged);
             _fullscreenToggle.onValueChanged.AddListener(OnFullscreenChanged);
             _minimapToggle.onValueChanged.AddListener(OnMinimapChanged);
             _rivalToggle.onValueChanged.AddListener(OnRivalChanged);
@@ -44,7 +46,8 @@ namespace Snake3D
             _masterSlider.onValueChanged.RemoveListener(OnMasterChanged);
             _musicSlider.onValueChanged.RemoveListener(OnMusicChanged);
             _sfxSlider.onValueChanged.RemoveListener(OnSfxChanged);
-            _steerSlider.onValueChanged.RemoveListener(OnSteerChanged);
+            _mouseSlider.onValueChanged.RemoveListener(OnMouseChanged);
+            _invertYToggle.onValueChanged.RemoveListener(OnInvertYChanged);
             _fullscreenToggle.onValueChanged.RemoveListener(OnFullscreenChanged);
             _minimapToggle.onValueChanged.RemoveListener(OnMinimapChanged);
             _rivalToggle.onValueChanged.RemoveListener(OnRivalChanged);
@@ -59,7 +62,8 @@ namespace Snake3D
             _masterSlider.SetValueWithoutNotify(_settings.MasterVolume);
             _musicSlider.SetValueWithoutNotify(_settings.MusicVolume);
             _sfxSlider.SetValueWithoutNotify(_settings.SfxVolume);
-            _steerSlider.SetValueWithoutNotify(_settings.SteerSensitivity);
+            _mouseSlider.SetValueWithoutNotify(_settings.MouseSensitivity);
+            _invertYToggle.SetIsOnWithoutNotify(_settings.InvertY);
             _fullscreenToggle.SetIsOnWithoutNotify(_settings.Fullscreen);
             _minimapToggle.SetIsOnWithoutNotify(_settings.ShowMinimap);
             _rivalToggle.SetIsOnWithoutNotify(_settings.RivalEnabled);
@@ -71,7 +75,8 @@ namespace Snake3D
         private void OnMasterChanged(float v) => _settings.SetMasterVolume(v);
         private void OnMusicChanged(float v) => _settings.SetMusicVolume(v);
         private void OnSfxChanged(float v) { _settings.SetSfxVolume(v); _audio.Play(SoundId.Click); }
-        private void OnSteerChanged(float v) => _settings.SetSteerSensitivity(v);
+        private void OnMouseChanged(float v) => _settings.SetMouseSensitivity(v);
+        private void OnInvertYChanged(bool v) => _settings.SetInvertY(v);
         private void OnFullscreenChanged(bool v) => _settings.SetFullscreen(v);
         private void OnMinimapChanged(bool v) => _settings.SetShowMinimap(v);
         private void OnRivalChanged(bool v) => _settings.SetRivalEnabled(v);

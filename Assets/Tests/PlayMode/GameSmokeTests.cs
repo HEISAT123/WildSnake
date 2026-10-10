@@ -108,6 +108,50 @@ namespace Snake3D.Tests
         }
 
         [UnityTest]
+        public IEnumerator Player_StandsStill_WithoutInput()
+        {
+            _game.StartGame();
+            SnakeController snake = FindPlayer();
+            yield return new WaitForSeconds(0.3f);
+            Vector3 start = snake.HeadPosition;
+
+            yield return new WaitForSeconds(1.5f);
+
+            Vector3 d = snake.HeadPosition - start;
+            d.y = 0f;
+            Assert.Less(d.magnitude, 0.05f, "Без ввода змея должна стоять на месте");
+            Assert.IsFalse(snake.IsMoving);
+        }
+
+        [UnityTest]
+        public IEnumerator Player_MovesByIntent_AndStrikes()
+        {
+            _game.StartGame();
+            SnakeController snake = FindPlayer();
+            // Ввод игрока в тесте не нажать — выключаем его и задаём намерение напрямую.
+            snake.GetComponent<PlayerSnakeInput>().enabled = false;
+            yield return null;
+            Vector3 start = snake.HeadPosition;
+            snake.SetMoveIntent(snake.Forward, SnakePace.Walk);
+            yield return new WaitForSeconds(0.8f);
+            Assert.Greater((snake.HeadPosition - start).magnitude, 0.5f, "Змея не поползла по намерению");
+
+            yield return new WaitForSeconds(0.1f);
+            Assert.IsTrue(snake.TryStrike(snake.Forward), "Бросок не начался");
+            Assert.IsTrue(snake.IsStriking);
+            yield return new WaitForSeconds(0.6f);
+            Assert.IsFalse(snake.IsStriking, "Бросок не закончился");
+        }
+
+        private static SnakeController FindPlayer()
+        {
+            foreach (SnakeController s in Object.FindObjectsByType<SnakeController>(FindObjectsSortMode.None))
+                if (s.IsPlayer) return s;
+            Assert.Fail("Нет змеи игрока");
+            return null;
+        }
+
+        [UnityTest]
         public IEnumerator Resume_InMenu_DoesNothing()
         {
             _game.Resume();

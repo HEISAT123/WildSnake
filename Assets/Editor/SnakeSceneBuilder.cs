@@ -218,7 +218,12 @@ public static class SnakeSceneBuilder
         camGo.AddComponent<AudioListener>();
         EnvironmentBuilder.SetupSky(light, cam);
         var rig = camGo.AddComponent<CameraRig>();
-        Wire(rig, ("_snake", player.Controller));
+        Wire(rig, ("_snake", player.Controller), ("_grid", grid));
+
+        // Ввод игрока — на самой змее; в меню выключен, змею ведёт автопилот через то же «намерение».
+        var playerInput = player.Controller.gameObject.AddComponent<PlayerSnakeInput>();
+        Wire(playerInput, ("_snake", player.Controller), ("_camera", rig));
+        playerInput.enabled = false;
 
         var dayNight = new GameObject("DayNight").AddComponent<DayNightCycle>();
         Wire(dayNight, ("_config", config), ("_sun", light), ("_moon", moon), ("_stars", stars), ("_fireflies", pollen), ("_clouds", clouds));
@@ -240,7 +245,7 @@ public static class SnakeSceneBuilder
         var game = new GameObject("GameManager").AddComponent<GameManager>();
         Wire(game,
             ("_config", config), ("_grid", grid),
-            ("_snake", player.Controller), ("_headAnimator", player.Animator), ("_rival", rival.Controller), ("_playerAutopilot", playerAi),
+            ("_snake", player.Controller), ("_headAnimator", player.Animator), ("_rival", rival.Controller), ("_playerAutopilot", playerAi), ("_playerInput", playerInput),
             ("_wildlife", wildlife), ("_eagle", eagle), ("_dayNight", dayNight), ("_scent", scent), ("_skinShed", shed),
             ("_leaderboard", leaderboard), ("_settings", settings), ("_audio", audio), ("_cameraRig", rig),
             ("_eatParticles", eatFx), ("_deathParticles", deathFx), ("_dustParticles", dustFx), ("_moltParticles", moltFx));

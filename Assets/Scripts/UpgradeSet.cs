@@ -20,8 +20,8 @@ namespace Snake3D
 
         public float DamageTakenMultiplier => 1f - 0.2f * Level(UpgradeType.ThickScales);
         public float HungerMultiplier => 1f - 0.15f * Level(UpgradeType.SlowMetabolism);
-        public float DashDurationMultiplier => 1f + 0.25f * Level(UpgradeType.LongStrike);
-        public float DashCooldownMultiplier => 1f - 0.15f * Level(UpgradeType.LongStrike);
+        public float StrikeDistanceMultiplier => 1f + 0.2f * Level(UpgradeType.LongStrike);
+        public float StrikeCostMultiplier => 1f - 0.15f * Level(UpgradeType.LongStrike);
         public float SmellRadiusMultiplier => 1f + 0.3f * Level(UpgradeType.KeenSmell);
         public float SmellCooldownMultiplier => 1f - 0.25f * Level(UpgradeType.KeenSmell);
         public float AwarenessMultiplier => 1f - 0.15f * Level(UpgradeType.SilentScales);

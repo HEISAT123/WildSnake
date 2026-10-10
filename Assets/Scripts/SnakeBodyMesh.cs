@@ -7,6 +7,9 @@ namespace Snake3D
     /// Гладкое тело змеи: процедурная «трубка» вдоль траектории головы.
     /// Кольца вершин ставятся с шагом _ringSpacing по позвоночнику; радиус задаёт профиль
     /// (тонкая шея → толстое тело → острый хвост), сечение слегка приплюснуто, как у настоящей змеи.
+    /// Поверх траектории — боковая волна: она привязана к пройденному пути (одометру), поэтому тело
+    /// скользит по неподвижной на земле «S», как настоящая змея, а при остановке замирает.
+    /// При замахе шея складывается в тугую S.
     /// Все буферы выделяются один раз, каждый кадр только перезаписываются.
     /// </summary>
     [RequireComponent(typeof(MeshFilter), typeof(MeshRenderer))]
@@ -36,6 +39,22 @@ namespace Snake3D
         [Tooltip("Частота мигания при неуязвимости, Гц")]
         [SerializeField, Min(1f)] private float _blinkFrequency = 12f;
 
+        [Header("Волна ползания")]
+        [Tooltip("Длина волны, клеток")]
+        [SerializeField, Min(0.3f)] private float _waveLength = 2.4f;
+
+        [Tooltip("Амплитуда волны на обычном шаге, клеток")]
+        [SerializeField, Min(0f)] private float _waveAmplitude = 0.17f;
+
+        [Tooltip("Участок шеи, где волна нарастает от нуля, клеток: голова идёт ровно")]
+        [SerializeField, Min(0.1f)] private float _waveNeck = 0.9f;
+
+        [Tooltip("Как быстро амплитуда догоняет нужную, на мировую единицу пути (стоя — не меняется)")]
+        [SerializeField, Min(0.01f)] private float _waveResponse = 0.6f;
+
+        [Tooltip("Изгиб шеи в «S» при замахе, клеток")]
+        [SerializeField, Min(0f)] private float _coilCurl = 0.32f;
+
         private Mesh _mesh;
         private MeshRenderer _renderer;
         private Vector3[] _vertices;
@@ -48,6 +67,9 @@ namespace Snake3D
         private int _ringVertexCount;
         private int _activeRings = -1;
         private Vector3 _lastForward = Vector3.forward;
+        private float _waveAmp;
+        private float _lastOdometer;
+        private float _coilBlend;
 
         /// <summary>Скрыть или показать тело (эффект смерти).</summary>
         public bool Visible { get; set; } = true;
@@ -135,7 +157,19 @@ namespace Snake3D
             _renderer.enabled = Visible && !blinkHidden;
             if (!Visible) return;
 
+            UpdateWave();
             Rebuild();
+        }
+
+        /// <summary>Амплитуда меняется только на ходу: остановилась — волна застыла в том виде, в каком была.</summary>
+        private void UpdateWave()
+        {
+            float odometer = _snake.Odometer;
+            float moved = Mathf.Abs(odometer - _lastOdometer);
+            _lastOdometer = odometer;
+            float target = _snake.IsStriking ? 0f : _waveAmplitude * Mathf.Clamp(_snake.Speed / _snake.WalkSpeed, 0f, 1.3f);
+            _waveAmp = Mathf.MoveTowards(_waveAmp, target, _waveResponse * moved);
+            _coilBlend = Mathf.MoveTowards(_coilBlend, _snake.IsCoiled ? 1f : 0f, Time.deltaTime * 5f);
         }
 
         private void Rebuild()
@@ -146,6 +180,11 @@ namespace Snake3D
             int rings = Mathf.Clamp(Mathf.CeilToInt(length / spacing) + 1, 2, _maxRings);
             float baseRadius = _snake.BodyRadiusWorld;
             float patternWorld = _patternLength * cs;
+            float waveK = Mathf.PI * 2f / (_waveLength * cs);
+            float odometer = _snake.Odometer;
+            float neck = _waveNeck * cs;
+            float amp = _waveAmp * cs;
+            float curl = _coilBlend * _coilCurl * cs;
 
             // Вершины в мировых координатах, а объект может стоять где угодно — переводим один раз матрицей.
             Matrix4x4 toLocal = transform.worldToLocalMatrix;
@@ -163,6 +202,13 @@ namespace Snake3D
                 if (right.sqrMagnitude < 1e-6f) right = Vector3.right;
                 right.Normalize();
                 Vector3 up = Vector3.Cross(forward, right);
+
+                // Боковая волна по пройденному пути и S-изгиб шеи при замахе.
+                float taper = Mathf.Clamp01(d / neck) * (1f - t * 0.5f);
+                float lateral = amp * taper * Mathf.Sin((odometer - d) * waveK);
+                float neckCells = d / cs;
+                if (curl > 0f && neckCells < 2.2f) lateral += curl * Mathf.Sin(neckCells * Mathf.PI / 1.1f) * (1f - neckCells / 2.2f);
+                center += right * lateral;
 
                 float radius = baseRadius * _radiusProfile.Evaluate(t);
                 float radiusV = radius * _verticalScale;

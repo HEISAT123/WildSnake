@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace Snake3D
 {
-    /// <summary>Шлейф за головой, который рисуется только во время рывка.</summary>
+    /// <summary>Шлейф за головой, который рисуется только во время броска.</summary>
     [RequireComponent(typeof(TrailRenderer))]
     public class DashTrail : MonoBehaviour
     {
@@ -30,7 +30,7 @@ namespace Snake3D
 
         private void LateUpdate()
         {
-            bool emit = _snake.IsDashing && _snake.IsAlive;
+            bool emit = _snake.IsStriking && _snake.IsAlive;
             if (_trail.emitting != emit) _trail.emitting = emit;
         }
 

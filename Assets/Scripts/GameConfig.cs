@@ -9,15 +9,24 @@ namespace Snake3D
     [CreateAssetMenu(fileName = "GameConfig", menuName = "Snake3D/Game Config")]
     public class GameConfig : ScriptableObject
     {
-        [Header("Змейка: скорость и руль")]
-        [Tooltip("Скорость ползания, клеток в секунду")]
-        [SerializeField, Min(0.5f)] private float _moveSpeed = 4.6f;
+        [Header("Змейка: движение")]
+        [Tooltip("Скорость, когда змея крадётся (Ctrl), клеток в секунду")]
+        [SerializeField, Min(0.2f)] private float _sneakSpeed = 1.5f;
 
-        [Tooltip("Скорость поворота при руле до упора, град/с")]
-        [SerializeField, Min(10f)] private float _turnSpeed = 190f;
+        [Tooltip("Обычная скорость ползания, клеток в секунду")]
+        [SerializeField, Min(0.5f)] private float _walkSpeed = 3.4f;
 
-        [Tooltip("Как быстро руль доходит до упора, 1/с")]
-        [SerializeField, Min(0.5f)] private float _steerResponse = 6f;
+        [Tooltip("Быстрое ползание (Shift), клеток в секунду")]
+        [SerializeField, Min(0.5f)] private float _sprintSpeed = 5.6f;
+
+        [Tooltip("Разгон, клеток в секунду²")]
+        [SerializeField, Min(0.5f)] private float _acceleration = 12f;
+
+        [Tooltip("Торможение, клеток в секунду²")]
+        [SerializeField, Min(0.5f)] private float _deceleration = 16f;
+
+        [Tooltip("Скорость поворота головы на ходу, град/с: змея заходит дугой, а не разворачивается на месте")]
+        [SerializeField, Min(10f)] private float _turnRate = 230f;
 
         [Header("Змейка: прыжок и бросок")]
         [Tooltip("Высота прыжка, клеток")]
@@ -26,14 +35,26 @@ namespace Snake3D
         [Tooltip("Гравитация, клеток в секунду²")]
         [SerializeField, Min(1f)] private float _gravity = 30f;
 
-        [Tooltip("Множитель скорости во время броска")]
-        [SerializeField, Min(1f)] private float _dashMultiplier = 2.4f;
+        [Tooltip("Дальность быстрого укуса (ЛКМ без замаха), клеток")]
+        [SerializeField, Min(0.5f)] private float _strikeDistance = 2.2f;
+
+        [Tooltip("Дальность броска после полного замаха (ПКМ), клеток")]
+        [SerializeField, Min(0.5f)] private float _chargedStrikeDistance = 5.5f;
 
         [Tooltip("Длительность броска, сек")]
-        [SerializeField, Min(0.05f)] private float _dashDuration = 0.35f;
+        [SerializeField, Min(0.05f)] private float _strikeDuration = 0.26f;
 
-        [Tooltip("Перезарядка броска, сек")]
-        [SerializeField, Min(0.1f)] private float _dashCooldown = 2.2f;
+        [Tooltip("Пауза между бросками, сек")]
+        [SerializeField, Min(0f)] private float _strikeCooldown = 0.45f;
+
+        [Tooltip("За сколько секунд замах набирает полную силу")]
+        [SerializeField, Min(0.1f)] private float _coilChargeTime = 1.1f;
+
+        [Tooltip("Насколько свёрнутая змея может повернуть голову для прицела, град")]
+        [SerializeField, Range(10f, 120f)] private float _coilAimLimit = 75f;
+
+        [Tooltip("Насколько быстрый укус может отклониться от курса к прицелу, град")]
+        [SerializeField, Range(0f, 90f)] private float _biteAimLimit = 50f;
 
         [Header("Змейка: длина")]
         [Tooltip("Начальная (и минимальная) длина тела, клеток")]
@@ -119,6 +140,12 @@ namespace Snake3D
         [Tooltip("Насколько лучше замечают змею во время броска (множитель радиуса)")]
         [SerializeField, Min(1f)] private float _dashAwareness = 1.4f;
 
+        [Tooltip("Насколько хуже замечают крадущуюся змею (множитель радиуса)")]
+        [SerializeField, Range(0.05f, 1f)] private float _sneakAwareness = 0.45f;
+
+        [Tooltip("Насколько лучше замечают быстро ползущую змею (множитель радиуса)")]
+        [SerializeField, Min(1f)] private float _sprintAwareness = 1.3f;
+
         [Tooltip("Насколько хуже замечают спящие ночью птицы (множитель радиуса)")]
         [SerializeField, Range(0.05f, 1f)] private float _sleepAwareness = 0.35f;
 
@@ -152,14 +179,21 @@ namespace Snake3D
         [Tooltip("Здоровье змеи-соперницы")]
         [SerializeField, Min(1f)] private float _rivalMaxHealth = 60f;
 
-        public float MoveSpeed => _moveSpeed;
-        public float TurnSpeed => _turnSpeed;
-        public float SteerResponse => _steerResponse;
+        public float SneakSpeed => _sneakSpeed;
+        public float WalkSpeed => _walkSpeed;
+        public float SprintSpeed => _sprintSpeed;
+        public float Acceleration => _acceleration;
+        public float Deceleration => _deceleration;
+        public float TurnRate => _turnRate;
         public float JumpHeight => _jumpHeight;
         public float Gravity => _gravity;
-        public float DashMultiplier => _dashMultiplier;
-        public float DashDuration => _dashDuration;
-        public float DashCooldown => _dashCooldown;
+        public float StrikeDistance => _strikeDistance;
+        public float ChargedStrikeDistance => _chargedStrikeDistance;
+        public float StrikeDuration => _strikeDuration;
+        public float StrikeCooldown => _strikeCooldown;
+        public float CoilChargeTime => _coilChargeTime;
+        public float CoilAimLimit => _coilAimLimit;
+        public float BiteAimLimit => _biteAimLimit;
         public float StartLength => _startLength;
         public float MaxLength => _maxLength;
 
@@ -186,6 +220,8 @@ namespace Snake3D
         public float StrikeCatchRadius => _strikeCatchRadius;
         public float CoverAwareness => _coverAwareness;
         public float DashAwareness => _dashAwareness;
+        public float SneakAwareness => _sneakAwareness;
+        public float SprintAwareness => _sprintAwareness;
         public float SleepAwareness => _sleepAwareness;
         public int PreyKindCount => _prey.Length;
 
@@ -200,6 +236,24 @@ namespace Snake3D
 
         public float RivalRespawnDelay => _rivalRespawnDelay;
         public float RivalMaxHealth => _rivalMaxHealth;
+
+        /// <summary>Скорость темпа, клеток в секунду.</summary>
+        public float PaceSpeed(SnakePace pace)
+        {
+            switch (pace)
+            {
+                case SnakePace.Sneak: return _sneakSpeed;
+                case SnakePace.Sprint: return _sprintSpeed;
+                default: return _walkSpeed;
+            }
+        }
+
+        /// <summary>Скорость броска (клеток в секунду), чтобы за время броска пролететь заданную дальность.</summary>
+        public float StrikeSpeed(float charge01)
+        {
+            float distance = Mathf.Lerp(_strikeDistance, _chargedStrikeDistance, Mathf.Clamp01(charge01));
+            return distance / _strikeDuration;
+        }
 
         public PreyStats GetPrey(PreyKind kind)
         {

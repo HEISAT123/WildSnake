@@ -7,10 +7,11 @@ namespace Snake3D
     /// 1) план — A* по сетке поля несколько раз в секунду; стоимость клетки учитывает препятствия,
     ///    тела обеих змей и зону перед головой другой змеи;
     /// 2) рефлексы — «щупальца» впереди: уворот от стен и камней, прыжок через брёвна и тела;
-    /// 3) охота — выбирает самую выгодную добычу (сытность / расстояние), целится с упреждением
-    ///    и делает бросок вблизи; иногда выходит наперерез игроку, чтобы тот врезался в её тело.
+    /// 3) охота — выбирает самую выгодную добычу (сытность / расстояние), подкрадывается к ней,
+    ///    целится с упреждением и делает бросок вблизи; иногда выходит наперерез игроку.
+    /// Управляет змеёй тем же «намерением», что и игрок: желаемое направление + темп, бросок, прыжок.
     /// Все буферы выделяются один раз в Start, в игровом цикле аллокаций нет.
-    /// Выполняется раньше SnakeController, чтобы руль применился в том же кадре.
+    /// Выполняется раньше SnakeController, чтобы намерение применилось в том же кадре.
     /// </summary>
     [DefaultExecutionOrder(-50)]
     public class SnakeAI : MonoBehaviour
@@ -74,6 +75,9 @@ namespace Snake3D
         [Tooltip("Угол до цели, при котором руль в упоре, град")]
         [SerializeField, Range(5f, 90f)] private float _fullSteerAngle = 35f;
 
+        [Tooltip("Насколько отклоняется желаемое направление от курса при руле в упоре, град")]
+        [SerializeField, Range(10f, 120f)] private float _steerToDirection = 80f;
+
         [Tooltip("Отступ от стен арены, клеток")]
         [SerializeField, Min(0f)] private float _wallAvoidMargin = 0.8f;
 
@@ -100,7 +104,10 @@ namespace Snake3D
         [SerializeField, Range(1f, 45f)] private float _dashAngle = 12f;
 
         [Tooltip("С какого расстояния до добычи делать бросок, клеток")]
-        [SerializeField, Min(0.5f)] private float _strikeDistance = 3f;
+        [SerializeField, Min(0.5f)] private float _strikeDistance = 2f;
+
+        [Tooltip("С какого расстояния до спокойной добычи начинать красться, клеток")]
+        [SerializeField, Min(0f)] private float _stalkDistance = 6f;
 
         [Tooltip("Упреждение по скорости добычи, сек")]
         [SerializeField, Min(0f)] private float _preyLead = 0.35f;
@@ -138,6 +145,8 @@ namespace Snake3D
         private PreyAnimal _prey;
         private bool _hunting;
         private bool _initialized;
+        private bool _wantJump;
+        private bool _wantStrike;
 
         /// <summary>Другая змея на поле: выключенный объект (соперник отключён в настройках) не считается.</summary>
         private bool OtherAlive => _player != null && _player.isActiveAndEnabled && _player.IsAlive;
@@ -167,6 +176,8 @@ namespace Snake3D
                 _pathLength = 0;
                 return;
             }
+            _wantJump = false;
+            _wantStrike = false;
 
             float dt = Time.deltaTime;
             _decisionTimer -= dt;
@@ -254,18 +265,31 @@ namespace Snake3D
                 bool rightFree = right != Blocked.Solid;
                 if (leftFree && !rightFree) steer = -1f;
                 else if (rightFree && !leftFree) steer = 1f;
-                else if (!leftFree && !rightFree && near == Blocked.Jumpable) _snake.AiJump = true;
+                else if (!leftFree && !rightFree && near == Blocked.Jumpable) _wantJump = true;
                 else steer = steer >= 0f ? 1f : -1f;
             }
             else
             {
-                if (near == Blocked.Jumpable) _snake.AiJump = true;
+                if (near == Blocked.Jumpable) _wantJump = true;
                 if (left == Blocked.Solid) steer = Mathf.Max(steer, 0.6f);
                 if (right == Blocked.Solid) steer = Mathf.Min(steer, -0.6f);
             }
 
-            _snake.AiSteer = steer;
             TryDash(goal, angle, near, center);
+            Vector3 direction = Quaternion.Euler(0f, steer * _steerToDirection, 0f) * forward;
+            _snake.SetMoveIntent(direction, ChoosePace(goal));
+            if (_wantJump) _snake.RequestJump();
+            if (_wantStrike) _snake.TryStrike(forward);
+        }
+
+        /// <summary>К спокойной добыче — крадётся, за убегающей и на перехват — спешит, иначе обычный шаг.</summary>
+        private SnakePace ChoosePace(Vector3 goal)
+        {
+            if (_hunting) return SnakePace.Sprint;
+            if (!HasPrey) return SnakePace.Walk;
+            if (_prey.IsFleeing) return SnakePace.Sprint;
+            float dist = DistanceCells(goal);
+            return dist < _stalkDistance && dist > _strikeDistance * 0.5f ? SnakePace.Sneak : SnakePace.Walk;
         }
 
         private bool HasPrey => _prey != null && _prey.IsActive && !_prey.IsFlying;
@@ -273,17 +297,17 @@ namespace Snake3D
         /// <summary>Бросок: при перехвате игрока или когда добыча прямо впереди на расстоянии броска.</summary>
         private void TryDash(Vector3 goal, float angle, Blocked near, Blocked center)
         {
-            if (_snake.DashCharge01 < 1f || near != Blocked.Free || center != Blocked.Free) return;
+            if (_snake.StrikeReady01 < 1f || near != Blocked.Free || center != Blocked.Free) return;
             if (Mathf.Abs(angle) > _dashAngle) return;
 
             float myDist = DistanceCells(goal);
             if (_hunting)
             {
-                if (myDist < 6f) _snake.AiDash = true;
+                if (myDist < 3f) _wantStrike = true;
                 return;
             }
 
-            if (HasPrey && myDist <= _strikeDistance) _snake.AiDash = true;
+            if (HasPrey && myDist <= _strikeDistance) _wantStrike = true;
         }
 
         private bool CanLand(Vector3 head, Vector3 forward)

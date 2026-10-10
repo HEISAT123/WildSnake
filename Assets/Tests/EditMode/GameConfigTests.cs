@@ -23,7 +23,9 @@ namespace Snake3D.Tests
         [Test]
         public void Defaults_AreConsistent()
         {
-            Assert.Greater(_config.MoveSpeed, 0f);
+            Assert.Greater(_config.WalkSpeed, _config.SneakSpeed, "Красться должно быть медленнее шага");
+            Assert.Greater(_config.SprintSpeed, _config.WalkSpeed, "Быстрое ползание должно быть быстрее шага");
+            Assert.Greater(_config.ChargedStrikeDistance, _config.StrikeDistance, "Замах должен давать дальний бросок");
             Assert.Greater(_config.MaxLength, _config.StartLength, "Максимальная длина не больше стартовой");
             Assert.Greater(_config.MaxHealth, 0f);
             Assert.Greater(_config.MaxSatiety, 0f);
@@ -62,9 +64,9 @@ namespace Snake3D.Tests
         [Test]
         public void FleeingPrey_IsFasterThanSnake_ButSlowerThanStrike()
         {
-            float strike = _config.MoveSpeed * _config.DashMultiplier;
+            float strike = _config.StrikeSpeed(0f);
             PreyStats mouse = _config.GetPrey(PreyKind.Mouse);
-            Assert.Greater(mouse.FleeSpeed, _config.MoveSpeed, "Мышь должна убегать от ползущей змеи — иначе бросок не нужен");
+            Assert.Greater(mouse.FleeSpeed, _config.WalkSpeed, "Мышь должна убегать от ползущей змеи — иначе бросок не нужен");
             Assert.Less(mouse.FleeSpeed, strike, "Бросок должен догонять мышь");
         }
     }

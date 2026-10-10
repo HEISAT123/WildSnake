@@ -183,7 +183,9 @@ namespace Snake3D
             if (!IsHunting(snake)) return default;
             float m = multiplier;
             if (snake.IsHidden) m *= _config.CoverAwareness;
-            if (snake.IsDashing) m *= _config.DashAwareness;
+            if (snake.IsStriking) m *= _config.DashAwareness;
+            else if (snake.Pace == SnakePace.Sneak) m *= _config.SneakAwareness;
+            else if (snake.Pace == SnakePace.Sprint && snake.IsMoving) m *= _config.SprintAwareness;
             return new PreyThreat(true, snake.HeadPosition, m);
         }
 
@@ -196,7 +198,7 @@ namespace Snake3D
         {
             if (!IsHunting(snake)) return;
             float cs = _grid.CellSize;
-            bool strike = snake.IsDashing;
+            bool strike = snake.IsStriking;
             float r = (strike ? _config.StrikeCatchRadius : _config.TouchCatchRadius) * cs;
             float rSqr = r * r;
             float maxDy = _catchHeight * cs;

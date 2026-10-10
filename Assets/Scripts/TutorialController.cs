@@ -4,7 +4,7 @@ using UnityEngine.UI;
 namespace Snake3D
 {
     /// <summary>
-    /// Обучение при первом запуске: по шагам подсказывает руль, охоту, бросок, нюх, укрытия и линьку.
+    /// Обучение при первом запуске: по шагам подсказывает движение, охоту, бросок, нюх, укрытия и линьку.
     /// Шаг засчитывается, когда игрок сделал действие (или прошло время для информационных шагов).
     /// </summary>
     public class TutorialController : MonoBehaviour
@@ -13,9 +13,9 @@ namespace Snake3D
 
         private static readonly string[] Steps =
         {
-            "Зажмите A / D или ← / →, чтобы рулить",
+            "WASD — ползти, мышь — камера. Ctrl — красться, Shift — быстрее",
             "Сытость тает — охотьтесь. Жука достаточно просто коснуться",
-            "Мышей, лягушек и птиц ловят броском: Shift, когда добыча рядом",
+            "Мышей, лягушек и птиц ловят броском: ЛКМ — укус, ПКМ — замах",
             "E — нюх: язык покажет след к ближайшей добыче",
             "Высокая трава прячет змею и от добычи, и от орла",
             "Набрав рост, змея линяет — и вы выбираете улучшение"
@@ -33,7 +33,7 @@ namespace Snake3D
         [SerializeField] private Text _text;
 
         [Header("Тайминги")]
-        [Tooltip("Сколько секунд нужно рулить, чтобы засчитать шаг")]
+        [Tooltip("Сколько секунд нужно ползти, чтобы засчитать шаг")]
         [SerializeField, Min(0.1f)] private float _steerTime = 1f;
 
         [Tooltip("Сколько висят информационные подсказки, сек")]
@@ -54,14 +54,14 @@ namespace Snake3D
         private void OnEnable()
         {
             _game.PreyCaught += OnPreyCaught;
-            _snake.Dashed += OnDashed;
+            _snake.StrikeStarted += OnStrikeStarted;
             _scent.Sniffed += OnSniffed;
         }
 
         private void OnDisable()
         {
             _game.PreyCaught -= OnPreyCaught;
-            _snake.Dashed -= OnDashed;
+            _snake.StrikeStarted -= OnStrikeStarted;
             _scent.Sniffed -= OnSniffed;
         }
 
@@ -88,7 +88,7 @@ namespace Snake3D
             switch (_step)
             {
                 case 0:
-                    if (Mathf.Abs(_snake.Steer) > 0.5f) _timer += dt;
+                    if (_snake.IsMoving) _timer += dt;
                     if (_timer >= _steerTime) ShowStep(1);
                     break;
                 case 1:
@@ -108,7 +108,7 @@ namespace Snake3D
             if (_step == 1) ShowStep(2);
         }
 
-        private void OnDashed()
+        private void OnStrikeStarted(float charge)
         {
             if (_step == 2 && _game.State == GameState.Playing) ShowStep(3);
         }
