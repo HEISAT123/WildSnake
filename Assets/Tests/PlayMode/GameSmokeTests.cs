@@ -149,6 +149,37 @@ namespace Snake3D.Tests
             Assert.IsFalse(snake.IsStriking, "Бросок не закончился");
         }
 
+        [UnityTest]
+        public IEnumerator Burrow_EnterSavesProgress_NightPassesFaster_Exit()
+        {
+            _game.StartGame();
+            SnakeController snake = FindPlayer();
+            var grid = Object.FindAnyObjectByType<GridManager>();
+            var dayNight = Object.FindAnyObjectByType<DayNightCycle>();
+            Assert.Greater(grid.BurrowCount, 0, "На поле нет нор");
+            yield return null;
+
+            // Подводим змею ко входу в нору и жмём «E» (вызываем обработчик напрямую).
+            snake.ExitBurrow(grid.GetBurrow(0), 0f);
+            yield return null;
+            Assert.GreaterOrEqual(_game.NearbyBurrow, 0, "Змея у норы, но войти нельзя");
+            var interact = typeof(GameManager).GetMethod("Interact", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            interact.Invoke(_game, null);
+            Assert.IsTrue(_game.InBurrow);
+            Assert.IsTrue(snake.IsHidden, "В норе змею не должно быть видно");
+            Assert.IsTrue(RunSaveStore.HasSave, "У норы прогресс должен сохраниться");
+
+            dayNight.SetPhase(0.9f);
+            yield return null;
+            yield return null;
+            Assert.Greater(Time.timeScale, 1f, "Ночью в норе время должно идти быстрее");
+
+            interact.Invoke(_game, null);
+            Assert.IsFalse(_game.InBurrow);
+            Assert.AreEqual(1f, Time.timeScale);
+            RunSaveStore.Clear();
+        }
+
         private static SnakeController FindPlayer()
         {
             foreach (SnakeController s in Object.FindObjectsByType<SnakeController>(FindObjectsSortMode.None))

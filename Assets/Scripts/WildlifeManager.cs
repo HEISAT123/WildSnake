@@ -214,7 +214,7 @@ namespace Snake3D
 
         private static bool IsHunting(SnakeController snake)
         {
-            return snake != null && snake.isActiveAndEnabled && snake.IsAlive && snake.IsRunning;
+            return snake != null && snake.isActiveAndEnabled && snake.IsAlive && snake.IsRunning && !snake.InBurrow;
         }
 
         private void CheckCatches(SnakeController snake)
@@ -324,7 +324,9 @@ namespace Snake3D
             float bestDist = -1f;
             for (int attempt = 0; attempt < 10; attempt++)
             {
-                if (!_grid.TryGetRandomFreeCell(out Vector2Int cell)) break;
+                // Лягушки живут у пруда.
+                bool found = kind == PreyKind.Frog ? _grid.TryGetRandomShoreCell(out Vector2Int cell) : _grid.TryGetRandomFreeCell(out cell);
+                if (!found) break;
                 Vector3 pos = _grid.CellToWorld(cell);
                 float dist = Mathf.Min(DistanceToSnake(_player, pos), DistanceToSnake(_rival, pos));
                 if (dist > bestDist)

@@ -15,6 +15,9 @@ namespace Snake3D
         /// <summary>Сколько атак орла пережила без удара.</summary>
         public int EaglesEvaded;
 
+        /// <summary>Сколько раз отпугнула лису.</summary>
+        public int FoxesScared;
+
         public float Length;
         public DamageSource Cause;
     }

@@ -6,7 +6,7 @@ namespace Snake3D
     /// <summary>
     /// Визуал поля: пол одним объектом, стены по периметру и «дикие» препятствия из раскладки GridManager:
     /// низкие стенки — поваленные брёвна, колонны — сломанные пни и стоячие камни, блоки — валуны;
-    /// плюс заросли высокой травы.
+    /// плюс заросли высокой травы, пруд, плоские солнечные камни и норы.
     /// Строится один раз (в редакторе SnakeSceneBuilder'ом или в Start, если раскладку поменяли в инспекторе).
     /// </summary>
     public class BoardView : MonoBehaviour
@@ -39,6 +39,21 @@ namespace Snake3D
 
         [Tooltip("Высокая трава (укрытия)")]
         [SerializeField] private Material _tallGrassMaterial;
+
+        [Tooltip("Вода пруда (полупрозрачная)")]
+        [SerializeField] private Material _waterMaterial;
+
+        [Tooltip("Илистое дно и берег пруда")]
+        [SerializeField] private Material _pondBedMaterial;
+
+        [Tooltip("Солнечные камни")]
+        [SerializeField] private Material _sunStoneMaterial;
+
+        [Tooltip("Земляной холмик норы")]
+        [SerializeField] private Material _dirtMaterial;
+
+        [Tooltip("Тёмный вход в нору")]
+        [SerializeField] private Material _holeMaterial;
 
         [Header("Меши")]
         [Tooltip("Меш валуна")]
@@ -99,6 +114,9 @@ namespace Snake3D
             BuildFloor(cs);
             BuildWalls(cs);
             BuildObstacles(cs);
+            BuildPond(cs);
+            BuildSunStones(cs);
+            BuildBurrows(cs);
             BuildTallGrass(cs);
 
             _builtLayoutVersion = _grid.LayoutVersion;
@@ -258,6 +276,98 @@ namespace Snake3D
             Renderer log = CreateShape(PrimitiveType.Cylinder, "Log", center + Vector3.up * (diameter * 0.5f),
                 new Vector3(diameter, length * cs * 0.5f, diameter), _barkMaterial);
             log.transform.rotation = lay * Quaternion.Euler(0f, Hash(x, y) * 360f, 0f);
+        }
+
+        /// <summary>
+        /// Пруд — два «веера» по форме берега из GridManager: широкое тёмное дно-берег и над ним
+        /// полупрозрачная вода. Форма берега совпадает с водными клетками логики.
+        /// </summary>
+        private void BuildPond(float cs)
+        {
+            if (!_grid.HasPond || _waterMaterial == null) return;
+            Vector3 center = _grid.PondCenter - transform.position;
+            if (_pondBedMaterial != null)
+                CreateFan("PondBed", center + Vector3.up * 0.006f, 0.55f * cs, 1.06f, _pondBedMaterial);
+            CreateFan("PondWater", center + Vector3.up * 0.04f, 0.25f * cs, 1f, _waterMaterial);
+        }
+
+        private void CreateFan(string objectName, Vector3 localCenter, float pad, float scale, Material mat)
+        {
+            const int segments = 64;
+            var vertices = new Vector3[segments + 1];
+            var uvs = new Vector2[segments + 1];
+            var triangles = new int[segments * 3];
+            vertices[0] = localCenter;
+            uvs[0] = new Vector2(0.5f, 0.5f);
+            for (int i = 0; i < segments; i++)
+            {
+                float a = i * Mathf.PI * 2f / segments;
+                float r = _grid.PondEdgeWorld(a) * scale + pad;
+                var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                vertices[i + 1] = localCenter + dir * r;
+                uvs[i + 1] = new Vector2(0.5f + dir.x * r * 0.25f, 0.5f + dir.z * r * 0.25f);
+                // Обход по часовой стрелке, если смотреть сверху, — лицом вверх.
+                triangles[i * 3] = 0;
+                triangles[i * 3 + 1] = (i + 1) % segments + 1;
+                triangles[i * 3 + 2] = i + 1;
+            }
+            var mesh = new Mesh { name = objectName, vertices = vertices, uv = uvs, triangles = triangles };
+            mesh.RecalculateNormals();
+            mesh.RecalculateTangents();
+            mesh.RecalculateBounds();
+
+            var go = new GameObject(objectName);
+            go.transform.SetParent(transform, false);
+            go.transform.rotation = Quaternion.identity;
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var r2 = go.AddComponent<MeshRenderer>();
+            r2.sharedMaterial = mat;
+            r2.shadowCastingMode = ShadowCastingMode.Off;
+        }
+
+        /// <summary>Плоский светлый камень на 2x2 клетки: на него можно заползти и греться.</summary>
+        private void BuildSunStones(float cs)
+        {
+            if (_sunStoneMaterial == null) return;
+            for (int i = 0; i < _grid.SunStoneCount; i++)
+            {
+                Vector2Int cell = _grid.GetSunStone(i);
+                Vector3 center = (_grid.CellToWorld(cell) + _grid.CellToWorld(new Vector2Int(cell.x + 1, cell.y + 1))) * 0.5f;
+                float yaw = Hash(cell.x, cell.y) * 360f;
+                if (_rockMesh != null)
+                    CreateMesh("SunStone", _rockMesh, _sunStoneMaterial, center, new Vector3(2.3f * cs, 0.12f * cs, 2f * cs), yaw);
+                else
+                    CreateShape(PrimitiveType.Cylinder, "SunStone", center, new Vector3(2f * cs, 0.03f * cs, 2f * cs), _sunStoneMaterial);
+            }
+        }
+
+        /// <summary>Нора: низкий земляной холмик и тёмный лаз, повёрнутый к центру поля.</summary>
+        private void BuildBurrows(float cs)
+        {
+            if (_dirtMaterial == null || _holeMaterial == null) return;
+            for (int i = 0; i < _grid.BurrowCount; i++)
+            {
+                Vector3 pos = _grid.GetBurrow(i);
+                Vector3 toCenter = _grid.Center - pos;
+                toCenter.y = 0f;
+                Quaternion face = Quaternion.LookRotation(toCenter.sqrMagnitude > 0.01f ? toCenter.normalized : Vector3.forward);
+                Vector3 back = face * Vector3.back;
+
+                Renderer mound = CreateShape(PrimitiveType.Sphere, "BurrowMound", pos + back * (0.35f * cs), new Vector3(1.9f * cs, 0.55f * cs, 1.7f * cs), _dirtMaterial);
+                mound.transform.rotation = face;
+                Renderer lip = CreateShape(PrimitiveType.Sphere, "BurrowLip", pos + face * Vector3.forward * (0.2f * cs), new Vector3(1.1f * cs, 0.3f * cs, 0.7f * cs), _dirtMaterial);
+                lip.transform.rotation = face;
+                Renderer hole = CreateShape(PrimitiveType.Sphere, "BurrowHole", pos + face * new Vector3(0f, 0.12f * cs, 0.42f * cs), new Vector3(0.62f * cs, 0.36f * cs, 0.3f * cs), _holeMaterial);
+                hole.transform.rotation = face * Quaternion.Euler(-20f, 0f, 0f);
+                hole.shadowCastingMode = ShadowCastingMode.Off;
+                // Насыпанная вокруг земля.
+                for (int k = 0; k < 5; k++)
+                {
+                    Quaternion around = face * Quaternion.Euler(0f, 120f + k * 30f + Hash(i, k) * 12f, 0f);
+                    CreateShape(PrimitiveType.Sphere, "Clod", pos + around * Vector3.forward * (0.95f * cs),
+                        new Vector3(0.35f * cs, 0.16f * cs, 0.3f * cs) * (0.8f + 0.4f * Hash(k, i)), _dirtMaterial);
+                }
+            }
         }
 
         /// <summary>Заросли: несколько пучков на клетку со случайным сдвигом, все в одном меше — один вызов отрисовки.</summary>

@@ -124,6 +124,9 @@ namespace Snake3D
         /// <summary>Обвивание закончилось: true — задушила, false — добыча вырвалась.</summary>
         public event Action<bool> ConstrictionEnded;
 
+        /// <summary>Змея вошла в нору (true, прогресс сохранён) или вышла из неё (false).</summary>
+        public event Action<bool> BurrowChanged;
+
         public GameState State { get; private set; } = GameState.Menu;
         public RunStats Stats => _stats;
         public SurvivalStats Survival => _survival;
@@ -146,12 +149,27 @@ namespace Snake3D
         /// <summary>Длина суток в секундах (день + ночь).</summary>
         public float DayLengthSeconds => _config.DaySeconds + _config.NightSeconds;
 
+        /// <summary>Змея пережидает в норе.</summary>
+        public bool InBurrow => _snake.InBurrow;
+
+        /// <summary>Нора, в которую можно войти прямо сейчас (-1 — рядом нет).</summary>
+        public int NearbyBurrow
+        {
+            get
+            {
+                if (_snake.InBurrow || !_snake.IsAlive) return -1;
+                int i = _grid.NearestBurrow(_snake.HeadPosition, out float dist);
+                return i >= 0 && dist <= _config.BurrowEnterRadius * _grid.CellSize ? i : -1;
+            }
+        }
+
         private readonly UpgradeType[] _moltChoices = new UpgradeType[MOLT_CHOICES];
         private readonly System.Random _rng = new System.Random();
         private SurvivalStats _survival;
         private readonly UpgradeSet _upgrades = new UpgradeSet();
         private readonly Constriction _constriction = new Constriction();
         private PreyAnimal _heldPrey;
+        private int _burrowIndex;
         private RunStats _stats;
         private float _moltProgress;
         private bool _moltPending;
@@ -251,17 +269,34 @@ namespace Snake3D
 
         // ---------------- Управление партией ----------------
 
+        /// <summary>Новая жизнь: старое сохранение у норы стирается.</summary>
         public void StartGame()
+        {
+            RunSaveStore.Clear();
+            StartRun(null);
+        }
+
+        /// <summary>«Играть» в меню: если есть сохранение у норы — продолжить, иначе новая жизнь.</summary>
+        public void PlayFromMenu()
+        {
+            if (RunSaveStore.TryLoad(out RunSave save)) StartRun(save);
+            else StartGame();
+        }
+
+        private void StartRun(RunSave save)
         {
             // Из меню камера не прыгает, а плавно перелетает из витрины за змею.
             bool fromMenu = State == GameState.Menu;
             SetAutopilot(false);
             _cameraRig.Showcase = false;
-            _dayNight.ResetCycle(_config.StartPhase);
+            if (save != null) _dayNight.Restore(save.Day, save.Phase);
+            else _dayNight.ResetCycle(_config.StartPhase);
             _eagle.Ambient = false;
             _eagle.ResetHunter(_config.EagleFirstDelay);
             PrepareRound(!fromMenu);
+            if (save != null) ApplySave(save);
             SetState(GameState.Playing);
+            if (save != null) EnterBurrow(Mathf.Clamp(save.Burrow, 0, Mathf.Max(0, _grid.BurrowCount - 1)), false);
         }
 
         public void Resume()
@@ -330,6 +365,7 @@ namespace Snake3D
             _wildlife.ResetAll();
             _scent.ResetScent();
             _skinShed.Clear();
+            _playerInput.MovementLocked = false;
 
             if (snapCamera) _cameraRig.SnapToTarget();
             _audio.SetMusicPitch(1f);
@@ -358,11 +394,8 @@ namespace Snake3D
 
         private void TickPlaying(float dt)
         {
-            if (GameInput.Interact && _scent.TrySniff())
-            {
-                _headAnimator.Flick();
-                _audio.Play(SoundId.Sniff);
-            }
+            if (GameInput.Interact) Interact();
+            _snake.Daylight01 = _dayNight.Daylight01;
 
             _stats.Time += dt;
             _stats.Days = _stats.Time / DayLengthSeconds;
@@ -372,8 +405,12 @@ namespace Snake3D
             TickHunger(dt);
             if (State != GameState.Playing) return;
             TickConstriction(dt);
-            // Голодная змея медленнее восстанавливает силы.
-            _snake.Stamina.RegenMultiplier = Mathf.Lerp(_config.HungryStaminaRegen, 1f, Mathf.Clamp01(_survival.Satiety01 * 2f));
+            // Голодная и замёрзшая змея медленнее восстанавливает силы.
+            _snake.Stamina.RegenMultiplier = Mathf.Lerp(_config.HungryStaminaRegen, 1f, Mathf.Clamp01(_survival.Satiety01 * 2f))
+                                             * _snake.Temperature.RegenMultiplier;
+            // Ночь в норе пролетает быстрее (голод при этом идёт).
+            float timeScale = _snake.InBurrow && _dayNight.IsNight ? _config.BurrowNightTimeScale : 1f;
+            if (!Mathf.Approximately(Time.timeScale, timeScale)) Time.timeScale = timeScale;
 
             if (RivalActive)
             {
@@ -567,6 +604,8 @@ namespace Snake3D
         private void EndGame()
         {
             if (State == GameState.GameOver) return;
+            // Жизнь кончилась — сохранение у норы больше не нужно.
+            RunSaveStore.Clear();
             _stats.Length = _snake.BodyLengthCells;
             _stats.Days = _stats.Time / DayLengthSeconds;
             var entry = new LeaderboardEntry(Mathf.FloorToInt(_stats.Time), _stats.Prey, _stats.Length, _stats.Molts);
@@ -611,6 +650,94 @@ namespace Snake3D
             _audio.Play(big ? SoundId.Feast : SoundId.Catch);
             if (big) _cameraRig.Shake(0.08f, 0.2f);
             PreyCaught?.Invoke(kind);
+        }
+
+        // ---------------- Нора, нюх и сохранение ----------------
+
+        /// <summary>E: в норе — выйти, у норы — войти, иначе нюх.</summary>
+        private void Interact()
+        {
+            if (_snake.InBurrow)
+            {
+                ExitBurrow();
+                return;
+            }
+
+            int burrow = NearbyBurrow;
+            if (burrow >= 0 && !_constriction.IsActive && _snake.IsGrounded)
+            {
+                EnterBurrow(burrow, true);
+                return;
+            }
+
+            if (_scent.TrySniff())
+            {
+                _headAnimator.Flick();
+                _audio.Play(SoundId.Sniff);
+            }
+        }
+
+        private void EnterBurrow(int index, bool save)
+        {
+            _burrowIndex = index;
+            _snake.EnterBurrow(_grid.GetBurrow(index));
+            _playerInput.MovementLocked = true;
+            _scent.ResetScent();
+            if (save) RunSaveStore.Save(BuildSave());
+            _audio.Play(SoundId.Land);
+            BurrowChanged?.Invoke(true);
+        }
+
+        private void ExitBurrow()
+        {
+            Vector3 pos = _grid.GetBurrow(_burrowIndex);
+            Vector3 face = _grid.Center - pos;
+            face.y = 0f;
+            face = face.sqrMagnitude > 0.01f ? face.normalized : Vector3.forward;
+            _snake.ExitBurrow(pos + face * (1.2f * _grid.CellSize), Mathf.Atan2(face.x, face.z) * Mathf.Rad2Deg);
+            _playerInput.MovementLocked = false;
+            Time.timeScale = 1f;
+            _cameraRig.LookBehindSnake();
+            BurrowChanged?.Invoke(false);
+        }
+
+        private RunSave BuildSave()
+        {
+            var save = new RunSave
+            {
+                Day = _dayNight.Day,
+                Phase = _dayNight.Phase,
+                Time = _stats.Time,
+                Health = _survival.Health,
+                MaxHealth = _survival.MaxHealth,
+                Satiety = _survival.Satiety,
+                Length = _snake.BodyLengthCells,
+                MoltProgress = _moltProgress,
+                Temperature = _snake.Temperature.Value01,
+                Prey = _stats.Prey,
+                Molts = _stats.Molts,
+                EaglesEvaded = _stats.EaglesEvaded,
+                FoxesScared = _stats.FoxesScared,
+                Burrow = _burrowIndex
+            };
+            _upgrades.CopyLevels(save.Upgrades);
+            return save;
+        }
+
+        private void ApplySave(RunSave save)
+        {
+            _upgrades.SetLevels(save.Upgrades);
+            ApplyUpgrades();
+            _survival.Restore(save.Health, save.MaxHealth, save.Satiety);
+            _snake.SetLength(save.Length);
+            _snake.Temperature.Reset(save.Temperature);
+            _moltProgress = save.MoltProgress;
+            _stats.Time = save.Time;
+            _stats.Days = save.Time / DayLengthSeconds;
+            _stats.Prey = save.Prey;
+            _stats.Molts = save.Molts;
+            _stats.EaglesEvaded = save.EaglesEvaded;
+            _stats.FoxesScared = save.FoxesScared;
         }
 
         // ---------------- Обвивание ----------------

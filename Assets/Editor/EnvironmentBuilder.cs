@@ -30,6 +30,11 @@ public static class EnvironmentBuilder
         public Material StumpTop;
         public Material Block;
         public Material TallGrass;
+        public Material PondWater;
+        public Material PondBed;
+        public Material SunStone;
+        public Material Dirt;
+        public Material Hole;
         public Mesh RockMesh;
         public Mesh TuftMesh;
     }
@@ -69,6 +74,19 @@ public static class EnvironmentBuilder
         MakeCutout(m.TallGrass);
         // Стены — длинные кубы: повторяем кладку вдоль, иначе кирпичи растянутся на всю длину.
         m.Wall.mainTextureScale = new Vector2(24f, 0.6f);
+
+        // Пруд на арене: полупрозрачная рябь над тёмным илистым дном.
+        m.PondWater = SnakeSceneBuilder.CreateLitMaterial("PondWater", new Color(0.18f, 0.42f, 0.52f, 0.72f), 0.95f);
+        // Своё имя текстуры: окружение пересохраняет Water_N, и ссылка пруда потерялась бы.
+        Texture2D pondNormal = ProceduralTextures.WaterNormal(256);
+        pondNormal.name = "PondWater_N";
+        SetNormalMap(m.PondWater, Save(pondNormal), 0.5f);
+        m.PondWater.SetTextureScale("_BumpMap", new Vector2(2f, 2f));
+        SnakeSceneBuilder.MakeTransparent(m.PondWater);
+        m.PondBed = SnakeSceneBuilder.CreateLitMaterial("PondBed", new Color(0.24f, 0.27f, 0.17f), 0.35f);
+        m.SunStone = Textured("SunStone", new Color(0.95f, 0.86f, 0.7f), 0.25f, rock, rockN, 0.9f);
+        m.Dirt = SnakeSceneBuilder.CreateLitMaterial("BurrowDirt", new Color(0.36f, 0.25f, 0.16f), 0.05f);
+        m.Hole = SnakeSceneBuilder.CreateLitMaterial("BurrowHole", new Color(0.03f, 0.02f, 0.015f), 0f);
         return m;
     }
 

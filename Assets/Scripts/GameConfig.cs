@@ -103,6 +103,29 @@ namespace Snake3D
         [Tooltip("Насколько заметнее «открытая» змея после промаха (множитель радиуса)")]
         [SerializeField, Min(1f)] private float _missAwareness = 1.6f;
 
+        [Header("Вода и температура")]
+        [Tooltip("Скорость в воде (множитель): змея плывёт медленнее")]
+        [SerializeField, Range(0.1f, 1f)] private float _swimSpeed = 0.6f;
+
+        [Tooltip("Температура в начале партии (0 — окоченела, 1 — прогрета)")]
+        [SerializeField, Range(0f, 1f)] private float _startTemperature = 0.7f;
+
+        [Tooltip("Скорость нагрева, долей в секунду (на солнечном камне — втрое быстрее)")]
+        [SerializeField, Min(0f)] private float _heatRate = 0.05f;
+
+        [Tooltip("Скорость остывания, долей в секунду (в воде — в 2.5 раза быстрее)")]
+        [SerializeField, Min(0f)] private float _coolRate = 0.022f;
+
+        [Tooltip("Насколько замёрзшая змея медленнее ползает и короче бросается")]
+        [SerializeField, Range(0f, 0.9f)] private float _coldSlowdown = 0.3f;
+
+        [Header("Норы")]
+        [Tooltip("С какого расстояния можно войти в нору, клеток")]
+        [SerializeField, Min(0.3f)] private float _burrowEnterRadius = 1.6f;
+
+        [Tooltip("Во сколько раз быстрее идёт ночь, пока змея пережидает её в норе")]
+        [SerializeField, Range(1f, 12f)] private float _burrowNightTimeScale = 6f;
+
         [Header("Змейка: длина")]
         [Tooltip("Начальная (и минимальная) длина тела, клеток")]
         [SerializeField, Min(1f)] private float _startLength = 3f;
@@ -251,6 +274,13 @@ namespace Snake3D
         public float CoilChargeTime => _coilChargeTime;
         public float CoilAimLimit => _coilAimLimit;
         public float BiteAimLimit => _biteAimLimit;
+        public float SwimSpeed => _swimSpeed;
+        public float StartTemperature => _startTemperature;
+        public float HeatRate => _heatRate;
+        public float CoolRate => _coolRate;
+        public float ColdSlowdown => _coldSlowdown;
+        public float BurrowEnterRadius => _burrowEnterRadius;
+        public float BurrowNightTimeScale => _burrowNightTimeScale;
         public float MaxStamina => _maxStamina;
         public float StaminaRegen => _staminaRegen;
         public float StaminaRegenDelay => _staminaRegenDelay;

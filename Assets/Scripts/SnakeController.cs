@@ -131,6 +131,31 @@ namespace Snake3D
         /// <summary>Переваривание: бугры по телу замедляют и тяжелят прыжок.</summary>
         public Digestion Digestion => _digestion;
 
+        /// <summary>Температура тела: холод замедляет и ослабляет бросок.</summary>
+        public BodyTemperature Temperature => _temperature;
+
+        /// <summary>Освещённость 0..1 для температуры (ставит GameManager из смены дня и ночи).</summary>
+        public float Daylight01 { get; set; } = 1f;
+
+        /// <summary>Голова в пруду: змея плывёт медленнее.</summary>
+        public bool IsInWater => _inWater;
+
+        /// <summary>Змея пережидает в норе: её не видно, она не двигается и не охотится.</summary>
+        public bool InBurrow { get; private set; }
+
+        /// <summary>Где сейчас змея — для температуры.</summary>
+        public TemperatureSpot Spot
+        {
+            get
+            {
+                if (InBurrow) return TemperatureSpot.Burrow;
+                if (_inWater) return TemperatureSpot.Water;
+                if (_grid.IsSunStoneAt(_headPos)) return TemperatureSpot.SunStone;
+                if (_hidden) return TemperatureSpot.Shade;
+                return TemperatureSpot.Open;
+            }
+        }
+
         /// <summary>После промаха змея на секунду медленнее и заметнее.</summary>
         public bool IsExposed => _exposedTimer > 0f;
 
@@ -138,7 +163,7 @@ namespace Snake3D
         public float Coil01 => _coiled ? Mathf.Clamp01(_coilTime / _config.CoilChargeTime) : 0f;
 
         /// <summary>Змея лежит в высокой траве: добыча и орёл её почти не видят. В прыжке укрытия нет.</summary>
-        public bool IsHidden => _hidden;
+        public bool IsHidden => _hidden || InBurrow;
 
         /// <summary>Тело уже минимальной длины — худеть от голода некуда.</summary>
         public bool IsAtMinLength => _targetLengthCells <= _config.StartLength + 0.01f;
@@ -231,6 +256,9 @@ namespace Snake3D
         private readonly Stamina _stamina = new Stamina();
         private readonly AmbushTracker _ambush = new AmbushTracker();
         private readonly Digestion _digestion = new Digestion();
+        private readonly BodyTemperature _temperature = new BodyTemperature();
+        private bool _inWater;
+        private float _sink;
         private float _exposedTimer;
         private bool _strikeHit;
         private float _strikeTimer;
@@ -262,6 +290,9 @@ namespace Snake3D
             _ambush.Ramp = _config.AmbushRamp;
             _ambush.OpenAwareness = _config.AmbushAwareness;
             _ambush.CoverAwareness = _config.AmbushCoverAwareness;
+            _temperature.HeatRate = _config.HeatRate;
+            _temperature.CoolRate = _config.CoolRate;
+            _temperature.ColdSlowdown = _config.ColdSlowdown;
         }
 
         /// <summary>Поставить змейку в точку с заданным курсом (град, 0 — вдоль +Z).</summary>
@@ -296,22 +327,71 @@ namespace Snake3D
             _stamina.Reset(_config.MaxStamina);
             _ambush.Break();
             _digestion.Reset();
+            _temperature.Reset(_config.StartTemperature);
+            _inWater = false;
+            _sink = 0f;
+            SetInBurrow(false);
             IsAlive = true;
             IsRunning = false;
 
             _headPos = new Vector3(position.x, _groundY, position.z);
-
-            // Заполняем траекторию прямой линией позади головы.
-            Vector3 forward = Forward;
-            int needed = Mathf.Min(_path.Length, Mathf.CeilToInt((_lengthCells + 1f) / _pathSampleDistance) + 2);
-            _pathHead = _path.Length - 1;
-            _pathCount = 0;
-            for (int j = needed - 1; j >= 0; j--) PushPathPoint(_headPos - forward * (j * _sampleDist));
+            LayStraightPath();
 
             _head.localScale = _headBaseScale;
             ComputeSpine();
             ApplyHeadVisual(0f);
             Respawned?.Invoke();
+        }
+
+        /// <summary>Траектория прямой линией позади головы (старт, выход из норы).</summary>
+        private void LayStraightPath()
+        {
+            Vector3 forward = Forward;
+            int needed = Mathf.Min(_path.Length, Mathf.CeilToInt((_targetLengthCells + 1f) / _pathSampleDistance) + 2);
+            _pathHead = _path.Length - 1;
+            _pathCount = 0;
+            for (int j = needed - 1; j >= 0; j--) PushPathPoint(_headPos - forward * (j * _sampleDist));
+        }
+
+        /// <summary>Сразу задать длину тела (продолжение сохранённой партии).</summary>
+        public void SetLength(float cells)
+        {
+            _targetLengthCells = Mathf.Clamp(cells, _config.StartLength, _config.MaxLength);
+            _lengthCells = _targetLengthCells;
+            LayStraightPath();
+            ComputeSpine();
+        }
+
+        // ---------------- Нора ----------------
+
+        /// <summary>Заползти в нору: змея прячется целиком, стоит и не видна ни добыче, ни хищникам.</summary>
+        public void EnterBurrow(Vector3 burrowPosition)
+        {
+            _headPos = new Vector3(burrowPosition.x, _groundY, burrowPosition.z);
+            _speed = 0f;
+            _strikeTimer = 0f;
+            _coiled = false;
+            _moveAmount = 0f;
+            SetInBurrow(true);
+            ApplyHeadVisual(0f);
+        }
+
+        /// <summary>Выползти из норы мордой в сторону yaw: тело ложится прямо позади входа.</summary>
+        public void ExitBurrow(Vector3 exitPosition, float yaw)
+        {
+            _yaw = yaw;
+            _headPos = new Vector3(exitPosition.x, _groundY, exitPosition.z);
+            LayStraightPath();
+            ComputeSpine();
+            SetInBurrow(false);
+            _ambush.Break();
+            ApplyHeadVisual(0f);
+        }
+
+        private void SetInBurrow(bool value)
+        {
+            InBurrow = value;
+            if (_head.gameObject.activeSelf == value) _head.gameObject.SetActive(!value);
         }
 
         // ---------------- Намерение (игрок и ИИ) ----------------
@@ -368,7 +448,7 @@ namespace Snake3D
 
             _coiled = false;
             _coilTime = 0f;
-            _strikeSpeed = _config.StrikeSpeed(charge) * StrikeDistanceScale;
+            _strikeSpeed = _config.StrikeSpeed(charge) * StrikeDistanceScale * _temperature.StrikeMultiplier;
             _strikeTimer = _config.StrikeDuration;
             _strikeCooldownTimer = _config.StrikeCooldown;
             _strikeHit = false;
@@ -531,9 +611,12 @@ namespace Snake3D
 
         private void Update()
         {
-            if (!IsRunning || !IsAlive) return;
+            if (!IsAlive) return;
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
+            // Температура живёт и в норе (там ровное тепло), и на паузе движения.
+            if (IsRunning || InBurrow) _temperature.Tick(dt, Daylight01, Spot);
+            if (!IsRunning || InBurrow) return;
 
             if (_strikeCooldownTimer > 0f) _strikeCooldownTimer -= dt;
             if (_invulnerableTimer > 0f) _invulnerableTimer -= dt;
@@ -552,7 +635,10 @@ namespace Snake3D
             float step = _speed * _cellSize * dt;
             _headPos += Forward * step;
             _odometer += step;
-            _headPos.y = _groundY + _height;
+            // В воде тело чуть погружается — видно, что змея плывёт.
+            _inWater = _grounded && _grid.IsWaterAt(_headPos);
+            _sink = Mathf.MoveTowards(_sink, _inWater ? 0.14f * _cellSize : 0f, dt * 0.8f);
+            _headPos.y = _groundY + _height - _sink;
             _lengthCells = Mathf.MoveTowards(_lengthCells, _targetLengthCells, _lengthChangeSpeed * dt);
 
             bool blocked = ClampToArena(out Vector3 normal) | HitsObstacle(out Vector3 obstacleNormal);
@@ -596,7 +682,8 @@ namespace Snake3D
 
                 target = _config.PaceSpeed(EffectivePace) * _moveAmount * _speedScale * ExternalSpeedMultiplier;
                 if (IsExposed) target *= _config.MissSlowdown;
-                target *= _digestion.SpeedMultiplier;
+                target *= _digestion.SpeedMultiplier * _temperature.SpeedMultiplier;
+                if (_inWater) target *= _config.SwimSpeed;
                 // Крутой разворот — сбавляем ход, иначе дуга вышла бы слишком широкой.
                 float turnAbs = Mathf.Abs(delta);
                 if (turnAbs > 90f) target *= Mathf.Lerp(1f, 0.55f, Mathf.InverseLerp(90f, 170f, turnAbs));

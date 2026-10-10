@@ -44,6 +44,20 @@ namespace Snake3D
             Array.Clear(_levels, 0, TYPE_COUNT);
         }
 
+        /// <summary>Уровни всех улучшений (для сохранения партии): копирует в result.</summary>
+        public void CopyLevels(int[] result)
+        {
+            Array.Copy(_levels, result, Math.Min(result.Length, TYPE_COUNT));
+        }
+
+        /// <summary>Восстановить уровни из сохранения (с ограничением MAX_LEVEL).</summary>
+        public void SetLevels(int[] levels)
+        {
+            Reset();
+            if (levels == null) return;
+            for (int i = 0; i < TYPE_COUNT && i < levels.Length; i++) _levels[i] = Math.Max(0, Math.Min(MAX_LEVEL, levels[i]));
+        }
+
         /// <summary>Взять улучшение. Возвращает false, если оно уже на максимуме.</summary>
         public bool Apply(UpgradeType type)
         {

@@ -69,6 +69,41 @@ namespace Snake3D.Tests
         // ---------------- Раскладка ----------------
 
         [Test]
+        public void Pond_SunStones_Burrows_DoNotOverlapObstacles()
+        {
+            GridManager grid = CreateGrid();
+            Assert.Greater(grid.WaterCellCount, 10, "На поле должен быть пруд");
+            Assert.AreEqual(3, grid.BurrowCount, "По умолчанию на поле три норы");
+            Assert.Greater(grid.SunStoneCount, 0, "Нет солнечных камней");
+            foreach (Vector2Int c in AllCells(grid))
+            {
+                bool feature = grid.IsWater(c) || grid.IsSunStone(c) || grid.IsBurrowCell(c);
+                if (feature) Assert.AreEqual(ObstacleType.None, grid.GetObstacle(c), $"Препятствие на воде, камне или норе: {c}");
+                if (grid.IsWater(c)) Assert.IsFalse(grid.IsCover(c), $"Трава в воде: {c}");
+            }
+            for (int i = 0; i < grid.BurrowCount; i++)
+            {
+                Assert.IsFalse(grid.IsWater(grid.GetBurrowCell(i)));
+                int nearest = grid.NearestBurrow(grid.GetBurrow(i), out float dist);
+                Assert.AreEqual(i, nearest);
+                Assert.AreEqual(0f, dist, 1e-4f);
+            }
+        }
+
+        [Test]
+        public void SpawnCells_AreNeverInWater()
+        {
+            GridManager grid = CreateGrid();
+            for (int i = 0; i < 200; i++)
+            {
+                Assert.IsTrue(grid.TryGetRandomFreeCell(out Vector2Int cell));
+                Assert.IsFalse(grid.IsWater(cell), $"Добыча появилась в воде: {cell}");
+                Assert.IsTrue(grid.TryGetRandomShoreCell(out Vector2Int shore));
+                Assert.IsFalse(grid.IsWater(shore));
+            }
+        }
+
+        [Test]
         public void Defaults_Are44x44()
         {
             GridManager grid = CreateGrid();

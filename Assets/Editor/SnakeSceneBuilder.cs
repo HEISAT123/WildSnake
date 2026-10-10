@@ -135,6 +135,8 @@ public static class SnakeSceneBuilder
         Wire(board, ("_grid", grid), ("_floorMaterial", arena.Floor), ("_wallMaterial", arena.Wall),
             ("_lowWallMaterial", arena.LowWall), ("_barkMaterial", arena.Bark), ("_stumpTopMaterial", arena.StumpTop),
             ("_blockMaterial", arena.Block), ("_tallGrassMaterial", arena.TallGrass),
+            ("_waterMaterial", arena.PondWater), ("_pondBedMaterial", arena.PondBed), ("_sunStoneMaterial", arena.SunStone),
+            ("_dirtMaterial", arena.Dirt), ("_holeMaterial", arena.Hole),
             ("_rockMesh", arena.RockMesh), ("_grassTuftMesh", arena.TuftMesh));
         board.Build();
         EnvironmentBuilder.Build(grid, particles, out ParticleSystem pollen, out Renderer stars, out Transform clouds);

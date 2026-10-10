@@ -146,6 +146,13 @@ namespace Snake3D
             SetPhase(phase);
         }
 
+        /// <summary>Продолжение сохранённой партии: номер суток и время без событий.</summary>
+        public void Restore(int day, float phase)
+        {
+            Day = Mathf.Max(1, day);
+            SetPhase(phase);
+        }
+
         /// <summary>Поставить время суток без событий (меню, начало партии).</summary>
         public void SetPhase(float phase)
         {

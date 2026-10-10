@@ -77,6 +77,14 @@ namespace Snake3D
             Health = Clamp(Health + amount, 0f, MaxHealth);
         }
 
+        /// <summary>Продолжение сохранённой партии.</summary>
+        public void Restore(float health, float maxHealth, float satiety)
+        {
+            MaxHealth = Math.Max(1f, maxHealth);
+            Health = Clamp(health, 1f, MaxHealth);
+            Satiety = Clamp(satiety, 0f, MaxSatiety);
+        }
+
         public void HealFull()
         {
             if (!IsDead) Health = MaxHealth;

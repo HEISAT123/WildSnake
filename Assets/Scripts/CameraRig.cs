@@ -170,6 +170,13 @@ namespace Snake3D
             _shakeTime = 0f;
         }
 
+        /// <summary>Развернуть камеру за спину змеи (выход из норы).</summary>
+        public void LookBehindSnake()
+        {
+            ResetOrbitBehindSnake();
+            _autoPitch = 0f;
+        }
+
         private void ResetOrbitBehindSnake()
         {
             _orbitYaw = _snake.Yaw;

@@ -164,8 +164,9 @@ namespace Snake3D
             if (_mesh == null) return;
 
             bool blinkHidden = _snake.IsInvulnerable && Mathf.Repeat(Time.time * _blinkFrequency, 1f) < 0.5f;
-            _renderer.enabled = Visible && !blinkHidden;
-            if (!Visible) return;
+            bool show = Visible && !_snake.InBurrow;
+            _renderer.enabled = show && !blinkHidden;
+            if (!show) return;
 
             UpdateWave();
             Rebuild();

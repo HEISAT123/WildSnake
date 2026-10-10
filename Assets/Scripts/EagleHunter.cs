@@ -328,7 +328,7 @@ namespace Snake3D
 
         private bool TargetAlive()
         {
-            return _target != null && _target.IsAlive && _target.IsRunning;
+            return _target != null && _target.IsAlive && _target.IsRunning && !_target.InBurrow;
         }
 
         private float Ground()

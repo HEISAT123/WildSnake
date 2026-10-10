@@ -400,7 +400,10 @@ namespace Snake3D
             Vector3 local = point - _grid.Center;
             if (Mathf.Abs(local.x) > half.x - margin || Mathf.Abs(local.z) > half.y - margin) return true;
             Vector2Int cell = _grid.WorldToCell(point);
-            return _grid.IsInside(cell) && _grid.GetObstacleHeight(cell) > 0f;
+            if (!_grid.IsInside(cell)) return false;
+            // В воду заходит только лягушка.
+            if (_kind != PreyKind.Frog && _grid.IsWater(cell)) return true;
+            return _grid.GetObstacleHeight(cell) > 0f;
         }
 
         private void FaceTowards(Vector3 dir, float dt)

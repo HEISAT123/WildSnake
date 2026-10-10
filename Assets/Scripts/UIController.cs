@@ -128,6 +128,10 @@ namespace Snake3D
 
         [Header("Кнопки меню")]
         [SerializeField] private Button _playButton;
+
+        [Tooltip("Подпись и описание пункта «Играть»: при сохранении у норы — «Продолжить»")]
+        [SerializeField] private Text _playLabel;
+        [SerializeField] private Text _playDescription;
         [SerializeField] private Button _guideButton;
         [SerializeField] private Button _menuLeaderboardButton;
         [SerializeField] private Button _menuSettingsButton;
@@ -162,6 +166,7 @@ namespace Snake3D
             _game.MoltCompleted += OnMoltCompleted;
             _game.ConstrictionStarted += OnConstrictionStarted;
             _game.ConstrictionEnded += OnConstrictionEnded;
+            _game.BurrowChanged += OnBurrowChanged;
             _wildlife.Startled += OnPreyStartled;
             _eagle.Missed += OnEagleMissed;
             _dayNight.DayStarted += OnDayStarted;
@@ -193,6 +198,7 @@ namespace Snake3D
             _game.MoltCompleted -= OnMoltCompleted;
             _game.ConstrictionStarted -= OnConstrictionStarted;
             _game.ConstrictionEnded -= OnConstrictionEnded;
+            _game.BurrowChanged -= OnBurrowChanged;
             _wildlife.Startled -= OnPreyStartled;
             _eagle.Missed -= OnEagleMissed;
             _dayNight.DayStarted -= OnDayStarted;
@@ -425,6 +431,13 @@ namespace Snake3D
             ShowBanner("ДЕРЖИТЕ F — ОБВИТЬ");
         }
 
+        private void OnBurrowChanged(bool entered)
+        {
+            if (_game.State != GameState.Playing) return;
+            if (!entered) return;
+            ShowBanner(_dayNight.IsNight ? "НОРА · НОЧЬ ПРОЙДЁТ БЫСТРЕЕ" : "НОРА · ПРОГРЕСС СОХРАНЁН");
+        }
+
         private void OnConstrictionEnded(bool won)
         {
             if (!won) ShowBanner("ВЫРВАЛСЯ");
@@ -459,6 +472,8 @@ namespace Snake3D
 
         private void OnStateChanged(GameState state)
         {
+            // До показа меню: пункт «Играть» превращается в «Продолжить», если змея ждёт в норе.
+            if (state == GameState.Menu) RefreshPlayRow();
             // HUD только во время партии: на паузе, линьке и в итогах он мешал бы композиции экрана.
             _hudRoot.SetActive(state == GameState.Playing);
             _menuPanel.SetActive(state == GameState.Menu);
@@ -547,7 +562,17 @@ namespace Snake3D
 
         // ---------------- Кнопки ----------------
 
-        private void OnPlayClicked() { Click(); _game.StartGame(); }
+        private void OnPlayClicked() { Click(); _game.PlayFromMenu(); }
+
+        private void RefreshPlayRow()
+        {
+            if (_playLabel == null || _playDescription == null) return;
+            bool hasSave = RunSaveStore.TryLoad(out RunSave save);
+            _playLabel.text = hasSave ? "ПРОДОЛЖИТЬ" : "ВЫЖИВАНИЕ";
+            _playDescription.text = hasSave
+                ? "День " + save.Day + " · змея ждёт в норе. Новая жизнь — пауза, «Заново»"
+                : "Голод, хищники, смена дня и ночи";
+        }
         private void OnResumeClicked() { Click(); _game.Resume(); }
         private void OnRestartClicked() { Click(); _game.Restart(); }
         private void OnMenuClicked() { Click(); _game.OpenMenu(); }
