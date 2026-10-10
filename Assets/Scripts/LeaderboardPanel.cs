@@ -5,11 +5,9 @@ using UnityEngine.UI;
 
 namespace Snake3D
 {
-    /// <summary>Экран рекордов: топ-10 по каждому режиму в трёх колонках.</summary>
+    /// <summary>Экран рекордов: топ-10 по каждому режиму в трёх колонках (заголовки колонок — в разметке).</summary>
     public class LeaderboardPanel : MonoBehaviour
     {
-        private static readonly string[] ModeNames = { "Классика", "На время", "Выживание" };
-
         [Header("Ссылки")]
         [SerializeField] private LeaderboardService _leaderboard;
         [SerializeField] private AudioService _audio;
@@ -35,17 +33,16 @@ namespace Snake3D
         private void Refresh()
         {
             var sb = new StringBuilder();
-            for (int m = 0; m < _columns.Length && m < ModeNames.Length; m++)
+            for (int m = 0; m < _columns.Length; m++)
             {
                 sb.Clear();
-                sb.Append(ModeNames[m]).Append("\n\n");
                 Leaderboard board = _leaderboard.GetBoard((GameMode)m);
                 if (board.Count == 0) sb.Append("пока пусто");
                 for (int i = 0; i < board.Count; i++)
                 {
                     LeaderboardEntry e = board.Entries[i];
-                    sb.Append(i + 1).Append(". ").Append(e.Score)
-                      .Append("   дл. ").Append(e.Length.ToString("0.0", CultureInfo.InvariantCulture))
+                    sb.Append(i + 1).Append(".   ").Append(e.Score)
+                      .Append("     длина ").Append(e.Length.ToString("0.0", CultureInfo.InvariantCulture))
                       .Append('\n');
                 }
                 _columns[m].text = sb.ToString();

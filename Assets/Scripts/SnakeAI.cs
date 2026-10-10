@@ -82,6 +82,12 @@ namespace Snake3D
         [Tooltip("Отступ от стен арены, клеток")]
         [SerializeField, Min(0f)] private float _wallAvoidMargin = 0.8f;
 
+        [Tooltip("Умеет ли прыгать через низкие стенки (автопилот меню не прыгает — он должен ездить спокойно)")]
+        [SerializeField] private bool _canJump = true;
+
+        [Tooltip("Где приземлится прыжок, клеток впереди: прыгаем, только если там свободно")]
+        [SerializeField, Min(1f)] private float _landingDistance = 2.7f;
+
         [Header("Характер")]
         [Tooltip("Склонность охотиться на игрока (0 — никогда, 1 — всегда, когда он рядом)")]
         [SerializeField, Range(0f, 1f)] private float _aggression = 0.55f;
@@ -126,6 +132,9 @@ namespace Snake3D
         private float _decisionTimer;
         private bool _hunting;
         private bool _initialized;
+
+        /// <summary>Другая змея на поле: выключенный объект (соперник отключён в настройках) не считается.</summary>
+        private bool OtherAlive => _player != null && _player.isActiveAndEnabled && _player.IsAlive;
 
         private void Start()
         {
@@ -176,12 +185,12 @@ namespace Snake3D
         private void DecideMood()
         {
             bool golden = _food.HasFood && _food.Kind == FoodKind.Golden;
-            _hunting = !golden && _player.IsAlive && DistanceCells(_player.HeadPosition) < _huntRange && Random.value < _aggression;
+            _hunting = !golden && OtherAlive && DistanceCells(_player.HeadPosition) < _huntRange && Random.value < _aggression;
         }
 
         private Vector3 CurrentGoal()
         {
-            if (_hunting && _player.IsAlive)
+            if (_hunting && OtherAlive)
             {
                 // Выходим наперерез: точка перед головой игрока, чтобы он врезался в наше тело.
                 if (DistanceCells(_player.HeadPosition) > _huntRange * 1.5f) _hunting = false;
@@ -221,6 +230,8 @@ namespace Snake3D
             Vector3 leftDir = Quaternion.Euler(0f, -_feelerAngle, 0f) * forward;
             Vector3 rightDir = Quaternion.Euler(0f, _feelerAngle, 0f) * forward;
             Blocked near = Probe(head + forward * (_nearLook * cs));
+            // Прыжок без места для приземления (стенка вдоль курса, колонна сразу за ней) — это авария.
+            if (near == Blocked.Jumpable && !CanLand(head, forward)) near = Blocked.Solid;
             Blocked center = Probe(head + forward * (_lookAhead * cs));
             Blocked left = Probe(head + leftDir * (_lookAhead * cs));
             Blocked right = Probe(head + rightDir * (_lookAhead * cs));
@@ -262,8 +273,13 @@ namespace Snake3D
             Vector3 d = _food.Position - _player.HeadPosition;
             d.y = 0f;
             float playerDist = d.magnitude / _grid.CellSize;
-            bool race = _player.IsAlive && playerDist < myDist * 1.3f;
+            bool race = OtherAlive && playerDist < myDist * 1.3f;
             if (race || _food.Kind == FoodKind.Golden) _snake.AiDash = true;
+        }
+
+        private bool CanLand(Vector3 head, Vector3 forward)
+        {
+            return _canJump && _snake.IsGrounded && Probe(head + forward * (_landingDistance * _grid.CellSize)) == Blocked.Free;
         }
 
         private Blocked Probe(Vector3 point)
@@ -278,13 +294,13 @@ namespace Snake3D
             if (_grid.IsInside(cell))
             {
                 float h = _grid.GetObstacleHeight(cell);
-                if (h > 0f) return h < _snake.JumpHeightWorld * 0.6f ? Blocked.Jumpable : Blocked.Solid;
+                if (h > 0f) return _canJump && h < _snake.JumpHeightWorld * 0.6f ? Blocked.Jumpable : Blocked.Solid;
             }
 
             float radius = _snake.HeadRadiusWorld;
             if (_hazards != null && _hazards.HitsAny(point, radius, 0f)) return Blocked.Jumpable;
             // Тела перепрыгиваемы, но лучше объехать: план их и так обходит, а рефлекс прыгает в крайнем случае.
-            if (_player.IsAlive && _player.BodyHits(point, radius, 0)) return Blocked.Jumpable;
+            if (OtherAlive && _player.BodyHits(point, radius, 0)) return Blocked.Jumpable;
             if (_snake.BodyHits(point, radius, 6)) return Blocked.Jumpable;
             return Blocked.Free;
         }
@@ -306,6 +322,12 @@ namespace Snake3D
                         continue;
                     }
 
+                    if (type == ObstacleType.LowWall && !_canJump)
+                    {
+                        _baseCost[i] = BLOCKED;
+                        continue;
+                    }
+
                     int cost = type == ObstacleType.LowWall ? 1 + _lowWallCost : 1;
                     if (x == 0 || y == 0 || x == _width - 1 || y == _height - 1 || NearSolid(x, y)) cost += _nearObstacleCost;
                     _baseCost[i] = cost;
@@ -320,7 +342,7 @@ namespace Snake3D
                 int x = cx + DirX[d], y = cy + DirY[d];
                 if (x < 0 || y < 0 || x >= _width || y >= _height) continue;
                 ObstacleType t = _grid.GetObstacle(new Vector2Int(x, y));
-                if (t == ObstacleType.Pillar || t == ObstacleType.Block) return true;
+                if (t == ObstacleType.Pillar || t == ObstacleType.Block || (t == ObstacleType.LowWall && !_canJump)) return true;
             }
             return false;
         }
@@ -345,7 +367,7 @@ namespace Snake3D
         {
             System.Array.Clear(_dynamicCost, 0, _dynamicCost.Length);
 
-            if (_player.IsAlive)
+            if (OtherAlive)
             {
                 for (int i = 0; i < _player.SpineCount; i++) MarkBody(_player.GetSpinePoint(i));
                 Vector3 pf = _player.Forward * _grid.CellSize;

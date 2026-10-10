@@ -31,6 +31,9 @@ namespace Snake3D
         [SerializeField] private Camera _minimapCamera;
 
         [Header("HUD")]
+        [Tooltip("Корень HUD: в главном меню скрыт, чтобы фон был чистым")]
+        [SerializeField] private GameObject _hudRoot;
+
         [SerializeField] private Text _scoreText;
         [SerializeField] private Text _bestText;
         [SerializeField] private Text _levelText;
@@ -263,6 +266,7 @@ namespace Snake3D
 
         private void OnStateChanged(GameState state)
         {
+            _hudRoot.SetActive(state != GameState.Menu);
             _menuPanel.SetActive(state == GameState.Menu);
             _pausePanel.SetActive(state == GameState.Paused);
             _gameOverPanel.SetActive(state == GameState.GameOver);
@@ -281,22 +285,26 @@ namespace Snake3D
             if (state == GameState.GameOver) FillGameOver();
         }
 
+        /// <summary>
+        /// Экран итогов: крупный счёт, место в таблице и столбец значений статистики
+        /// (подписи к ним статичны и лежат рядом в разметке).
+        /// </summary>
         private void FillGameOver()
         {
             bool timeUp = _game.IsTimed && _game.TimeLeft <= 0f;
-            _gameOverTitle.text = timeUp ? "Время вышло!" : "Игра окончена";
-            _finalScoreText.text = "Счёт: " + _score.Score;
+            _gameOverTitle.text = timeUp ? "Время вышло" : "Игра окончена";
+            _finalScoreText.text = _score.Score.ToString();
 
             int rank = _game.LastRank;
-            _rankText.text = rank == 0 ? "Новый рекорд!" : rank > 0 ? "Место в таблице: " + (rank + 1) : "Рекорд: " + _score.Best;
+            _rankText.text = rank == 0 ? "Новый рекорд!" : rank > 0 ? "Место " + (rank + 1) + " в таблице рекордов" : "Рекорд: " + _score.Best;
 
             RunStats s = _game.Stats;
             _statsText.text =
-                "Длина: " + s.Length.ToString("0.0") + "\n" +
-                "Яблок: " + s.Apples + "  (золотых " + s.Golden + ", гнилых " + s.Rotten + ")\n" +
-                "Бонусов: " + s.PowerUps + "\n" +
-                "Уровень: " + s.MaxLevel + "\n" +
-                "Время: " + FormatTime(Mathf.FloorToInt(s.Time));
+                s.Length.ToString("0.0") + "\n" +
+                s.Apples + (s.Golden > 0 || s.Rotten > 0 ? "  (золотых " + s.Golden + ", гнилых " + s.Rotten + ")" : "") + "\n" +
+                s.PowerUps + "\n" +
+                s.MaxLevel + "\n" +
+                FormatTime(Mathf.FloorToInt(s.Time));
         }
 
         private static string FormatTime(int totalSeconds)

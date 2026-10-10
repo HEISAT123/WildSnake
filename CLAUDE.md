@@ -37,7 +37,12 @@ Assets/
   Синтез идёт в фоновом потоке — в этих классах только System.Math, никакого Unity API.
 - Окружение (Editor): `EnvironmentBuilder` (небо, рельеф, лес, камни, трава, озеро, облака), `ProceduralTextures`, `ProceduralMeshes`; рантайм — `CloudDrift`.
 - Отображение: `CameraRig` (третье лицо, крен, тряска), `UIController`, `SettingsPanel`, `LeaderboardPanel`, `TutorialController`.
-- Главное меню «Неоновый закат»: `NeonMenu` (выбор стрелками/мышью, рекорд режима, бегущая сетка) + `MenuItemHover`; строит `NeonMenuBuilder` (Editor), текстуры в `Assets/Materials/UI`.
+- UI в едином стиле (тёмные полупрозрачные скруглённые панели, мягкие тени) строит `UIBuilder` (Editor); спрайты рисует `UISpriteFactory`
+  (`Assets/Materials/UI`). Шрифт — системный Segoe UI через `UIFontApplier` при запуске.
+- Главное меню — панель слева поверх живой сцены: `MainMenu` (карточки режимов с рекордами, выбор стрелками/мышью) + `MenuItemHover`.
+  Живой фон (attract-режим): в состоянии Menu змея игрока едет на автопилоте (`SnakeAI` с `_canJump = false`, `SnakeController.AutoPilot`),
+  соперник тоже ездит; аварии и еда в меню не влияют на очки и рекорды, звуков нет. Камера в меню — `CameraRig.Showcase` (облёт), при старте партии плавно перелетает.
+- Переключатели настроек — `ToggleSwitch` (вид «свитча» для Toggle).
 - Курсор скрыт и заблокирован только в состоянии Playing (`UIController.ApplyCursor`); «Выйти» — `Application.Quit`, в редакторе останавливает Play Mode.
 - Управление: A/D или ←/→ — руль (держать), Space — прыжок, Shift — рывок, Esc — пауза, R — заново, F11 — полный экран.
 

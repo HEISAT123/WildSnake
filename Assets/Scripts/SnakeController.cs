@@ -143,6 +143,11 @@ namespace Snake3D
         /// <summary>Запрос рывка от ИИ, сбрасывается после обработки.</summary>
         public bool AiDash { get; set; }
 
+        /// <summary>Автопилот: змея игрока управляется ИИ (живой фон главного меню).</summary>
+        public bool AutoPilot { get; set; }
+
+        private bool UsesPlayerInput => _isPlayer && !AutoPilot;
+
         /// <summary>Сколько точек позвоночника сейчас активно ([0] — голова).</summary>
         public int SpineCount => _spineCount;
 
@@ -365,7 +370,7 @@ namespace Snake3D
         private void UpdateSteer(float dt)
         {
             float target;
-            if (_isPlayer)
+            if (UsesPlayerInput)
             {
                 target = 0f;
                 if (GameInput.LeftHeld) target -= 1f;
@@ -383,7 +388,7 @@ namespace Snake3D
 
         private void UpdateJump(float dt)
         {
-            bool wantJump = _isPlayer ? GameInput.Jump && Time.frameCount != _runStartFrame : AiJump;
+            bool wantJump = UsesPlayerInput ? GameInput.Jump && Time.frameCount != _runStartFrame : AiJump;
             AiJump = false;
 
             if (_grounded && wantJump)
@@ -412,7 +417,7 @@ namespace Snake3D
             if (_dashTimer > 0f) _dashTimer -= dt;
             if (_dashCooldownTimer > 0f) _dashCooldownTimer -= dt;
 
-            bool wantDash = _isPlayer ? GameInput.Dash : AiDash;
+            bool wantDash = UsesPlayerInput ? GameInput.Dash : AiDash;
             AiDash = false;
             if (wantDash && _dashCooldownTimer <= 0f)
             {

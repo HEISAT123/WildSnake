@@ -28,15 +28,6 @@ public static class SnakeSceneBuilder
     // Материалы прошлых версий сборщика, которые больше не нужны.
     private static readonly string[] ObsoleteMaterials = { "TileLight", "TileDark", "SnakeStripe", "SnakeEyeWhite", "Ground" };
 
-    private static readonly Color PlateColor = new Color(0.06f, 0.08f, 0.12f, 0.72f);
-    private static readonly Color CardColor = new Color(0.07f, 0.09f, 0.13f, 0.95f);
-    private static readonly Color DimColor = new Color(0f, 0f, 0f, 0.5f);
-    private static readonly Color AccentGreen = new Color(0.35f, 0.8f, 0.42f);
-    private static readonly Color AccentGold = new Color(1f, 0.82f, 0.35f);
-    private static readonly Color AccentRed = new Color(1f, 0.45f, 0.4f);
-    private static readonly Color AccentBlue = new Color(0.4f, 0.6f, 0.95f);
-    private static readonly Color ButtonGrey = new Color(0.33f, 0.38f, 0.48f);
-    private static readonly Color MutedText = new Color(0.8f, 0.84f, 0.9f);
 
     private static readonly Color[] PowerUpColors =
     {
@@ -47,9 +38,7 @@ public static class SnakeSceneBuilder
         new Color(1f, 0.55f, 0.15f)   // Очки x2
     };
 
-    private static readonly string[] PowerUpNames = { "Ускорение", "Замедление", "Щит", "Магнит", "Очки x2" };
 
-    private static Font _font;
     private static bool _urp;
 
     /// <summary>Внешний вид одной змеи.</summary>
@@ -76,7 +65,6 @@ public static class SnakeSceneBuilder
         EnsureFolder("Assets", "Scenes");
         EnsureFolder("Assets", "Materials");
         EnsureFolder("Assets", "Settings");
-        _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         _urp = GraphicsSettings.currentRenderPipeline != null;
         int minimapLayer = EnsureLayer(MINIMAP_LAYER);
         DeleteObsoleteAssets();
@@ -191,6 +179,12 @@ public static class SnakeSceneBuilder
         SnakeController rival = BuildSnake("RivalSnake", rivalLook, false, 0.85f, config, grid, foodSpawner, piecesFx, null, minimapLayer);
         var ai = rival.gameObject.AddComponent<SnakeAI>();
         Wire(ai, ("_snake", rival), ("_player", player), ("_food", foodSpawner), ("_grid", grid));
+        // Автопилот змеи игрока — она сама ползает на фоне главного меню; на игрока не охотится.
+        var playerAi = player.gameObject.AddComponent<SnakeAI>();
+        Wire(playerAi, ("_snake", player), ("_player", rival), ("_food", foodSpawner), ("_grid", grid));
+        SetFloat(playerAi, "_aggression", 0f);
+        SetBool(playerAi, "_canJump", false);
+        playerAi.enabled = false;
 
         // ================= Бонусы =================
         var powerUpSpawner = new GameObject("PowerUpSpawner").AddComponent<PowerUpSpawner>();
@@ -207,6 +201,7 @@ public static class SnakeSceneBuilder
         Wire(hazards, ("_config", config), ("_grid", grid));
         WireArray(hazards, "_spinners", spinners);
         Wire(ai, ("_hazards", hazards));
+        Wire(playerAi, ("_hazards", hazards));
 
         var arena = new GameObject("ShrinkingArena").AddComponent<ShrinkingArena>();
         var dangerWalls = new Object[4];
@@ -263,13 +258,18 @@ public static class SnakeSceneBuilder
         var game = new GameObject("GameManager").AddComponent<GameManager>();
         Wire(game,
             ("_config", config), ("_grid", grid), ("_hazards", hazards), ("_arena", arena),
-            ("_snake", player), ("_rival", rival),
+            ("_snake", player), ("_rival", rival), ("_playerAutopilot", playerAi),
             ("_food", foodSpawner), ("_powerUpSpawner", powerUpSpawner), ("_powerUps", powerUps),
             ("_score", score), ("_leaderboard", leaderboard), ("_settings", settings), ("_audio", audio), ("_cameraRig", rig),
             ("_eatParticles", eatFx), ("_deathParticles", deathFx), ("_dustParticles", dustFx), ("_pickupParticles", pickupFx));
 
         // ================= UI =================
-        BuildUI(game, score, player, powerUps, settings, audio, arena, foodSpawner, leaderboard, camGo.transform, miniCam, minimapTexture);
+        UIBuilder.Build(new UIBuilder.Refs
+        {
+            Game = game, Score = score, Player = player, PowerUps = powerUps, Settings = settings, Audio = audio,
+            Arena = arena, Food = foodSpawner, Leaderboard = leaderboard,
+            CameraTransform = camGo.transform, MinimapCamera = miniCam, MinimapTexture = minimapTexture
+        });
 
         // ================= Сохранение =================
         AssetDatabase.SaveAssets();
@@ -426,413 +426,6 @@ public static class SnakeSceneBuilder
         Wire(spinner, ("_beam", beamRoot));
         go.SetActive(false);
         return spinner;
-    }
-
-    // ===================== UI =====================
-
-    private static void BuildUI(GameManager game, ScoreService score, SnakeController player, PowerUpService powerUps,
-        SettingsService settings, AudioService audio, ShrinkingArena arena, FoodSpawner food, LeaderboardService leaderboard,
-        Transform cameraTransform, Camera minimapCamera, RenderTexture minimapTexture)
-    {
-        var canvasGo = new GameObject("Canvas", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-        canvasGo.layer = LayerMask.NameToLayer("UI");
-        canvasGo.GetComponent<Canvas>().renderMode = RenderMode.ScreenSpaceOverlay;
-        var scaler = canvasGo.GetComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1920f, 1080f);
-        scaler.matchWidthOrHeight = 0.5f;
-        Transform root = canvasGo.transform;
-
-        var eventSystem = new GameObject("EventSystem", typeof(EventSystem));
-#if !ENABLE_LEGACY_INPUT_MANAGER && ENABLE_INPUT_SYSTEM
-        eventSystem.AddComponent<InputSystemUIInputModule>();
-#else
-        eventSystem.AddComponent<StandaloneInputModule>();
-#endif
-
-        // ---------- HUD ----------
-        RectTransform hud = CreateRect("HUD", root);
-        Stretch(hud);
-
-        RectTransform scorePlate = CreatePlate(hud, "ScorePlate", new Vector2(0f, 1f), new Vector2(32f, -28f), new Vector2(340f, 80f), PlateColor);
-        Text scoreText = CreateFillText(scorePlate, "ScoreText", "Счёт: 0", 42, TextAnchor.MiddleLeft, Color.white, 22f);
-        RectTransform levelPlate = CreatePlate(hud, "LevelPlate", new Vector2(0f, 1f), new Vector2(32f, -116f), new Vector2(340f, 56f), PlateColor);
-        Text levelText = CreateFillText(levelPlate, "LevelText", "Уровень 1", 32, TextAnchor.MiddleLeft, AccentGreen, 22f);
-
-        RectTransform bestPlate = CreatePlate(hud, "BestPlate", new Vector2(1f, 1f), new Vector2(-32f, -28f), new Vector2(340f, 80f), PlateColor);
-        Text bestText = CreateFillText(bestPlate, "BestText", "Рекорд: 0", 42, TextAnchor.MiddleRight, AccentGold, 22f);
-        RectTransform timerPlate = CreatePlate(hud, "TimerPlate", new Vector2(1f, 1f), new Vector2(-32f, -116f), new Vector2(220f, 70f), PlateColor);
-        Text timerText = CreateFillText(timerPlate, "TimerText", "2:00", 48, TextAnchor.MiddleCenter, Color.white, 8f);
-        timerPlate.gameObject.SetActive(false);
-
-        // Стрелка на еду.
-        RectTransform pointer = CreatePlate(hud, "FoodPointer", new Vector2(0.5f, 1f), new Vector2(0f, -24f), new Vector2(130f, 130f), PlateColor);
-        Image pointerImg = pointer.GetComponent<Image>();
-        pointerImg.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd");
-        pointerImg.type = Image.Type.Simple;
-        RectTransform arrowPivot = CreateRect("ArrowPivot", pointer);
-        arrowPivot.anchorMin = new Vector2(0.5f, 0.56f);
-        arrowPivot.anchorMax = new Vector2(0.5f, 0.56f);
-        arrowPivot.sizeDelta = new Vector2(70f, 70f);
-        RectTransform arrow = CreateRect("Arrow", arrowPivot);
-        Stretch(arrow);
-        arrow.localRotation = Quaternion.Euler(0f, 0f, 180f); // спрайт смотрит вниз, разворачиваем вверх
-        var arrowImg = arrow.gameObject.AddComponent<Image>();
-        arrowImg.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/DropdownArrow.psd");
-        arrowImg.color = AccentRed;
-        arrowImg.raycastTarget = false;
-        Text pointerLabel = CreateText(pointer, "Label", "еда", 22, TextAnchor.MiddleCenter, new Vector2(0.5f, 0f), new Vector2(0f, 12f), new Vector2(120f, 28f));
-        pointerLabel.color = MutedText;
-
-        // Активные бонусы — колонка строк под уровнем.
-        var rows = new Object[PowerUpColors.Length];
-        var fills = new Object[PowerUpColors.Length];
-        for (int i = 0; i < PowerUpColors.Length; i++)
-        {
-            RectTransform row = CreatePlate(hud, "PowerUp_" + (PowerUpType)i, new Vector2(0f, 1f), new Vector2(32f, -188f - i * 52f), new Vector2(300f, 44f), PlateColor);
-            Image fill = CreateFillBar(row, "Fill", new Color(PowerUpColors[i].r, PowerUpColors[i].g, PowerUpColors[i].b, 0.55f));
-            CreateFillText(row, "Label", PowerUpNames[i], 26, TextAnchor.MiddleLeft, Color.white, 14f);
-            row.gameObject.SetActive(false);
-            rows[i] = row.gameObject;
-            fills[i] = fill;
-        }
-
-        RectTransform dashPlate = CreatePlate(hud, "DashPlate", new Vector2(0f, 0f), new Vector2(32f, 24f), new Vector2(300f, 52f), PlateColor);
-        Image dashFill = CreateFillBar(dashPlate, "Fill", new Color(0.4f, 0.85f, 1f, 0.55f));
-        CreateFillText(dashPlate, "Label", "Рывок  [Shift]", 26, TextAnchor.MiddleLeft, Color.white, 14f);
-
-        RectTransform hintPlate = CreatePlate(hud, "HintPlate", new Vector2(0.5f, 0f), new Vector2(0f, 24f), new Vector2(980f, 52f), PlateColor);
-        CreateFillText(hintPlate, "HintText", "A D / ← → — руль     Space — прыжок     Shift — рывок     Esc — пауза", 26, TextAnchor.MiddleCenter, MutedText, 12f);
-
-        RectTransform minimapFrame = CreatePlate(hud, "Minimap", new Vector2(1f, 0f), new Vector2(-32f, 24f), new Vector2(300f, 300f), PlateColor);
-        RectTransform minimapImageRect = CreateRect("MinimapImage", minimapFrame);
-        Stretch(minimapImageRect);
-        minimapImageRect.offsetMin = new Vector2(8f, 8f);
-        minimapImageRect.offsetMax = new Vector2(-8f, -8f);
-        var raw = minimapImageRect.gameObject.AddComponent<RawImage>();
-        raw.texture = minimapTexture;
-        raw.raycastTarget = false;
-
-        // Подсказки обучения и баннеры.
-        RectTransform tutorialPlate = CreatePlate(hud, "TutorialPlate", new Vector2(0.5f, 0f), new Vector2(0f, 100f), new Vector2(1200f, 64f), new Color(0.1f, 0.3f, 0.15f, 0.85f));
-        Text tutorialText = CreateFillText(tutorialPlate, "TutorialText", "", 30, TextAnchor.MiddleCenter, Color.white, 16f);
-        tutorialPlate.gameObject.SetActive(false);
-
-        RectTransform banner = CreateRect("Banner", hud);
-        banner.anchorMin = new Vector2(0.5f, 0.72f);
-        banner.anchorMax = new Vector2(0.5f, 0.72f);
-        banner.sizeDelta = new Vector2(1200f, 110f);
-        var bannerGroup = banner.gameObject.AddComponent<CanvasGroup>();
-        bannerGroup.alpha = 0f;
-        bannerGroup.blocksRaycasts = false;
-        bannerGroup.interactable = false;
-        Text bannerText = CreateFillText(banner, "BannerText", "", 72, TextAnchor.MiddleCenter, AccentGold, 0f);
-
-        // ---------- Меню: «Неоновый закат» ----------
-        RectTransform menu = NeonMenuBuilder.Build(root, out Button classicButton, out Button timeButton, out Button survivalButton,
-            out Button menuLeaderboardButton, out Button menuSettingsButton, out Button quitButton, out NeonMenu neonMenu);
-
-        // ---------- Пауза ----------
-        RectTransform pause = CreateOverlay(root, "PausePanel", out RectTransform pauseCard, new Vector2(720f, 640f));
-        CreateCardText(pauseCard, "Title", "Пауза", 96, new Vector2(0f, 230f), new Vector2(680f, 120f), Color.white);
-        Button resumeButton = CreateButton(pauseCard, "ResumeButton", "Продолжить", new Vector2(0f, 90f), new Vector2(440f, 84f), 40, AccentGreen);
-        Button pauseRestartButton = CreateButton(pauseCard, "RestartButton", "Заново", new Vector2(0f, -10f), new Vector2(440f, 84f), 40, ButtonGrey);
-        Button pauseSettingsButton = CreateButton(pauseCard, "SettingsButton", "Настройки", new Vector2(0f, -110f), new Vector2(440f, 84f), 40, ButtonGrey);
-        Button pauseMenuButton = CreateButton(pauseCard, "MenuButton", "В меню", new Vector2(0f, -210f), new Vector2(440f, 84f), 40, ButtonGrey);
-
-        // ---------- Game Over ----------
-        RectTransform over = CreateOverlay(root, "GameOverPanel", out RectTransform overCard, new Vector2(840f, 800f));
-        Text overTitle = CreateCardText(overCard, "Title", "Игра окончена", 84, new Vector2(0f, 320f), new Vector2(800f, 110f), AccentRed);
-        Text finalScore = CreateCardText(overCard, "FinalScoreText", "Счёт: 0", 60, new Vector2(0f, 220f), new Vector2(800f, 76f), Color.white);
-        Text rankText = CreateCardText(overCard, "RankText", "", 38, new Vector2(0f, 150f), new Vector2(800f, 50f), AccentGold);
-        Text statsText = CreateCardText(overCard, "StatsText", "", 30, new Vector2(0f, 10f), new Vector2(800f, 210f), MutedText);
-        Button restartButton = CreateButton(overCard, "RestartButton", "Заново (R)", new Vector2(0f, -210f), new Vector2(440f, 84f), 40, AccentGreen);
-        Button overMenuButton = CreateButton(overCard, "MenuButton", "В меню", new Vector2(0f, -310f), new Vector2(440f, 84f), 40, ButtonGrey);
-
-        // ---------- Настройки ----------
-        RectTransform settingsPanel = CreateOverlay(root, "SettingsPanel", out RectTransform settingsCard, new Vector2(920f, 880f));
-        CreateCardText(settingsCard, "Title", "Настройки", 72, new Vector2(0f, 360f), new Vector2(880f, 90f), Color.white);
-        Slider masterSlider = CreateSettingSlider(settingsCard, "Общая громкость", 260f, 0f, 1f);
-        Slider musicSlider = CreateSettingSlider(settingsCard, "Музыка", 180f, 0f, 1f);
-        Slider sfxSlider = CreateSettingSlider(settingsCard, "Звуки", 100f, 0f, 1f);
-        Slider steerSlider = CreateSettingSlider(settingsCard, "Чувствительность руля", 20f, 0.5f, 1.5f);
-        Toggle fullscreenToggle = CreateSettingToggle(settingsCard, "Полный экран (F11)", -70f);
-        Toggle minimapToggle = CreateSettingToggle(settingsCard, "Мини-карта", -145f);
-        Toggle rivalToggle = CreateSettingToggle(settingsCard, "Змея-соперник (со следующей партии)", -220f);
-        Button qualityButton = CreateButton(settingsCard, "QualityButton", "Качество", new Vector2(-210f, -305f), new Vector2(400f, 70f), 30, ButtonGrey);
-        Text qualityLabel = qualityButton.GetComponentInChildren<Text>();
-        Button tutorialButton = CreateButton(settingsCard, "TutorialButton", "Показать обучение", new Vector2(210f, -305f), new Vector2(400f, 70f), 30, ButtonGrey);
-        Button settingsBack = CreateButton(settingsCard, "BackButton", "Назад", new Vector2(0f, -390f), new Vector2(360f, 70f), 34, AccentGreen);
-
-        // ---------- Рекорды ----------
-        RectTransform leaderboardPanel = CreateOverlay(root, "LeaderboardPanel", out RectTransform lbCard, new Vector2(1240f, 800f));
-        CreateCardText(lbCard, "Title", "Рекорды", 72, new Vector2(0f, 330f), new Vector2(1200f, 90f), AccentGold);
-        var columns = new Object[3];
-        for (int i = 0; i < 3; i++)
-        {
-            Text col = CreateText(lbCard, "Column" + i, "", 28, TextAnchor.UpperLeft, new Vector2(0.5f, 0.5f),
-                new Vector2(-400f + i * 400f, 10f), new Vector2(360f, 520f));
-            col.color = MutedText;
-            columns[i] = col;
-        }
-        Button lbBack = CreateButton(lbCard, "BackButton", "Назад", new Vector2(0f, -330f), new Vector2(360f, 70f), 34, AccentGreen);
-
-        pause.gameObject.SetActive(false);
-        over.gameObject.SetActive(false);
-        settingsPanel.gameObject.SetActive(false);
-        leaderboardPanel.gameObject.SetActive(false);
-
-        // ---------- Компоненты ----------
-        var tutorial = canvasGo.AddComponent<TutorialController>();
-        Wire(tutorial, ("_game", game), ("_snake", player), ("_plate", tutorialPlate.gameObject), ("_text", tutorialText));
-
-        var settingsComp = settingsPanel.gameObject.AddComponent<SettingsPanel>();
-        Wire(settingsComp, ("_settings", settings), ("_audio", audio), ("_tutorial", tutorial),
-            ("_masterSlider", masterSlider), ("_musicSlider", musicSlider), ("_sfxSlider", sfxSlider), ("_steerSlider", steerSlider),
-            ("_fullscreenToggle", fullscreenToggle), ("_minimapToggle", minimapToggle), ("_rivalToggle", rivalToggle),
-            ("_qualityButton", qualityButton), ("_qualityLabel", qualityLabel), ("_tutorialButton", tutorialButton), ("_backButton", settingsBack));
-
-        Wire(neonMenu, ("_leaderboard", leaderboard), ("_audio", audio));
-        WireArray(neonMenu, "_overlays", new Object[] { settingsPanel.gameObject, leaderboardPanel.gameObject });
-
-        var lbComp = leaderboardPanel.gameObject.AddComponent<LeaderboardPanel>();
-        Wire(lbComp, ("_leaderboard", leaderboard), ("_audio", audio), ("_backButton", lbBack));
-        WireArray(lbComp, "_columns", columns);
-
-        var ui = canvasGo.AddComponent<UIController>();
-        Wire(ui,
-            ("_game", game), ("_score", score), ("_snake", player), ("_powerUps", powerUps), ("_settings", settings),
-            ("_audio", audio), ("_arena", arena), ("_food", food), ("_cameraTransform", cameraTransform), ("_minimapCamera", minimapCamera),
-            ("_scoreText", scoreText), ("_bestText", bestText), ("_levelText", levelText),
-            ("_timerPlate", timerPlate.gameObject), ("_timerText", timerText),
-            ("_foodPointer", pointer.gameObject), ("_foodArrow", arrowPivot), ("_dashFill", dashFill),
-            ("_minimapRoot", minimapFrame.gameObject), ("_bannerGroup", bannerGroup), ("_bannerText", bannerText),
-            ("_menuPanel", menu.gameObject), ("_pausePanel", pause.gameObject), ("_gameOverPanel", over.gameObject),
-            ("_settingsPanel", settingsPanel.gameObject), ("_leaderboardPanel", leaderboardPanel.gameObject),
-            ("_gameOverTitle", overTitle), ("_finalScoreText", finalScore), ("_rankText", rankText), ("_statsText", statsText),
-            ("_classicButton", classicButton), ("_timeAttackButton", timeButton), ("_survivalButton", survivalButton),
-            ("_menuLeaderboardButton", menuLeaderboardButton), ("_menuSettingsButton", menuSettingsButton), ("_quitButton", quitButton),
-            ("_resumeButton", resumeButton), ("_pauseRestartButton", pauseRestartButton),
-            ("_pauseSettingsButton", pauseSettingsButton), ("_pauseMenuButton", pauseMenuButton),
-            ("_restartButton", restartButton), ("_gameOverMenuButton", overMenuButton));
-        WireArray(ui, "_powerUpRows", rows);
-        WireArray(ui, "_powerUpFills", fills);
-    }
-
-    internal static RectTransform CreateRect(string name, Transform parent)
-    {
-        var go = new GameObject(name, typeof(RectTransform));
-        go.layer = LayerMask.NameToLayer("UI");
-        var rt = (RectTransform)go.transform;
-        rt.SetParent(parent, false);
-        return rt;
-    }
-
-    internal static void Stretch(RectTransform rt)
-    {
-        rt.anchorMin = Vector2.zero;
-        rt.anchorMax = Vector2.one;
-        rt.offsetMin = Vector2.zero;
-        rt.offsetMax = Vector2.zero;
-    }
-
-    /// <summary>Скруглённая полупрозрачная плашка; anchor одновременно служит pivot.</summary>
-    private static RectTransform CreatePlate(Transform parent, string name, Vector2 anchor, Vector2 position, Vector2 size, Color color)
-    {
-        RectTransform rt = CreateRect(name, parent);
-        rt.anchorMin = anchor;
-        rt.anchorMax = anchor;
-        rt.pivot = anchor;
-        rt.anchoredPosition = position;
-        rt.sizeDelta = size;
-        var img = rt.gameObject.AddComponent<Image>();
-        img.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
-        img.type = Image.Type.Sliced;
-        img.color = color;
-        img.raycastTarget = false;
-        return rt;
-    }
-
-    /// <summary>Полоса заполнения на всю плашку (Image типа Filled, слева направо).</summary>
-    private static Image CreateFillBar(Transform parent, string name, Color color)
-    {
-        RectTransform rt = CreateRect(name, parent);
-        Stretch(rt);
-        rt.offsetMin = new Vector2(4f, 4f);
-        rt.offsetMax = new Vector2(-4f, -4f);
-        var img = rt.gameObject.AddComponent<Image>();
-        img.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
-        img.type = Image.Type.Filled;
-        img.fillMethod = Image.FillMethod.Horizontal;
-        img.fillOrigin = 0;
-        img.fillAmount = 1f;
-        img.color = color;
-        img.raycastTarget = false;
-        return img;
-    }
-
-    /// <summary>Затемнение всего экрана и карточка по центру. Возвращает корень панели.</summary>
-    private static RectTransform CreateOverlay(Transform parent, string name, out RectTransform card, Vector2 cardSize)
-    {
-        RectTransform panel = CreateRect(name, parent);
-        Stretch(panel);
-        panel.gameObject.AddComponent<Image>().color = DimColor;
-        card = CreatePlate(panel, "Card", new Vector2(0.5f, 0.5f), Vector2.zero, cardSize, CardColor);
-        return panel;
-    }
-
-    internal static Text CreateText(Transform parent, string name, string value, int size, TextAnchor alignment,
-        Vector2 anchor, Vector2 position, Vector2 sizeDelta)
-    {
-        RectTransform rt = CreateRect(name, parent);
-        rt.anchorMin = anchor;
-        rt.anchorMax = anchor;
-        rt.pivot = anchor;
-        rt.anchoredPosition = position;
-        rt.sizeDelta = sizeDelta;
-        return SetupText(rt, value, size, alignment, Color.white);
-    }
-
-    /// <summary>Текст на всю плашку с горизонтальным отступом.</summary>
-    private static Text CreateFillText(Transform parent, string name, string value, int size, TextAnchor alignment, Color color, float padding)
-    {
-        RectTransform rt = CreateRect(name, parent);
-        Stretch(rt);
-        rt.offsetMin = new Vector2(padding, 0f);
-        rt.offsetMax = new Vector2(-padding, 0f);
-        return SetupText(rt, value, size, alignment, color);
-    }
-
-    private static Text CreateCardText(Transform parent, string name, string value, int size, Vector2 position, Vector2 sizeDelta, Color color)
-    {
-        Text text = CreateText(parent, name, value, size, TextAnchor.MiddleCenter, new Vector2(0.5f, 0.5f), position, sizeDelta);
-        text.color = color;
-        return text;
-    }
-
-    private static Text SetupText(RectTransform rt, string value, int size, TextAnchor alignment, Color color)
-    {
-        var text = rt.gameObject.AddComponent<Text>();
-        text.font = _font;
-        text.text = value;
-        text.fontSize = size;
-        text.alignment = alignment;
-        text.color = color;
-        text.lineSpacing = 1.1f;
-        text.horizontalOverflow = HorizontalWrapMode.Wrap;
-        text.verticalOverflow = VerticalWrapMode.Overflow;
-        text.raycastTarget = false;
-
-        // Обводка: текст читается и на светлом поле, и на тёмном фоне.
-        var outline = rt.gameObject.AddComponent<Outline>();
-        outline.effectColor = new Color(0f, 0f, 0f, 0.75f);
-        outline.effectDistance = new Vector2(2f, -2f);
-        return text;
-    }
-
-    private static Button CreateButton(Transform parent, string name, string label, Vector2 position, Vector2 size, int fontSize, Color color)
-    {
-        RectTransform rt = CreatePlate(parent, name, new Vector2(0.5f, 0.5f), position, size, color);
-        rt.GetComponent<Image>().raycastTarget = true;
-
-        var button = rt.gameObject.AddComponent<Button>();
-        ColorBlock colors = button.colors;
-        colors.highlightedColor = new Color(0.85f, 0.85f, 0.85f);
-        colors.pressedColor = new Color(0.65f, 0.65f, 0.65f);
-        button.colors = colors;
-
-        CreateFillText(rt, "Label", label, fontSize, TextAnchor.MiddleCenter, Color.white, 8f);
-        return button;
-    }
-
-    /// <summary>Строка настроек: подпись слева, слайдер справа.</summary>
-    private static Slider CreateSettingSlider(Transform card, string label, float y, float min, float max)
-    {
-        CreateText(card, "Label", label, 30, TextAnchor.MiddleLeft, new Vector2(0.5f, 0.5f), new Vector2(-180f, y), new Vector2(460f, 50f))
-            .rectTransform.pivot = new Vector2(0.5f, 0.5f);
-
-        RectTransform rt = CreateRect("Slider", card);
-        rt.anchorMin = new Vector2(0.5f, 0.5f);
-        rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = new Vector2(220f, y);
-        rt.sizeDelta = new Vector2(360f, 36f);
-        var slider = rt.gameObject.AddComponent<Slider>();
-
-        Sprite uiSprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
-        RectTransform bg = CreateRect("Background", rt);
-        bg.anchorMin = new Vector2(0f, 0.3f);
-        bg.anchorMax = new Vector2(1f, 0.7f);
-        bg.offsetMin = Vector2.zero;
-        bg.offsetMax = Vector2.zero;
-        var bgImg = bg.gameObject.AddComponent<Image>();
-        bgImg.sprite = uiSprite;
-        bgImg.type = Image.Type.Sliced;
-        bgImg.color = new Color(0.25f, 0.28f, 0.34f);
-
-        RectTransform fillArea = CreateRect("Fill Area", rt);
-        fillArea.anchorMin = new Vector2(0f, 0.3f);
-        fillArea.anchorMax = new Vector2(1f, 0.7f);
-        fillArea.offsetMin = new Vector2(5f, 0f);
-        fillArea.offsetMax = new Vector2(-15f, 0f);
-        RectTransform fill = CreateRect("Fill", fillArea);
-        fill.sizeDelta = new Vector2(10f, 0f);
-        var fillImg = fill.gameObject.AddComponent<Image>();
-        fillImg.sprite = uiSprite;
-        fillImg.type = Image.Type.Sliced;
-        fillImg.color = AccentGreen;
-
-        RectTransform handleArea = CreateRect("Handle Slide Area", rt);
-        Stretch(handleArea);
-        handleArea.offsetMin = new Vector2(10f, 0f);
-        handleArea.offsetMax = new Vector2(-10f, 0f);
-        RectTransform handle = CreateRect("Handle", handleArea);
-        handle.sizeDelta = new Vector2(36f, 0f);
-        var handleImg = handle.gameObject.AddComponent<Image>();
-        handleImg.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd");
-        handleImg.color = Color.white;
-
-        slider.fillRect = fill;
-        slider.handleRect = handle;
-        slider.targetGraphic = handleImg;
-        slider.direction = Slider.Direction.LeftToRight;
-        slider.minValue = min;
-        slider.maxValue = max;
-        slider.value = max;
-        return slider;
-    }
-
-    /// <summary>Строка настроек: подпись слева, флажок справа.</summary>
-    private static Toggle CreateSettingToggle(Transform card, string label, float y)
-    {
-        CreateText(card, "Label", label, 30, TextAnchor.MiddleLeft, new Vector2(0.5f, 0.5f), new Vector2(-110f, y), new Vector2(600f, 50f))
-            .rectTransform.pivot = new Vector2(0.5f, 0.5f);
-
-        RectTransform rt = CreateRect("Toggle", card);
-        rt.anchorMin = new Vector2(0.5f, 0.5f);
-        rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.anchoredPosition = new Vector2(360f, y);
-        rt.sizeDelta = new Vector2(52f, 52f);
-        var toggle = rt.gameObject.AddComponent<Toggle>();
-
-        RectTransform bg = CreateRect("Background", rt);
-        Stretch(bg);
-        var bgImg = bg.gameObject.AddComponent<Image>();
-        bgImg.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
-        bgImg.type = Image.Type.Sliced;
-        bgImg.color = new Color(0.85f, 0.88f, 0.92f);
-
-        RectTransform check = CreateRect("Checkmark", bg);
-        Stretch(check);
-        check.offsetMin = new Vector2(6f, 6f);
-        check.offsetMax = new Vector2(-6f, -6f);
-        var checkImg = check.gameObject.AddComponent<Image>();
-        checkImg.sprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Checkmark.psd");
-        checkImg.color = new Color(0.15f, 0.55f, 0.25f);
-
-        toggle.targetGraphic = bgImg;
-        toggle.graphic = checkImg;
-        toggle.isOn = true;
-        return toggle;
     }
 
     // ===================== Объекты =====================
@@ -1135,6 +728,13 @@ public static class SnakeSceneBuilder
         {
             string path = MATERIALS_FOLDER + "/" + name + ".mat";
             if (AssetDatabase.LoadAssetAtPath<Material>(path) != null) AssetDatabase.DeleteAsset(path);
+        }
+
+        // Текстуры неонового меню больше не используются.
+        foreach (string name in new[] { "MenuSky", "MenuSun", "MenuMountains", "MenuGrid" })
+        {
+            string path = "Assets/Materials/UI/" + name + ".asset";
+            if (AssetDatabase.LoadAssetAtPath<Texture2D>(path) != null) AssetDatabase.DeleteAsset(path);
         }
 
         // Шахматная текстура пола заменена травой из EnvironmentBuilder.

@@ -30,6 +30,9 @@ namespace Snake3D
         [Tooltip("Змея-соперник под управлением ИИ (может отсутствовать)")]
         [SerializeField] private SnakeController _rival;
 
+        [Tooltip("ИИ-автопилот змеи игрока: ведёт её на живом фоне главного меню")]
+        [SerializeField] private SnakeAI _playerAutopilot;
+
         [Header("Предметы")]
         [Tooltip("Еда")]
         [SerializeField] private FoodSpawner _food;
@@ -81,6 +84,13 @@ namespace Snake3D
         [Tooltip("Сколько частиц при подборе бонуса")]
         [SerializeField, Min(0)] private int _pickupParticleCount = 30;
 
+        [Header("Живое меню")]
+        [Tooltip("Через сколько секунд змея на фоне меню возрождается после аварии")]
+        [SerializeField, Min(0f)] private float _menuRespawnDelay = 2f;
+
+        [Tooltip("Максимальная длина змей на фоне меню, клеток (чтобы не заполнили поле)")]
+        [SerializeField, Min(1f)] private float _menuMaxLength = 9f;
+
         [Header("Старт")]
         [Tooltip("Начинать игру сразу, минуя меню")]
         [SerializeField] private bool _skipMenu;
@@ -100,6 +110,7 @@ namespace Snake3D
 
         private RunStats _stats;
         private float _rivalRespawnTimer = -1f;
+        private float _menuRespawnTimer = -1f;
 
         private bool RivalActive => _rival != null && _rival.gameObject.activeSelf;
 
@@ -145,14 +156,24 @@ namespace Snake3D
         private void Start()
         {
             ApplySettings();
-            PrepareRound();
-            SetState(_skipMenu ? GameState.Playing : GameState.Menu);
+            if (_skipMenu)
+            {
+                PrepareRound(true);
+                SetState(GameState.Playing);
+            }
+            else
+            {
+                OpenMenu();
+            }
         }
 
         private void Update()
         {
             switch (State)
             {
+                case GameState.Menu:
+                    TickMenu(Time.deltaTime);
+                    break;
                 case GameState.Playing:
                     if (GameInput.Pause) SetState(GameState.Paused);
                     else TickPlaying(Time.deltaTime);
@@ -171,8 +192,12 @@ namespace Snake3D
 
         public void StartGame(GameMode mode)
         {
+            // Из меню камера не прыгает, а плавно перелетает из витрины за змею.
+            bool fromMenu = State == GameState.Menu;
             Mode = mode;
-            PrepareRound();
+            SetAutopilot(false);
+            _cameraRig.Showcase = false;
+            PrepareRound(!fromMenu);
             SetState(GameState.Playing);
         }
 
@@ -188,11 +213,12 @@ namespace Snake3D
 
         public void OpenMenu()
         {
-            PrepareRound();
+            _cameraRig.Showcase = true;
+            PrepareRound(true);
             SetState(GameState.Menu);
         }
 
-        private void PrepareRound()
+        private void PrepareRound(bool snapCamera)
         {
             Time.timeScale = 1f;
             _arena.ResetArena(Mode == GameMode.Survival);
@@ -222,7 +248,7 @@ namespace Snake3D
             }
 
             SpawnFood();
-            _cameraRig.SnapToTarget();
+            if (snapCamera) _cameraRig.SnapToTarget();
             _audio.SetMusicPitch(1f);
             LevelChanged?.Invoke(Level);
         }
@@ -231,8 +257,12 @@ namespace Snake3D
         {
             State = state;
             bool running = state == GameState.Playing;
-            _snake.IsRunning = running;
-            if (RivalActive) _rival.IsRunning = running;
+            bool menu = state == GameState.Menu;
+            // В меню змеи тоже ползают — это живой фон, игрок ими не управляет.
+            _snake.IsRunning = running || menu;
+            if (RivalActive) _rival.IsRunning = running || menu;
+            SetAutopilot(menu);
+            _cameraRig.Showcase = menu;
             _powerUps.IsTicking = running;
             _powerUpSpawner.IsRunning = running;
             _arena.IsRunning = running;
@@ -269,10 +299,9 @@ namespace Snake3D
                     CheckSnakeCollisions();
                     if (State != GameState.Playing) return;
                 }
-                else if (_rivalRespawnTimer > 0f)
+                else
                 {
-                    _rivalRespawnTimer -= dt;
-                    if (_rivalRespawnTimer <= 0f) SpawnRival();
+                    TickRivalRespawn(dt);
                 }
             }
 
@@ -281,6 +310,35 @@ namespace Snake3D
                 PrepareOccupancy();
                 _powerUpSpawner.SpawnNow();
             }
+        }
+
+        /// <summary>Живой фон меню: змеи ездят сами, после аварии возрождаются. Очки и рекорды не трогаем.</summary>
+        private void TickMenu(float dt)
+        {
+            if (!_snake.IsAlive)
+            {
+                _menuRespawnTimer -= dt;
+                if (_menuRespawnTimer <= 0f)
+                {
+                    _snake.ResetSnake(_grid.Center, UnityEngine.Random.Range(0f, 360f));
+                    _snake.IsRunning = true;
+                }
+            }
+
+            if (RivalActive && !_rival.IsAlive) TickRivalRespawn(dt);
+        }
+
+        private void TickRivalRespawn(float dt)
+        {
+            if (_rivalRespawnTimer <= 0f) return;
+            _rivalRespawnTimer -= dt;
+            if (_rivalRespawnTimer <= 0f) SpawnRival();
+        }
+
+        private void SetAutopilot(bool on)
+        {
+            _snake.AutoPilot = on;
+            if (_playerAutopilot != null) _playerAutopilot.enabled = on;
         }
 
         private void ApplyPowerUps()
@@ -326,7 +384,7 @@ namespace Snake3D
             Vector3 toCenter = _grid.Center - best;
             float yaw = toCenter.sqrMagnitude > 0.01f ? Mathf.Atan2(toCenter.x, toCenter.z) * Mathf.Rad2Deg : 0f;
             _rival.ResetSnake(best, yaw);
-            _rival.IsRunning = State == GameState.Playing;
+            _rival.IsRunning = State == GameState.Playing || State == GameState.Menu;
             _rivalRespawnTimer = -1f;
         }
 
@@ -357,6 +415,14 @@ namespace Snake3D
 
         private void OnPlayerFoodEaten(Vector3 position)
         {
+            if (State == GameState.Menu)
+            {
+                if (_snake.BodyLengthCells < _menuMaxLength) _snake.Grow(_config.GrowthPerFood);
+                Emit(_eatParticles, _food.Position, _eatParticleCount / 2);
+                SpawnFood();
+                return;
+            }
+
             FoodKind kind = _food.Kind;
             switch (kind)
             {
@@ -393,8 +459,9 @@ namespace Snake3D
 
         private void OnRivalFoodEaten(Vector3 position)
         {
+            bool capped = State == GameState.Menu && _rival.BodyLengthCells >= _menuMaxLength;
             if (_food.Kind == FoodKind.Rotten) _rival.Shrink(_config.RottenShrink);
-            else _rival.Grow(_config.GrowthPerFood);
+            else if (!capped) _rival.Grow(_config.GrowthPerFood);
             Emit(_eatParticles, _food.Position, _eatParticleCount / 2);
             SpawnFood();
         }
@@ -421,6 +488,13 @@ namespace Snake3D
 
         private void OnPlayerDied(Vector3 position)
         {
+            if (State == GameState.Menu)
+            {
+                Emit(_deathParticles, position, _deathParticleCount / 2);
+                _menuRespawnTimer = _menuRespawnDelay;
+                return;
+            }
+
             Emit(_deathParticles, position, _deathParticleCount);
             _audio.Play(SoundId.Death);
             _cameraRig.Shake(0.45f, 0.6f);
@@ -430,23 +504,26 @@ namespace Snake3D
         private void OnRivalDied(Vector3 position)
         {
             Emit(_deathParticles, position, _deathParticleCount / 2);
-            _audio.Play(SoundId.Land);
+            if (State != GameState.Menu) _audio.Play(SoundId.Land);
             _rivalRespawnTimer = _config.RivalRespawnDelay;
         }
 
+        // На фоне меню змеи прыгают и делают рывки сами — без звуков и тряски, чтобы не отвлекать.
         private void OnJumped()
         {
+            if (State == GameState.Menu) return;
             _audio.Play(SoundId.Jump);
         }
 
         private void OnLanded(Vector3 position)
         {
-            _audio.Play(SoundId.Land);
+            if (State != GameState.Menu) _audio.Play(SoundId.Land);
             Emit(_dustParticles, position, _dustParticleCount);
         }
 
         private void OnDashed()
         {
+            if (State == GameState.Menu) return;
             _audio.Play(SoundId.Dash);
             _cameraRig.Shake(0.08f, 0.2f);
         }
