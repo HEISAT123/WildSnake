@@ -11,9 +11,7 @@
 
 ![Unity](https://img.shields.io/badge/Unity-6000.6-000000?style=for-the-badge&logo=unity&logoColor=white)
 ![URP](https://img.shields.io/badge/Render-URP%2017-c8f533?style=for-the-badge)
-![C#](https://img.shields.io/badge/C%23-100%25-239120?style=for-the-badge&logo=csharp&logoColor=white)
 ![Platform](https://img.shields.io/badge/Windows-Desktop-0078D6?style=for-the-badge&logo=windows&logoColor=white)
-![Assets](https://img.shields.io/badge/сторонних%20ассетов-0-ff6b4d?style=for-the-badge)
 
 <br>
 
