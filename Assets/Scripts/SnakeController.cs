@@ -219,6 +219,9 @@ namespace Snake3D
         /// <summary>Множитель цены броска в выносливости от улучшений.</summary>
         public float StrikeCostScale { get; set; } = 1f;
 
+        /// <summary>Множитель скорости в воде (улучшение «Пловец»).</summary>
+        public float SwimSpeedScale { get; set; } = 1f;
+
         /// <summary>Змея душит добычу (ставит GameManager): тело сжимается кольцами.</summary>
         public bool IsConstricting { get; set; }
 
@@ -266,6 +269,8 @@ namespace Snake3D
         private bool _grounded;
 
         private readonly Stamina _stamina = new Stamina();
+        private float _coolRateScale = 1f;
+        private float _ambushDelayScale = 1f;
         private readonly AmbushTracker _ambush = new AmbushTracker();
         private readonly Digestion _digestion = new Digestion();
         private readonly BodyTemperature _temperature = new BodyTemperature();
@@ -298,13 +303,27 @@ namespace Snake3D
 
             _stamina.RegenPerSecond = _config.StaminaRegen;
             _stamina.RegenDelay = _config.StaminaRegenDelay;
-            _ambush.Delay = _config.AmbushDelay;
+            _ambush.Delay = _config.AmbushDelay * _ambushDelayScale;
             _ambush.Ramp = _config.AmbushRamp;
             _ambush.OpenAwareness = _config.AmbushAwareness;
             _ambush.CoverAwareness = _config.AmbushCoverAwareness;
             _temperature.HeatRate = _config.HeatRate;
-            _temperature.CoolRate = _config.CoolRate;
+            _temperature.CoolRate = _config.CoolRate * _coolRateScale;
             _temperature.ColdSlowdown = _config.ColdSlowdown;
+        }
+
+        /// <summary>Тело остывает медленнее (улучшение «Тёплая кровь»): множитель к скорости остывания из баланса.</summary>
+        public void SetCoolRateScale(float scale)
+        {
+            _coolRateScale = scale;
+            if (_config != null) _temperature.CoolRate = _config.CoolRate * scale;
+        }
+
+        /// <summary>Засада наступает быстрее (улучшение «Терпеливый охотник»): множитель к задержке засады из баланса.</summary>
+        public void SetAmbushDelayScale(float scale)
+        {
+            _ambushDelayScale = scale;
+            if (_config != null) _ambush.Delay = _config.AmbushDelay * scale;
         }
 
         /// <summary>Поставить змейку в точку с заданным курсом (град, 0 — вдоль +Z).</summary>
@@ -714,7 +733,7 @@ namespace Snake3D
                 target = _config.PaceSpeed(EffectivePace) * _moveAmount * _speedScale * ExternalSpeedMultiplier;
                 if (IsExposed) target *= _config.MissSlowdown;
                 target *= _digestion.SpeedMultiplier * _temperature.SpeedMultiplier;
-                if (_inWater) target *= _config.SwimSpeed;
+                if (_inWater) target *= _config.SwimSpeed * SwimSpeedScale;
                 else target *= SlopeSpeedMultiplier() * ClimbSpeedMultiplier();
                 // Крутой разворот — сбавляем ход, иначе дуга вышла бы слишком широкой.
                 float turnAbs = Mathf.Abs(delta);

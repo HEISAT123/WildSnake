@@ -541,7 +541,7 @@ namespace Snake3D
             TickConstriction(dt);
             // Голодная и замёрзшая змея медленнее восстанавливает силы.
             _snake.Stamina.RegenMultiplier = Mathf.Lerp(_config.HungryStaminaRegen, 1f, Mathf.Clamp01(_survival.Satiety01 * 2f))
-                                             * _snake.Temperature.RegenMultiplier;
+                                             * _snake.Temperature.RegenMultiplier * _upgrades.StaminaRegenMultiplier;
             TickFoxScare();
             // Кладка зреет, пока змея её охраняет; вылупились — следующее поколение.
             if (_quest.TickHatch(dt))
@@ -625,6 +625,11 @@ namespace Snake3D
             _scent.RadiusMultiplier = _upgrades.SmellRadiusMultiplier;
             _scent.CooldownMultiplier = _upgrades.SmellCooldownMultiplier;
             _wildlife.PlayerAwarenessMultiplier = _upgrades.AwarenessMultiplier;
+            _snake.SetCoolRateScale(_upgrades.CoolRateMultiplier);
+            _snake.SetAmbushDelayScale(_upgrades.AmbushDelayMultiplier);
+            _snake.SwimSpeedScale = _upgrades.SwimSpeedMultiplier;
+            _survival.RegenPerSecond = _config.RegenPerSecond * _upgrades.HealthRegenMultiplier;
+            _constriction.Duration = _config.ConstrictDuration * _upgrades.ConstrictDurationMultiplier;
         }
 
         private void BeginMolt()

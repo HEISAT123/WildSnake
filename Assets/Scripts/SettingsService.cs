@@ -15,6 +15,7 @@ namespace Snake3D
         private const string KEY_FULLSCREEN = "Snake3D.Settings.Fullscreen";
         private const string KEY_HUD = "Snake3D.Settings.Hud";
         private const string KEY_RIVAL = "Snake3D.Settings.Rival";
+        private const string KEY_MINIMAP = "Snake3D.Settings.Minimap";
 
         public event Action Changed;
 
@@ -28,6 +29,8 @@ namespace Snake3D
         /// <summary>Интерфейс в игре (H): без него остаются только виньетки и звук.</summary>
         public bool ShowHud { get; private set; }
         public bool RivalEnabled { get; private set; }
+        /// <summary>Мини-карта в углу экрана во время партии.</summary>
+        public bool ShowMinimap { get; private set; }
 
         public string QualityName
         {
@@ -49,6 +52,7 @@ namespace Snake3D
             Fullscreen = PlayerPrefs.GetInt(KEY_FULLSCREEN, Screen.fullScreen ? 1 : 0) == 1;
             ShowHud = PlayerPrefs.GetInt(KEY_HUD, 1) == 1;
             RivalEnabled = PlayerPrefs.GetInt(KEY_RIVAL, 1) == 1;
+            ShowMinimap = PlayerPrefs.GetInt(KEY_MINIMAP, 1) == 1;
             Apply();
         }
 
@@ -65,6 +69,7 @@ namespace Snake3D
         public void SetFullscreen(bool value) { Fullscreen = value; PlayerPrefs.SetInt(KEY_FULLSCREEN, value ? 1 : 0); Commit(); }
         public void SetShowHud(bool value) { ShowHud = value; PlayerPrefs.SetInt(KEY_HUD, value ? 1 : 0); Commit(); }
         public void SetRivalEnabled(bool value) { RivalEnabled = value; PlayerPrefs.SetInt(KEY_RIVAL, value ? 1 : 0); Commit(); }
+        public void SetShowMinimap(bool value) { ShowMinimap = value; PlayerPrefs.SetInt(KEY_MINIMAP, value ? 1 : 0); Commit(); }
 
         public void CycleQuality()
         {

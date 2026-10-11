@@ -13,6 +13,8 @@ internal static class UISpriteFactory
 {
     private const string FOLDER = "Assets/Materials/UI";
     private const int SIZE = 64;
+    // Значки карты рисуются в 128 px с mip-картами: на экране они 15–40 px и без mip-карт «рябят» лесенкой.
+    private const int ICON_SIZE = 128;
     private const float CUT = 14f;
 
     /// <summary>Плашка со срезанными левым верхним и правым нижним углами.</summary>
@@ -107,6 +109,38 @@ internal static class UISpriteFactory
     public static Sprite MapBirdNest => CreateIcon("MapBirdNest", (x, y) =>
         InEllipse(x, y, 32f, 34f, 10f, 13f)
         || (y <= 28f && InEllipse(x, y, 32f, 28f, 26f, 18f) && !InEllipse(x, y, 32f, 34f, 13f, 16f)));
+
+    /// <summary>Наконечник стрелки метки угрозы (смотрит вверх), с обводкой — читается на любом фоне.</summary>
+    public static Sprite ThreatArrow => CreateIcon("ThreatArrow", (x, y) =>
+        InTriangle(x, y, 32f, 60f, 6f, 12f, 58f, 12f) && !InTriangle(x, y, 32f, 30f, 16f, 12f, 48f, 12f));
+
+    /// <summary>Круг высокого разрешения — маска мини-карты.</summary>
+    public static Sprite MapDisc => CreateSprite("MapDisc", (x, y) =>
+        Vector2.Distance(new Vector2(x, y), new Vector2(128f, 128f)) <= 127f, 0, 256);
+
+    /// <summary>
+    /// Мягкая тень из левого верхнего угла: плотная в углу и плавно гаснущая и вправо, и вниз — без видимых краёв.
+    /// Для других углов RawImage отражает её через uvRect.
+    /// </summary>
+    public static Texture2D CornerShade()
+    {
+        const int w = 256;
+        const int h = 160;
+        var tex = new Texture2D(w, h, TextureFormat.RGBA32, false) { name = "CornerShade", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+        for (int y = 0; y < h; y++)
+        {
+            for (int x = 0; x < w; x++)
+            {
+                float u = x / (w - 1f);
+                float v = 1f - y / (h - 1f);
+                float d = Mathf.Sqrt(u * u + v * v);
+                float a = Mathf.Pow(1f - Smooth(d), 1.4f);
+                tex.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+            }
+        }
+        tex.Apply();
+        return Save(tex);
+    }
 
     /// <summary>Солнечный камень: солнце с лучами.</summary>
     public static Sprite MapSun => CreateIcon("MapSun", (x, y) =>
@@ -315,43 +349,47 @@ internal static class UISpriteFactory
         return ImportSprite(path, border);
     }
 
-    private static Sprite ImportSprite(string path, int border)
+    private static Sprite ImportSprite(string path, int border, bool mipmaps = false)
     {
-        AssetDatabase.ImportAsset(path);
+        AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
         var importer = (TextureImporter)AssetImporter.GetAtPath(path);
         importer.textureType = TextureImporterType.Sprite;
         importer.spriteImportMode = SpriteImportMode.Single;
         importer.spriteBorder = new Vector4(border, border, border, border);
-        importer.mipmapEnabled = false;
+        importer.mipmapEnabled = mipmaps;
         importer.alphaIsTransparency = true;
         importer.wrapMode = TextureWrapMode.Clamp;
-        importer.filterMode = FilterMode.Bilinear;
+        importer.filterMode = mipmaps ? FilterMode.Trilinear : FilterMode.Bilinear;
         importer.textureCompression = TextureImporterCompression.Uncompressed;
         importer.SaveAndReimport();
         return AssetDatabase.LoadAssetAtPath<Sprite>(path);
     }
 
-    /// <summary>Значок карты: белая заливка формы и тёмная обводка толщиной outline пикселей (из 64).</summary>
+    /// <summary>
+    /// Значок карты: белая заливка формы и тёмная обводка толщиной outline (форма задана в координатах 0..64,
+    /// растр — ICON_SIZE). Старые 64-пиксельные значки перерисовываются по тому же пути — ссылки на них сохраняются.
+    /// </summary>
     private static Sprite CreateIcon(string name, Func<float, float, bool> inside, float outline = 4f)
     {
         string path = FOLDER + "/" + name + ".png";
         var cached = AssetDatabase.LoadAssetAtPath<Sprite>(path);
-        if (cached != null) return cached;
+        if (cached != null && cached.texture.width == ICON_SIZE) return cached;
         EnsureFolder();
 
         var ink = new Color(0.03f, 0.04f, 0.05f);
         const int directions = 16;
-        var tex = new Texture2D(SIZE, SIZE, TextureFormat.RGBA32, false);
-        for (int y = 0; y < SIZE; y++)
+        const float scale = (float)SIZE / ICON_SIZE;
+        var tex = new Texture2D(ICON_SIZE, ICON_SIZE, TextureFormat.RGBA32, false);
+        for (int y = 0; y < ICON_SIZE; y++)
         {
-            for (int x = 0; x < SIZE; x++)
+            for (int x = 0; x < ICON_SIZE; x++)
             {
                 int fill = 0, ring = 0;
                 for (int sy = 0; sy < 4; sy++)
                 {
                     for (int sx = 0; sx < 4; sx++)
                     {
-                        float px = x + (sx + 0.5f) / 4f, py = y + (sy + 0.5f) / 4f;
+                        float px = (x + (sx + 0.5f) / 4f) * scale, py = (y + (sy + 0.5f) / 4f) * scale;
                         if (inside(px, py))
                         {
                             fill++;
@@ -379,7 +417,7 @@ internal static class UISpriteFactory
         tex.Apply();
         File.WriteAllBytes(path, tex.EncodeToPNG());
         Object.DestroyImmediate(tex);
-        return ImportSprite(path, 0);
+        return ImportSprite(path, 0, true);
     }
 
     private static Texture2D Save(Texture2D tex)

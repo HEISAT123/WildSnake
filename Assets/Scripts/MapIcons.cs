@@ -4,9 +4,13 @@ using UnityEngine.UI;
 namespace Snake3D
 {
     /// <summary>
-    /// Карта по Tab: подложка, нарисованная по данным поля (MapPainter), и значки поверх неё —
+    /// Карта: подложка, нарисованная по данным поля (MapPainter), и значки поверх неё —
     /// стрелки змей по направлению головы, следы добычи, рыбы и жуки, орёл и лиса, норы, гнёзда, солнечные камни.
-    /// Неподвижные значки ставятся один раз при старте, подвижные двигаются только пока карта видна.
+    /// Два режима одного компонента:
+    /// • карта журнала (Tab) — всё поле целиком, север вверху;
+    /// • мини-карта HUD (_follow) — круглое окно вокруг змеи, повёрнутое по камере (вверху — куда смотрит камера),
+    ///   значки стоят прямо, видно только ближние.
+    /// Подложку рисует один экземпляр, второй берёт её у него (_textureSource), чтобы не рисовать дважды.
     /// </summary>
     public class MapIcons : MonoBehaviour
     {
@@ -27,7 +31,32 @@ namespace Snake3D
         [SerializeField] private CanvasGroup _group;
 
         [Tooltip("Пикселей подложки на клетку поля")]
-        [SerializeField, Range(1, 8)] private int _pixelsPerCell = 4;
+        [SerializeField, Range(1, 12)] private int _pixelsPerCell = 8;
+
+        [Tooltip("Чужая карта, у которой берётся уже нарисованная подложка (для мини-карты)")]
+        [SerializeField] private MapIcons _textureSource;
+
+        [Header("Мини-карта")]
+        [Tooltip("Окно вокруг змеи, повёрнутое по камере; иначе — всё поле, север вверху")]
+        [SerializeField] private bool _follow;
+
+        [Tooltip("Камера: мини-карта поворачивается вслед за ней")]
+        [SerializeField] private CameraRig _camera;
+
+        [Tooltip("Узел, который поворачивается по камере (родитель подложки)")]
+        [SerializeField] private RectTransform _rotator;
+
+        [Tooltip("Сколько метров от змеи до края круга")]
+        [SerializeField, Min(5f)] private float _viewRadius = 32f;
+
+        [Tooltip("Радиус круга мини-карты, пикселей интерфейса")]
+        [SerializeField, Min(10f)] private float _windowRadius = 120f;
+
+        [Tooltip("Метка «С» (север) на краю мини-карты")]
+        [SerializeField] private RectTransform _north;
+
+        [Tooltip("Настройки: мини-карту можно выключить")]
+        [SerializeField] private SettingsService _settings;
 
         [Header("Подвижные значки")]
         [SerializeField] private RectTransform _playerIcon;
@@ -62,15 +91,32 @@ namespace Snake3D
         private Vector3 _origin;
         private Vector2 _worldSize;
         private Vector2 _mapSize;
+        private Quaternion _upright = Quaternion.identity;
+
+        /// <summary>Подложка карты (рисуется при первом обращении).</summary>
+        public Texture2D Texture
+        {
+            get
+            {
+                if (_texture == null) _texture = _textureSource != null ? _textureSource.Texture : MapPainter.Paint(_grid, _pixelsPerCell);
+                return _texture;
+            }
+        }
 
         private void Start()
         {
-            _texture = MapPainter.Paint(_grid, _pixelsPerCell);
-            _map.texture = _texture;
+            _map.texture = Texture;
             _map.color = Color.white;
             _origin = _grid.CornerOrigin;
             _worldSize = new Vector2(_grid.Width * _grid.CellSize, _grid.Height * _grid.CellSize);
-            _mapSize = ((RectTransform)_map.transform).rect.size;
+            if (_follow)
+            {
+                // Масштаб мини-карты: радиус круга — это _viewRadius метров.
+                float pixelsPerMeter = _windowRadius / _viewRadius;
+                _map.rectTransform.sizeDelta = _worldSize * pixelsPerMeter;
+            }
+            _mapSize = _map.rectTransform.rect.size;
+            if (_follow) _mapSize = _map.rectTransform.sizeDelta;
 
             for (int i = 0; i < _burrowIcons.Length; i++) PlaceStatic(_burrowIcons[i], i < _grid.BurrowCount, i < _grid.BurrowCount ? _grid.GetBurrow(i) : Vector3.zero);
             for (int i = 0; i < _birdNestIcons.Length; i++) PlaceStatic(_birdNestIcons[i], i < _grid.BirdNestCount, i < _grid.BirdNestCount ? _grid.GetBirdNest(i) : Vector3.zero);
@@ -89,7 +135,8 @@ namespace Snake3D
 
         private void OnDestroy()
         {
-            if (_texture != null) Destroy(_texture);
+            // Подложку уничтожает тот, кто её нарисовал.
+            if (_texture != null && _textureSource == null) Destroy(_texture);
         }
 
         private void SetupPreyIcons()
@@ -114,8 +161,11 @@ namespace Snake3D
 
         private void Update()
         {
+            if (_settings != null) _group.alpha = _settings.ShowMinimap ? 1f : 0f;
             if (_group.alpha <= 0f) return;
             float t = Time.unscaledTime;
+
+            if (_follow) UpdateWindow();
 
             SetArrow(_playerIcon, _player, true);
             _playerRing.anchoredPosition = _playerIcon.anchoredPosition;
@@ -126,14 +176,20 @@ namespace Snake3D
             SetThreat(_eagleIcon, _eagle.CurrentPhase != EagleHunter.Phase.Away, _eagle.GroundPosition);
             SetThreat(_foxIcon, _fox.IsActive, _fox.Position);
 
+            Vector3 head = _player.HeadPosition;
+            float range = _viewRadius * 1.15f;
             int count = Mathf.Min(_preyIcons.Length, _wildlife.AnimalCount);
             for (int i = 0; i < count; i++)
             {
                 PreyAnimal animal = _wildlife.GetAnimal(i);
                 RectTransform icon = _preyIcons[i].rectTransform;
-                bool show = animal.IsActive;
+                Vector3 p = animal.Position;
+                // На мини-карте дальнюю добычу не двигаем — она всё равно за краем круга.
+                bool show = animal.IsActive && (!_follow || (Mathf.Abs(p.x - head.x) < range && Mathf.Abs(p.z - head.z) < range));
                 if (icon.gameObject.activeSelf != show) icon.gameObject.SetActive(show);
-                if (show) icon.anchoredPosition = ToMap(animal.Position);
+                if (!show) continue;
+                icon.anchoredPosition = ToMap(p);
+                if (_follow) icon.localRotation = _upright;
             }
 
             // Гнездо появляется на карте, когда змея повзрослела, и подсвечено кольцом, пока кладку не охраняют.
@@ -147,6 +203,25 @@ namespace Snake3D
                 float k = 1f + 0.3f * (0.5f + 0.5f * Mathf.Sin(t * 3f));
                 _nestRing.localScale = new Vector3(k, k, 1f);
             }
+        }
+
+        /// <summary>Мини-карта: змея в центре, верх — направление камеры, значки стоят прямо.</summary>
+        private void UpdateWindow()
+        {
+            float yaw = _camera.Yaw;
+            _rotator.localRotation = Quaternion.Euler(0f, 0f, yaw);
+            _upright = Quaternion.Euler(0f, 0f, -yaw);
+            _map.rectTransform.anchoredPosition = -ToMap(_player.HeadPosition);
+            if (_north != null)
+            {
+                _north.anchoredPosition = Quaternion.Euler(0f, 0f, yaw) * new Vector3(0f, _windowRadius - 14f, 0f);
+            }
+            for (int i = 0; i < _burrowIcons.Length; i++) _burrowIcons[i].localRotation = _upright;
+            for (int i = 0; i < _birdNestIcons.Length; i++) _birdNestIcons[i].localRotation = _upright;
+            for (int i = 0; i < _sunStoneIcons.Length; i++) _sunStoneIcons[i].localRotation = _upright;
+            _nestIcon.localRotation = _upright;
+            _eagleIcon.localRotation = _upright;
+            _foxIcon.localRotation = _upright;
         }
 
         private void SetArrow(RectTransform icon, SnakeController snake, bool active)
@@ -173,7 +248,7 @@ namespace Snake3D
             if (active) icon.anchoredPosition = ToMap(position);
         }
 
-        /// <summary>Мировая точка → позиция на карте (центр карты — ноль, вверх — +Z мира).</summary>
+        /// <summary>Мировая точка → позиция на подложке (центр подложки — ноль, вверх — +Z мира).</summary>
         private Vector2 ToMap(Vector3 world)
         {
             float u = (world.x - _origin.x) / _worldSize.x - 0.5f;

@@ -108,6 +108,9 @@ namespace Snake3D
         public bool IsDiving => _phase == Phase.Diving;
         public float DiveProgress01 => _phase == Phase.Diving ? Mathf.Clamp01(_phaseTime / _diveTime) : 0f;
 
+        /// <summary>Где орёл сейчас (в воздухе) — для метки угрозы.</summary>
+        public Vector3 Position => _pos;
+
         /// <summary>Точка на земле под орлом (там, где его тень).</summary>
         public Vector3 GroundPosition => new Vector3(_pos.x, _grid.GroundHeight(_pos), _pos.z);
 

@@ -35,6 +35,7 @@ internal static class UIBuilder
         public ScentTracker Scent;
         public BirdNests BirdNests;
         public Transform CameraTransform;
+        public CameraRig Rig;
         public SnakeController Rival;
     }
 
@@ -57,6 +58,8 @@ internal static class UIBuilder
     private static readonly Color MapSun = new Color(1f, 0.78f, 0.3f);
 
     private const float LEFT = 96f;
+    /// <summary>Радиус круга мини-карты, пикселей интерфейса.</summary>
+    private const float MINIMAP_RADIUS = 125f;
 
     private static Font _font;
     private static Sprite _chamfer;
@@ -109,7 +112,8 @@ internal static class UIBuilder
         Texture2D edgeH = UISpriteFactory.EdgeGradient(false);
         Texture2D edgeV = UISpriteFactory.EdgeGradient(true);
         GameObject stateLayer = BuildOverlays(root, r, edge, edgeH, edgeV, deepShade, out OverlayParts op2, out GameObject mapRoot);
-        GameObject hud = BuildHud(root, edgeV, out HudParts hp);
+        Texture2D cornerShade = UISpriteFactory.CornerShade();
+        GameObject hud = BuildHud(root, r, cornerShade, out HudParts hp);
         GameObject menu = BuildMainMenu(root, menuShade, out Row[] menuRows, out CanvasGroup menuGroup);
         GameObject pause = BuildPause(root, pauseShade, out Row[] pauseRows, out CanvasGroup pauseGroup);
         GameObject molt = BuildMolt(root, pauseShade, out Row[] moltRows, out CanvasGroup moltGroup);
@@ -184,20 +188,22 @@ internal static class UIBuilder
         SnakeSceneBuilder.WireArray(journal, "_goalChecks", op2.GoalChecks);
 
         var mapIcons = mapRoot.AddComponent<MapIcons>();
-        SnakeSceneBuilder.Wire(mapIcons, ("_game", r.Game), ("_grid", r.Grid), ("_player", r.Player), ("_rival", r.Rival),
-            ("_wildlife", r.Wildlife), ("_eagle", r.Eagle), ("_fox", r.Fox), ("_map", op2.Map), ("_group", op2.MapGroup),
-            ("_playerIcon", op2.PlayerIcon), ("_playerRing", op2.PlayerRing), ("_rivalIcon", op2.RivalIcon),
-            ("_eagleIcon", op2.EagleIcon), ("_foxIcon", op2.FoxIcon), ("_nestIcon", op2.NestIcon), ("_nestRing", op2.NestRing),
-            ("_pawSprite", UISpriteFactory.MapPaw), ("_fishSprite", UISpriteFactory.MapFish), ("_beetleSprite", UISpriteFactory.MapBeetle));
-        SnakeSceneBuilder.WireArray(mapIcons, "_preyIcons", op2.PreyIcons);
-        SnakeSceneBuilder.WireArray(mapIcons, "_burrowIcons", op2.BurrowIcons);
-        SnakeSceneBuilder.WireArray(mapIcons, "_birdNestIcons", op2.BirdNestIcons);
-        SnakeSceneBuilder.WireArray(mapIcons, "_sunStoneIcons", op2.SunStoneIcons);
+        WireMapIcons(mapIcons, r, op2.MapIcons, op2.MapGroup);
+
+        // Мини-карта в HUD: та же подложка (берётся у карты журнала), окно вокруг змеи по камере.
+        var minimap = hp.MinimapGroup.gameObject.AddComponent<MapIcons>();
+        WireMapIcons(minimap, r, hp.Minimap, hp.MinimapGroup);
+        SnakeSceneBuilder.Wire(minimap, ("_textureSource", mapIcons), ("_camera", r.Rig), ("_rotator", hp.MinimapRotator),
+            ("_north", hp.MinimapNorth), ("_settings", r.Settings));
+        SnakeSceneBuilder.SetBool(minimap, "_follow", true);
+        SnakeSceneBuilder.SetFloat(minimap, "_windowRadius", MINIMAP_RADIUS);
+        SnakeSceneBuilder.SetFloat(minimap, "_preySize", 14f);
+        SnakeSceneBuilder.SetFloat(minimap, "_beetleSize", 10f);
 
         var settingsComp = settings.AddComponent<SettingsPanel>();
         SnakeSceneBuilder.Wire(settingsComp, ("_settings", r.Settings), ("_audio", r.Audio), ("_hints", hints),
             ("_masterSlider", sp.Master), ("_musicSlider", sp.Music), ("_sfxSlider", sp.Sfx), ("_mouseSlider", sp.Mouse), ("_invertYToggle", sp.InvertY),
-            ("_fullscreenToggle", sp.Fullscreen), ("_hudToggle", sp.Hud), ("_rivalToggle", sp.Rival),
+            ("_fullscreenToggle", sp.Fullscreen), ("_hudToggle", sp.Hud), ("_rivalToggle", sp.Rival), ("_minimapToggle", sp.Minimap),
             ("_qualityButton", sp.Quality), ("_qualityLabel", sp.QualityLabel), ("_tutorialButton", sp.Tutorial), ("_backButton", sp.Back));
 
         var boardComp = board.AddComponent<LeaderboardPanel>();
@@ -394,7 +400,7 @@ internal static class UIBuilder
     private sealed class SettingsParts
     {
         public Slider Master, Music, Sfx, Mouse;
-        public Toggle Fullscreen, Hud, Rival, InvertY;
+        public Toggle Fullscreen, Hud, Rival, InvertY, Minimap;
         public Button Quality, Tutorial, Back;
         public Text QualityLabel;
     }
@@ -408,19 +414,20 @@ internal static class UIBuilder
         const float right = LEFT + 900f;
         Section(screen, "ЗВУК", -300f);
         p.Master = SliderAt(screen, SettingRow(screen, "Общая громкость", -324f), right, 0f, 1f);
-        p.Music = SliderAt(screen, SettingRow(screen, "Музыка", -382f), right, 0f, 1f);
-        p.Sfx = SliderAt(screen, SettingRow(screen, "Звуки", -440f), right, 0f, 1f);
+        p.Music = SliderAt(screen, SettingRow(screen, "Музыка", -376f), right, 0f, 1f);
+        p.Sfx = SliderAt(screen, SettingRow(screen, "Звуки", -428f), right, 0f, 1f);
 
-        Section(screen, "УПРАВЛЕНИЕ", -522f);
-        p.Mouse = SliderAt(screen, SettingRow(screen, "Чувствительность мыши", -546f), right, 0.2f, 3f);
-        p.InvertY = SwitchAt(screen, SettingRow(screen, "Инверсия оси Y", -604f), right);
+        Section(screen, "УПРАВЛЕНИЕ", -500f);
+        p.Mouse = SliderAt(screen, SettingRow(screen, "Чувствительность мыши", -524f), right, 0.2f, 3f);
+        p.InvertY = SwitchAt(screen, SettingRow(screen, "Инверсия оси Y", -576f), right);
 
-        Section(screen, "ЭКРАН И ИГРА", -686f);
-        p.Fullscreen = SwitchAt(screen, SettingRow(screen, "Полный экран   <size=18><color=#757A7A>F11</color></size>", -710f), right);
-        p.Hud = SwitchAt(screen, SettingRow(screen, "Интерфейс в игре   <size=18><color=#757A7A>H</color></size>", -768f), right);
-        p.Rival = SwitchAt(screen, SettingRow(screen, "Змея-соперница   <size=18><color=#757A7A>со следующей жизни</color></size>", -826f), right);
+        Section(screen, "ЭКРАН И ИГРА", -648f);
+        p.Fullscreen = SwitchAt(screen, SettingRow(screen, "Полный экран   <size=18><color=#757A7A>F11</color></size>", -672f), right);
+        p.Hud = SwitchAt(screen, SettingRow(screen, "Интерфейс в игре   <size=18><color=#757A7A>H</color></size>", -724f), right);
+        p.Minimap = SwitchAt(screen, SettingRow(screen, "Мини-карта", -776f), right);
+        p.Rival = SwitchAt(screen, SettingRow(screen, "Змея-соперница   <size=18><color=#757A7A>со следующей жизни</color></size>", -828f), right);
 
-        float qualityY = SettingRow(screen, "Качество графики", -884f);
+        float qualityY = SettingRow(screen, "Качество графики", -880f);
         p.Quality = LinkButton(screen, "Quality", "ULTRA   ›", 24, out p.QualityLabel);
         Anchor((RectTransform)p.Quality.transform, new Vector2(0f, 1f), new Vector2(1f, 0.5f), new Vector2(right, qualityY), new Vector2(300f, 44f));
         p.QualityLabel.alignment = TextAnchor.MiddleRight;
@@ -610,6 +617,9 @@ internal static class UIBuilder
         public CanvasGroup AimGroup, StruggleGroup;
         public Image ChargeFill, StruggleFill;
         public RectTransform EagleMarker, FoxMarker;
+        public MapIconParts Minimap;
+        public CanvasGroup MinimapGroup;
+        public RectTransform MinimapRotator, MinimapNorth;
         public CanvasGroup AlertGroup;
         public Text AlertText;
         public CanvasGroup BannerGroup;
@@ -628,9 +638,7 @@ internal static class UIBuilder
         public Object[] DamageEdges = new Object[4];
         public CanvasGroup LowHealth, Frost, Warmth, Ambush;
         public CanvasGroup MapGroup;
-        public RawImage Map;
-        public RectTransform PlayerIcon, PlayerRing, RivalIcon, EagleIcon, FoxIcon, NestIcon, NestRing;
-        public Object[] PreyIcons, BurrowIcons, BirdNestIcons, SunStoneIcons;
+        public MapIconParts MapIcons;
         public Text MapDay, Summary, QuestText, QuestNote;
         public Object[] GoalLabels = new Object[DailyGoals.MAX_GOALS];
         public Object[] GoalNotes = new Object[DailyGoals.MAX_GOALS];
@@ -642,27 +650,34 @@ internal static class UIBuilder
     /// контекстная подсказка у центра, прицел и кольцо борьбы, метки угроз у краёв, баннер.
     /// Всё, кроме дуги солнца, появляется только когда нужно.
     /// </summary>
-    private static GameObject BuildHud(Transform root, Texture2D edgeV, out HudParts p)
+    private static GameObject BuildHud(Transform root, Refs r, Texture2D cornerShade, out HudParts p)
     {
         p = new HudParts();
         RectTransform hud = Rect("HUD", root);
         Stretch(hud);
 
-        // Мягкая чернильная тень в левом верхнем углу: строка цели читается и над светлыми кронами.
+        // Мягкие чернильные тени из углов: текст читается и над светлыми кронами, а краёв у тени не видно —
+        // она гаснет и вбок, и вниз (раньше прямоугольные полосы давали заметную светлую «щель» между ними).
         RectTransform objShade = Rect("ObjectiveShade", hud);
-        TopLeft(objShade, 0f, 0f, 1250f, 200f);
-        RawImage shadeImg = Raw(objShade, edgeV);
-        shadeImg.color = new Color(Ink.r, Ink.g, Ink.b, 0.78f);
-        // Такая же тень справа — под дугой солнца и подписью дня.
+        TopLeft(objShade, 0f, 0f, 1150f, 330f);
+        Raw(objShade, cornerShade).color = new Color(Ink.r, Ink.g, Ink.b, 0.82f);
         RectTransform dayShade = Rect("DayShade", hud);
-        Anchor(dayShade, new Vector2(1f, 1f), new Vector2(1f, 1f), Vector2.zero, new Vector2(420f, 190f));
-        Raw(dayShade, edgeV).color = new Color(Ink.r, Ink.g, Ink.b, 0.7f);
-        // И снизу слева — под дугами показателей, подписями и состояниями (градиент перевёрнут: плотнее у нижнего края).
+        Anchor(dayShade, new Vector2(1f, 1f), new Vector2(1f, 1f), Vector2.zero, new Vector2(640f, 300f));
+        RawImage dayShadeImg = Raw(dayShade, cornerShade);
+        dayShadeImg.color = new Color(Ink.r, Ink.g, Ink.b, 0.75f);
+        dayShadeImg.uvRect = new Rect(1f, 0f, -1f, 1f);
         RectTransform vitalShade = Rect("VitalsShade", hud);
-        Anchor(vitalShade, new Vector2(0f, 0f), new Vector2(0f, 0f), Vector2.zero, new Vector2(760f, 360f));
-        RawImage vitalShadeImg = Raw(vitalShade, edgeV);
-        vitalShadeImg.color = new Color(Ink.r, Ink.g, Ink.b, 0.6f);
+        Anchor(vitalShade, new Vector2(0f, 0f), new Vector2(0f, 0f), Vector2.zero, new Vector2(980f, 470f));
+        RawImage vitalShadeImg = Raw(vitalShade, cornerShade);
+        vitalShadeImg.color = new Color(Ink.r, Ink.g, Ink.b, 0.72f);
         vitalShadeImg.uvRect = new Rect(0f, 1f, 1f, -1f);
+        RectTransform mapShade = Rect("MinimapShade", hud);
+        Anchor(mapShade, new Vector2(1f, 0f), new Vector2(1f, 0f), Vector2.zero, new Vector2(620f, 470f));
+        RawImage mapShadeImg = Raw(mapShade, cornerShade);
+        mapShadeImg.color = new Color(Ink.r, Ink.g, Ink.b, 0.55f);
+        mapShadeImg.uvRect = new Rect(1f, 1f, -1f, -1f);
+
+        BuildMinimap(hud, r, p);
 
         // ---------- Показатели: три тонкие дуги вокруг значка змеи ----------
         RectTransform vitals = Rect("Vitals", hud);
@@ -819,8 +834,8 @@ internal static class UIBuilder
         Anchor(hold.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -26f), new Vector2(160f, 20f));
 
         // ---------- Угрозы: метки у краёв и одно крупное предупреждение о пике ----------
-        p.EagleMarker = ThreatMarker(hud, "EagleMarker", "ОРЁЛ");
-        p.FoxMarker = ThreatMarker(hud, "FoxMarker", "ЛИСА");
+        p.EagleMarker = ThreatMarker(hud, "EagleMarker", UISpriteFactory.MapEagle, Ember);
+        p.FoxMarker = ThreatMarker(hud, "FoxMarker", UISpriteFactory.MapFox, MapFox);
         RectTransform alert = Rect("Alert", hud);
         Anchor(alert, new Vector2(0.5f, 0.72f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1400f, 90f));
         p.AlertGroup = Group(alert);
@@ -849,18 +864,72 @@ internal static class UIBuilder
     }
 
     /// <summary>Метка угрозы: стрелка (поворачивается к угрозе) и подпись под ней.</summary>
-    private static RectTransform ThreatMarker(RectTransform hud, string name, string caption)
+    /// <summary>Метка угрозы: значок зверя, стрелка (ThreatIndicator водит её вокруг значка) и подпись с расстоянием.</summary>
+    private static RectTransform ThreatMarker(RectTransform hud, string name, Sprite icon, Color color)
     {
         RectTransform marker = Rect(name, hud);
-        Anchor(marker, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(80f, 80f));
+        Anchor(marker, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(120f, 120f));
         Group(marker).alpha = 0f;
+        RectTransform backing = Rect("Backing", marker);
+        Anchor(backing, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(62f, 62f));
+        Img(backing, new Color(Ink.r, Ink.g, Ink.b, 0.55f), UISpriteFactory.MapDisc);
+        RectTransform ring = Rect("Ring", marker);
+        Anchor(ring, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(62f, 62f));
+        Img(ring, color, UISpriteFactory.ArcRing);
+        RectTransform iconRt = Rect("Icon", marker);
+        Anchor(iconRt, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(42f, 42f));
+        Img(iconRt, color, icon).preserveAspect = true;
         RectTransform arrow = Rect("Arrow", marker);
-        Anchor(arrow, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40f, 40f));
-        Img(arrow, Ember, UISpriteFactory.Chevron);
-        Text label = Label(marker, "Label", Spaced(caption), 15, Ember, TextAnchor.MiddleCenter, true);
-        Anchor(label.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -32f), new Vector2(120f, 20f));
-        AddShadow(label);
+        Anchor(arrow, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -38f), new Vector2(30f, 30f));
+        Img(arrow, color, UISpriteFactory.ThreatArrow);
+        Text label = Label(marker, "Label", "", 19, Bone, TextAnchor.MiddleCenter, false);
+        Anchor(label.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -40f), new Vector2(220f, 24f));
+        // Тёмный контур: подпись читается и на светлой траве, и на небе.
+        var outline = label.gameObject.AddComponent<Outline>();
+        outline.effectColor = new Color(0f, 0f, 0f, 0.85f);
+        outline.effectDistance = new Vector2(1.5f, -1.5f);
         return marker;
+    }
+
+    /// <summary>
+    /// Мини-карта справа снизу: круглое окно (маска) с поворотным узлом; внутри — подложка и значки (их ведёт MapIcons),
+    /// поверх — тонкий обод и метка севера.
+    /// </summary>
+    private static void BuildMinimap(RectTransform hud, Refs r, HudParts p)
+    {
+        float size = MINIMAP_RADIUS * 2f;
+        RectTransform root = Rect("Minimap", hud);
+        Anchor(root, new Vector2(1f, 0f), new Vector2(0.5f, 0.5f), new Vector2(-60f - MINIMAP_RADIUS, 60f + MINIMAP_RADIUS), new Vector2(size, size));
+        p.MinimapGroup = Group(root);
+
+        RectTransform back = Rect("Back", root);
+        Anchor(back, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(size + 10f, size + 10f));
+        Img(back, new Color(Ink.r, Ink.g, Ink.b, 0.85f), UISpriteFactory.MapDisc);
+
+        RectTransform mask = Rect("Mask", root);
+        Anchor(mask, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(size, size));
+        Img(mask, Color.white, UISpriteFactory.MapDisc);
+        mask.gameObject.AddComponent<Mask>().showMaskGraphic = false;
+
+        RectTransform rotator = Rect("Rotator", mask);
+        Anchor(rotator, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero);
+        p.MinimapRotator = rotator;
+
+        RectTransform mapImage = Rect("Map", rotator);
+        Anchor(mapImage, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(size, size));
+        RawImage raw = Raw(mapImage, null);
+        raw.color = new Color(0.1f, 0.12f, 0.14f);
+        p.Minimap = BuildMapIcons(mapImage, r, 0.75f);
+        p.Minimap.Map = raw;
+
+        RectTransform rim = Rect("Rim", root);
+        Anchor(rim, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(size + 4f, size + 4f));
+        Img(rim, new Color(Bone.r, Bone.g, Bone.b, 0.55f), UISpriteFactory.ArcRing);
+
+        Text north = Label(root, "North", "С", 18, Venom, TextAnchor.MiddleCenter, false);
+        Anchor(north.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, MINIMAP_RADIUS - 14f), new Vector2(26f, 24f));
+        AddShadow(north);
+        p.MinimapNorth = north.rectTransform;
     }
 
     /// <summary>
@@ -899,9 +968,10 @@ internal static class UIBuilder
         RectTransform mapImage = Rect("Map", map);
         Anchor(mapImage, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(LEFT, 0f), new Vector2(mapSize, mapSize));
         // Подложку рисует MapIcons при старте; до этого — тёмный квадрат.
-        p.Map = Raw(mapImage, null);
-        p.Map.color = new Color(0.1f, 0.12f, 0.14f);
-        BuildMapIcons(mapImage, r, p);
+        RawImage mapRaw = Raw(mapImage, null);
+        mapRaw.color = new Color(0.1f, 0.12f, 0.14f);
+        p.MapIcons = BuildMapIcons(mapImage, r, 1f);
+        p.MapIcons.Map = mapRaw;
         RectTransform frame = Rect("Frame", mapImage);
         Stretch(frame);
         Img(frame, new Color(Bone.r, Bone.g, Bone.b, 0.35f), _frame);
@@ -941,35 +1011,59 @@ internal static class UIBuilder
         return layer.gameObject;
     }
 
+    /// <summary>Подложка и значки одной карты (журнала или мини-карты).</summary>
+    private sealed class MapIconParts
+    {
+        public RawImage Map;
+        public RectTransform PlayerIcon, PlayerRing, RivalIcon, EagleIcon, FoxIcon, NestIcon, NestRing;
+        public Object[] PreyIcons, BurrowIcons, BirdNestIcons, SunStoneIcons;
+    }
+
     /// <summary>
     /// Значки карты поверх подложки. Порядок слоёв: неподвижное (камни, гнёзда, норы), добыча, змеи и хищники, вы — сверху.
     /// Неподвижных значков столько, сколько объектов на поле этого сида; MapIcons расставит их и скроет лишние.
+    /// scale — размер значков относительно карты журнала (на мини-карте они мельче).
     /// </summary>
-    private static void BuildMapIcons(RectTransform mapImage, Refs r, OverlayParts p)
+    private static MapIconParts BuildMapIcons(RectTransform mapImage, Refs r, float scale)
     {
+        var p = new MapIconParts();
         RectTransform layer = Rect("Icons", mapImage);
         Stretch(layer);
         GridManager grid = r.Grid;
 
         p.SunStoneIcons = new Object[grid.SunStoneCount];
-        for (int i = 0; i < p.SunStoneIcons.Length; i++) p.SunStoneIcons[i] = MapIcon(layer, "SunStone", UISpriteFactory.MapSun, MapSun, 15f);
+        for (int i = 0; i < p.SunStoneIcons.Length; i++) p.SunStoneIcons[i] = MapIcon(layer, "SunStone", UISpriteFactory.MapSun, MapSun, 16f * scale);
         p.BirdNestIcons = new Object[grid.BirdNestCount];
-        for (int i = 0; i < p.BirdNestIcons.Length; i++) p.BirdNestIcons[i] = MapIcon(layer, "BirdNest", UISpriteFactory.MapBirdNest, Sky, 22f);
+        for (int i = 0; i < p.BirdNestIcons.Length; i++) p.BirdNestIcons[i] = MapIcon(layer, "BirdNest", UISpriteFactory.MapBirdNest, Sky, 22f * scale);
         p.BurrowIcons = new Object[grid.BurrowCount];
-        for (int i = 0; i < p.BurrowIcons.Length; i++) p.BurrowIcons[i] = MapIcon(layer, "Burrow", UISpriteFactory.MapBurrow, Venom, 26f);
-        p.NestRing = MapIcon(layer, "NestRing", UISpriteFactory.MapRing, Venom, 62f);
-        p.NestIcon = MapIcon(layer, "Nest", UISpriteFactory.MapNest, Bone, 38f);
+        for (int i = 0; i < p.BurrowIcons.Length; i++) p.BurrowIcons[i] = MapIcon(layer, "Burrow", UISpriteFactory.MapBurrow, Venom, 26f * scale);
+        p.NestRing = MapIcon(layer, "NestRing", UISpriteFactory.MapRing, Venom, 62f * scale);
+        p.NestIcon = MapIcon(layer, "Nest", UISpriteFactory.MapNest, Bone, 38f * scale);
 
         // Значки добычи — по одному на животное пула; вид (лапа, рыба, жук) MapIcons выставит по животному.
         p.PreyIcons = new Object[r.Wildlife.AnimalCount];
         for (int i = 0; i < p.PreyIcons.Length; i++)
-            p.PreyIcons[i] = MapIcon(layer, "Prey", UISpriteFactory.MapPaw, MapPrey, 18f).GetComponent<Image>();
+            p.PreyIcons[i] = MapIcon(layer, "Prey", UISpriteFactory.MapPaw, MapPrey, 18f * scale).GetComponent<Image>();
 
-        p.RivalIcon = MapIcon(layer, "Rival", UISpriteFactory.MapArrow, MapRival, 30f);
-        p.FoxIcon = MapIcon(layer, "Fox", UISpriteFactory.MapFox, MapFox, 32f);
-        p.EagleIcon = MapIcon(layer, "Eagle", UISpriteFactory.MapEagle, Ember, 38f);
-        p.PlayerRing = MapIcon(layer, "PlayerRing", UISpriteFactory.MapRing, Venom, 56f);
-        p.PlayerIcon = MapIcon(layer, "Player", UISpriteFactory.MapArrow, Venom, 36f);
+        p.RivalIcon = MapIcon(layer, "Rival", UISpriteFactory.MapArrow, MapRival, 30f * scale);
+        p.FoxIcon = MapIcon(layer, "Fox", UISpriteFactory.MapFox, MapFox, 32f * scale);
+        p.EagleIcon = MapIcon(layer, "Eagle", UISpriteFactory.MapEagle, Ember, 38f * scale);
+        p.PlayerRing = MapIcon(layer, "PlayerRing", UISpriteFactory.MapRing, Venom, 56f * scale);
+        p.PlayerIcon = MapIcon(layer, "Player", UISpriteFactory.MapArrow, Venom, 36f * scale);
+        return p;
+    }
+
+    private static void WireMapIcons(MapIcons component, Refs r, MapIconParts p, CanvasGroup group)
+    {
+        SnakeSceneBuilder.Wire(component, ("_game", r.Game), ("_grid", r.Grid), ("_player", r.Player), ("_rival", r.Rival),
+            ("_wildlife", r.Wildlife), ("_eagle", r.Eagle), ("_fox", r.Fox), ("_map", p.Map), ("_group", group),
+            ("_playerIcon", p.PlayerIcon), ("_playerRing", p.PlayerRing), ("_rivalIcon", p.RivalIcon),
+            ("_eagleIcon", p.EagleIcon), ("_foxIcon", p.FoxIcon), ("_nestIcon", p.NestIcon), ("_nestRing", p.NestRing),
+            ("_pawSprite", UISpriteFactory.MapPaw), ("_fishSprite", UISpriteFactory.MapFish), ("_beetleSprite", UISpriteFactory.MapBeetle));
+        SnakeSceneBuilder.WireArray(component, "_preyIcons", p.PreyIcons);
+        SnakeSceneBuilder.WireArray(component, "_burrowIcons", p.BurrowIcons);
+        SnakeSceneBuilder.WireArray(component, "_birdNestIcons", p.BirdNestIcons);
+        SnakeSceneBuilder.WireArray(component, "_sunStoneIcons", p.SunStoneIcons);
     }
 
     private static RectTransform MapIcon(RectTransform parent, string name, Sprite sprite, Color color, float size)

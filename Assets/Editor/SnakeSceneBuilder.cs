@@ -283,7 +283,7 @@ public static class SnakeSceneBuilder
         {
             Game = game, Config = config, Player = player.Controller, Settings = settings, Audio = audio, Leaderboard = leaderboard,
             Wildlife = wildlife, Eagle = eagle, Fox = fox, DayNight = dayNight, Scent = scent, Grid = grid, Weather = weather, BirdNests = birdNests,
-            CameraTransform = camGo.transform, Rival = rival.Controller
+            CameraTransform = camGo.transform, Rig = rig, Rival = rival.Controller
         });
 
         Wire(ambience, ("_game", game));
@@ -1083,7 +1083,9 @@ public static class SnakeSceneBuilder
     {
         mat.EnableKeyword("_EMISSION");
         if (mat.HasProperty("_EmissionColor")) mat.SetColor("_EmissionColor", emission);
-        mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.None;
+        // URP при проверке материала включает свечение только при флаге «излучает»; запечённого GI в сцене нет,
+        // так что RealtimeEmissive ничего не добавляет в освещение. Built-in — без вклада в GI, как раньше.
+        mat.globalIlluminationFlags = _urp ? MaterialGlobalIlluminationFlags.RealtimeEmissive : MaterialGlobalIlluminationFlags.None;
         EditorUtility.SetDirty(mat);
     }
 
@@ -1219,7 +1221,7 @@ public static class SnakeSceneBuilder
         so.ApplyModifiedPropertiesWithoutUndo();
     }
 
-    private static void SetBool(Object target, string field, bool value)
+    internal static void SetBool(Object target, string field, bool value)
     {
         SerializedObject so = FindForWrite(target, field, out SerializedProperty prop);
         if (prop == null) return;

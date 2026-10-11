@@ -29,8 +29,14 @@ namespace Snake3D
         [Tooltip("Наклон камеры по умолчанию, град (0 — горизонтально)")]
         [SerializeField, Range(-10f, 80f)] private float _defaultPitch = 24f;
 
-        [Tooltip("Пределы наклона, град (мин, макс)")]
-        [SerializeField] private Vector2 _pitchRange = new Vector2(2f, 72f);
+        [Tooltip("Пределы наклона взгляда, град (мин, макс). Меньше нуля — взгляд вверх")]
+        [SerializeField] private Vector2 _pitchRange = new Vector2(-14f, 72f);
+
+        [Tooltip("Ниже этого наклона камера уже не опускается, а только запрокидывает взгляд — не тонет в траве, град")]
+        [SerializeField] private float _minPlacementPitch = 5f;
+
+        [Tooltip("Ниже этого наклона игрок сам смотрит вверх — автоподъём над препятствиями не вмешивается, град")]
+        [SerializeField] private float _lookUpPitch = 6f;
 
         [Tooltip("Высота точки взгляда над землёй")]
         [SerializeField, Min(0f)] private float _pivotHeight = 1f;
@@ -259,8 +265,10 @@ namespace Snake3D
             float wanted = _zoomDistance * Mathf.Lerp(1f, _coilZoom, _coilBlend);
             UpdateAutoPitch(pivot, wanted);
 
-            rotation = Quaternion.Euler(Mathf.Min(_pitchRange.y, _orbitPitch + _autoPitch), _orbitYaw, 0f);
-            Vector3 back = rotation * Vector3.back;
+            // Взгляд вверх: камера стоит как при _minPlacementPitch, а поворачивается круче — змея уходит вниз кадра.
+            float pitch = Mathf.Min(_pitchRange.y, _orbitPitch + _autoPitch);
+            rotation = Quaternion.Euler(pitch, _orbitYaw, 0f);
+            Vector3 back = Quaternion.Euler(Mathf.Max(pitch, _minPlacementPitch), _orbitYaw, 0f) * Vector3.back;
 
             // К препятствию камера придвигается сразу, а отходит плавно — без рывков на краю камня.
             float free = FreeDistance(pivot, back, wanted);
@@ -275,6 +283,12 @@ namespace Snake3D
         private void UpdateAutoPitch(Vector3 pivot, float wanted)
         {
             float target = 0f;
+            // Взгляд вверх — осознанный: автоподъём не возвращает камеру вниз-взгляд.
+            if (_orbitPitch < _lookUpPitch)
+            {
+                _autoPitch = Mathf.MoveTowards(_autoPitch, 0f, _autoPitchSpeed * Time.unscaledDeltaTime);
+                return;
+            }
             float best = FreeDistance(pivot, Quaternion.Euler(_orbitPitch, _orbitYaw, 0f) * Vector3.back, wanted, true);
             for (float extra = 8f; best < wanted * 0.9f && extra <= _maxAutoPitch; extra += 8f)
             {

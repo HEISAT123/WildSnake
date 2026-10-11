@@ -48,6 +48,40 @@ namespace Snake3D.Tests
             Assert.Greater(set.MaxHealthBonus, 0f);
             Assert.Greater(set.SpeedMultiplier, 1f);
             Assert.Greater(set.FeedMultiplier, 1f);
+            Assert.Greater(set.StaminaRegenMultiplier, 1f);
+            Assert.Less(set.CoolRateMultiplier, 1f);
+            Assert.Less(set.ConstrictDurationMultiplier, 1f);
+            Assert.Less(set.AmbushDelayMultiplier, 1f);
+            Assert.Greater(set.SwimSpeedMultiplier, 1f);
+        }
+
+        [Test]
+        public void Effects_HaveDiminishingReturns()
+        {
+            float first = UpgradeSet.Strength(1);
+            float second = UpgradeSet.Strength(2) - UpgradeSet.Strength(1);
+            float third = UpgradeSet.Strength(3) - UpgradeSet.Strength(2);
+            Assert.Greater(first, second);
+            Assert.Greater(second, third);
+            Assert.AreEqual(1f, UpgradeSet.Strength(UpgradeSet.MAX_LEVEL), 1e-5f);
+        }
+
+        [Test]
+        public void MaxedOut_IsNotInvulnerable()
+        {
+            var set = new UpgradeSet();
+            for (int i = 0; i < UpgradeSet.MAX_LEVEL; i++)
+            {
+                set.Apply(UpgradeType.ThickScales);
+                set.Apply(UpgradeType.SlowMetabolism);
+                set.Apply(UpgradeType.StrongHeart);
+            }
+            // Урон и голод заметно снижены, но не обнулены; у сильных улучшений есть плата.
+            Assert.GreaterOrEqual(set.DamageTakenMultiplier, 0.65f);
+            Assert.GreaterOrEqual(set.HungerMultiplier, 0.75f);
+            Assert.Less(set.SpeedMultiplier, 1f);
+            Assert.Less(set.HealthRegenMultiplier, 1f);
+            Assert.LessOrEqual(set.MaxHealthBonus, 45f);
         }
 
         [Test]

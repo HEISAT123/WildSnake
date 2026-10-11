@@ -23,6 +23,7 @@ namespace Snake3D
         [SerializeField] private Toggle _fullscreenToggle;
         [SerializeField] private Toggle _hudToggle;
         [SerializeField] private Toggle _rivalToggle;
+        [SerializeField] private Toggle _minimapToggle;
         [SerializeField] private Button _qualityButton;
         [SerializeField] private Text _qualityLabel;
         [SerializeField] private Button _tutorialButton;
@@ -39,6 +40,7 @@ namespace Snake3D
             _fullscreenToggle.onValueChanged.AddListener(OnFullscreenChanged);
             _hudToggle.onValueChanged.AddListener(OnHudChanged);
             _rivalToggle.onValueChanged.AddListener(OnRivalChanged);
+            _minimapToggle.onValueChanged.AddListener(OnMinimapChanged);
             _qualityButton.onClick.AddListener(OnQualityClicked);
             _tutorialButton.onClick.AddListener(OnTutorialClicked);
             _backButton.onClick.AddListener(OnBackClicked);
@@ -54,6 +56,7 @@ namespace Snake3D
             _fullscreenToggle.onValueChanged.RemoveListener(OnFullscreenChanged);
             _hudToggle.onValueChanged.RemoveListener(OnHudChanged);
             _rivalToggle.onValueChanged.RemoveListener(OnRivalChanged);
+            _minimapToggle.onValueChanged.RemoveListener(OnMinimapChanged);
             _qualityButton.onClick.RemoveListener(OnQualityClicked);
             _tutorialButton.onClick.RemoveListener(OnTutorialClicked);
             _backButton.onClick.RemoveListener(OnBackClicked);
@@ -77,6 +80,7 @@ namespace Snake3D
             _fullscreenToggle.SetIsOnWithoutNotify(_settings.Fullscreen);
             _hudToggle.SetIsOnWithoutNotify(_settings.ShowHud);
             _rivalToggle.SetIsOnWithoutNotify(_settings.RivalEnabled);
+            _minimapToggle.SetIsOnWithoutNotify(_settings.ShowMinimap);
             _qualityLabel.text = QualityText();
         }
 
@@ -90,6 +94,7 @@ namespace Snake3D
         private void OnFullscreenChanged(bool v) => _settings.SetFullscreen(v);
         private void OnHudChanged(bool v) => _settings.SetShowHud(v);
         private void OnRivalChanged(bool v) => _settings.SetRivalEnabled(v);
+        private void OnMinimapChanged(bool v) => _settings.SetShowMinimap(v);
 
         private void OnQualityClicked()
         {
