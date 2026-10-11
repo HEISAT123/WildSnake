@@ -1,0 +1,58 @@
+# Assets/Scripts — игровой код
+
+## Ядро
+- `GameManager` — связующее звено: состояния Menu/Playing/Paused/Molting/GameOver, голод и здоровье, охота, обвивание, удары,
+  орёл и лиса, день и ночь, норы и сохранение, цели суток, линька, соперница, статистика и рекорды. Остальные системы друг о друге не знают;
+  эффекты улучшений раздаются системам в `GameManager.ApplyUpgrades`.
+- `GameConfig` (ScriptableObject, `Assets/Settings/GameConfig.asset`) — весь баланс. Ассет старого формата: новых полей в нём нет,
+  значения берутся из инициализаторов. Новые виды добычи дописываются через `EnsurePreyDefaults`.
+- Чистые C#-классы (тесты EditMode): `SurvivalStats`, `Stamina`, `AmbushTracker`, `Digestion`, `BodyTemperature` + `TemperatureSpot`,
+  `Constriction` + `ConstrictResult`, `DailyGoals` + `DailyGoal` + `GoalType`, `MainQuest` + `QuestStage` + `NestCheck`,
+  `UpgradeSet` + `UpgradeType`, `DamageSource`, `RunStats`.
+- Улучшения: 13 видов, до 3 уровней, убывающая отдача 40/73/100% от предела; у сильных есть плата (толстая чешуя замедляет,
+  сердце и гибкое тело усиливают голод, медленный обмен замедляет заживление). Новые виды — только в конец `UpgradeType`
+  (индексы сохраняются в `RunSave`); тексты — `UIController.UpgradeNames/UpgradeDescriptions`.
+
+## Змея
+- Управление «намерением»: `SnakeController.SetMoveIntent(направление, SnakePace)`, `SetCoil`, `TryStrike`, `RequestJump`.
+  Источники: игрок (`PlayerSnakeInput`) и ИИ (`SnakeAI`). Голова поворачивается с ограниченной скоростью — разворот дугой.
+- `SnakeController`: движение, темп, бросок/замах, прыжок, выносливость, засада, промах, переваривание, температура, вода, нора;
+  траектория в кольцевом буфере. Граница мира — `ClampToMountains` по `TerrainShape.MountainFactor` (клетки `Mountain` — только для ИИ и добычи).
+- Визуал: `SnakeBodyMesh` (меш-трубка), `SnakeHeadAnimator`, `SnakeDeathEffect`, `DashTrail`, `SkinShedEffect`.
+- `SnakeAI`: соперница и автопилот меню — A* по сетке, рефлексы, охота; страховка от застревания.
+
+## Мир
+- `GridManager` (180x180, клетка 1 м): рельеф `TerrainShape` (холмы, кольцо гор), препятствия по сиду, рощи (`IsForest`/`IsCanopy`/`IsBirch`),
+  укрытия (`IsCover`, `IsReed`), вода (`IsPondWater`, `IsRiver`, мосты `IsBridge`), болото `IsSwamp`, гряда `IsRidge`, полые брёвна `IsHollow`,
+  птичьи гнёзда, солнечные камни 2x2, норы, гнездо. Генерируется в `Awake` (и из редактора).
+- `BoardView` — визуал поля; `CanopyFader` — полупрозрачность того, что реально заслоняет змею; `WaterFlow` — течение реки.
+- Природа: `WildlifeManager` + `PreyAnimal` (жук, мышь, лягушка, птица, кролик, ёж, рыба), `BirdNests`, `EagleHunter` (днём),
+  `FoxHunter` (ночью; `Raiding` — таскает яйца из кладки), `DayNightCycle`, `WeatherSystem`, `ScentTracker`, `Hatchlings`.
+- Сохранение у норы: `RunSave` → `RunSaveStore` (PlayerPrefs JSON); смерть стирает.
+
+## Сервисы
+- `LeaderboardService` + `Leaderboard`, `SettingsService` (звук, мышь, графика, интерфейс, мини-карта, соперница),
+  `AudioService` + `SfxSynth` + `MusicSynth` + `AmbientSynth` на `SynthDsp`/`SynthRng` — синтез в фоновом потоке, там только System.Math.
+
+## Камера
+- `CameraRig`: орбита мышью, колесо — дистанция, замах — ближе и через плечо, взгляд вверх до −14° (ниже `_minPlacementPitch`
+  камера не опускается, а только запрокидывает взгляд), дистанцию ограничивает рельеф, над низкими препятствиями — автоподъём, тряска,
+  витрина меню (`Showcase`).
+
+## Интерфейс (рантайм; строит его `Assets/Editor/UIBuilder`)
+- «Тихий» HUD — только важное сейчас; показывается только в Playing. `UIController` (экраны, баннеры, режим H, курсор только в Playing).
+- `HudVitals`, `HudObjective`, `HudStatus`, `SunDial`, `ContextHints` (обучение — подсказки первые несколько раз), `CenterReticle`,
+  `ThreatIndicator` (метка зверя: в кадре — над ним, иначе у края экрана; расстояние), `ScreenVignettes` (работают и без интерфейса).
+- Карта: `MapJournal` (Tab, журнал целей), `MapIcons` + `MapPainter` (подложка по данным поля один раз при старте, значки).
+  `MapIcons` с `_follow` — мини-карта HUD (окно вокруг змеи, повёрнуто по камере, подложку берёт у карты журнала).
+- Меню: `MenuList` (списки), `SettingsPanel`/`LeaderboardPanel`/`GuidePanel` закрываются «Готово» и Esc (`GameInput.ConsumePause`,
+  `DefaultExecutionOrder(-100)`), `ToggleSwitch`, `UIFontApplier`, `TimeFormat`.
+- Attract-режим меню: змея на автопилоте, без урона/голода/звуков, орёл только кружит, лисы нет, золотой час.
+
+## Материалы URP в рантайме
+- Цвет — `_BaseColor` (задавать и `_Color` для совместимости), тайлинг/сдвиг всех карт Lit — `_BaseMap`.
+- `MaterialPropertyBlock` не сохраняется в сцене — то, что задаётся через него, применять и в рантайме.
+
+## Управление
+WASD — ползти, мышь — камера, колесо — дистанция, Ctrl — красться, Shift — быстрее, ЛКМ — бросок, ПКМ — замах, Space — прыжок,
+F — обвить, E — нюх/нора/кладка, Tab — карта, H — интерфейс, Esc — пауза, R — заново, F11 — полный экран. Геймпад — через `GameInput`.

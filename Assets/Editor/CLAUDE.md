@@ -1,0 +1,18 @@
+# Assets/Editor — сборка сцены, UI и окружения
+
+- `SnakeSceneBuilder` (`Tools/Build Snake Scene`, batch `-executeMethod SnakeSceneBuilder.Build`): создаёт сцену, текстуры, материалы,
+  GameConfig, поле, змей, живность, эффекты, звук, камеру, UI и сохраняет `Assets/Scenes/Snake3D.unity`. Сцену создаёт первой
+  (NewScene выгружает ассеты). Ассеты переиспользует по пути, чтобы не ломать ссылки; устаревшие — в `ObsoleteMaterials`/`DeleteObsoleteAssets`.
+  Поля компонентов — через `Wire`/`WireArray`/`SetBool`/`SetFloat`/`SetInt`.
+- `RenderPipelineSetup`: ассеты URP в `Assets/Settings/URP` (Low/Medium/High под 6 уровней Quality, общий рендерер, профиль с bloom),
+  назначение в Graphics/Quality, `FixupMaterials` — ключевые слова материалов URP. Код под `#if SNAKE_URP` (versionDefines в asmdef).
+  Свечение материалов: флаг `RealtimeEmissive`, иначе URP выключит `_EMISSION`. Прозрачность как Fade: `_BlendModePreserveSpecular = 0`.
+- `EnvironmentBuilder` (небо, рельеф, лес, камни, трава, вода, облака, материалы арены), `ProceduralTextures`, `ProceduralMeshes`.
+- `UIBuilder` строит весь интерфейс; `UISpriteFactory` рисует графику в `Assets/Materials/UI` (значки карты 128 px с mip-картами,
+  мягкие тени-градиенты). Градиентные текстуры создавать один раз за сборку — пересохранение обнуляет ссылки.
+  Стиль: Bahnschrift, чернильное затемнение слева поверх живой сцены, «костяной» текст, акцент — лайм, опасность — тлеющий красный;
+  без карточек — заголовок с кикером, строки «01 02», тонкие линии, клавиши-подсказки; мелкий текст (≤22) без жирного.
+- `GameBuilder` (`Tools/Build Game (Windows)`): Mono, результат в `Builds/`; иконка рисуется кодом в `Assets/Settings/GameIcon.png`.
+- В Editor-коде `SettingsService` конфликтует с `UnityEditor.SettingsService` — `using SettingsService = Snake3D.SettingsService;`.
+- Если включат Input System — добавить `Unity.InputSystem` в оба asmdef.
+- Unity MCP (по желанию): пакет CoderGamester/mcp-unity; если подключён — ошибки читать из консоли редактора вместо batch.
