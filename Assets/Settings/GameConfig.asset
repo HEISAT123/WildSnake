@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 0abc5fd51cbbb644e9b42c056f441cf1, type: 3}
   m_Name: GameConfig
-  m_EditorClassIdentifier: Snake3D::Snake3D.GameConfig
+  m_EditorClassIdentifier: WildSnake::WildSnake.GameConfig
   _startSpeed: 4.5
   _maxSpeed: 9
   _speedPerFood: 0.1

@@ -1,7 +1,7 @@
 using NUnit.Framework;
 using UnityEngine;
 
-namespace Snake3D.Tests
+namespace WildSnake.Tests
 {
     /// <summary>Значения баланса по умолчанию.</summary>
     public class GameConfigTests

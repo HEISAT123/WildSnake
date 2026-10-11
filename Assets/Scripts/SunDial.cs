@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Время суток без часов: маленькая полудуга в правом верхнем углу, по которой днём идёт солнце,

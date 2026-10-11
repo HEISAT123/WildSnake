@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 
-namespace Snake3D.Tests
+namespace WildSnake.Tests
 {
     /// <summary>
     /// Логика сетки: раскладка по сиду, стартовая зона, перевод клетка/мир, границы арены,

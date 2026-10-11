@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Список пунктов в стиле интерфейса игры: выбор стрелками/W-S и мышью, Enter/Space — нажать.

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Медленно поворачивает слой облаков вокруг центра — небо «живёт».</summary>
     public class CloudDrift : MonoBehaviour

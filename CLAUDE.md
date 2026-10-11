@@ -1,4 +1,4 @@
-# CLAUDE.md — 3D Змейка (Unity)
+# CLAUDE.md — Wild Snake (Unity)
 
 Корневая карта проекта: читается в каждой сессии, поэтому коротко. Подробности — во вложенных CLAUDE.md
 (подгружаются, когда работаешь с файлами папки): `Assets/Scripts/`, `Assets/Editor/`, `Assets/Tests/`.
@@ -12,7 +12,7 @@
 
 ## Где что
 ```
-Assets/Scripts/   игровой код (Snake3D.asmdef)        → детали: Assets/Scripts/CLAUDE.md
+Assets/Scripts/   игровой код (WildSnake.asmdef)        → детали: Assets/Scripts/CLAUDE.md
 Assets/Editor/    сборка сцены, UI, окружения, URP    → детали: Assets/Editor/CLAUDE.md
 Assets/Tests/     EditMode/PlayMode-тесты              → детали: Assets/Tests/CLAUDE.md
 Assets/Materials/ Meshes/ Settings/ Scenes/  — генерируются сборщиком сцены (Settings: GameConfig.asset, URP/)

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Ввод игрока → намерение змеи: WASD задаёт направление относительно камеры, Ctrl/Shift — темп,

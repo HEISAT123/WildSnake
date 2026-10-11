@@ -12,8 +12,8 @@ PlayerSettings:
   targetDevice: 2
   useOnDemandResources: 0
   accelerometerFrequency: 60
-  companyName: Snake3D
-  productName: "\u0417\u043C\u0435\u0439\u043A\u0430 3D"
+  companyName: WildSnake
+  productName: Wild Snake
   defaultCursor: {fileID: 0}
   cursorHotspot: {x: 0, y: 0}
   m_SplashScreenBackgroundColor: {r: 0.12156863, g: 0.12156863, b: 0.1254902, a: 1}
@@ -619,14 +619,14 @@ PlayerSettings:
   editorAssembliesCompatibilityLevel: 1
   m_RenderingPath: 1
   m_MobileRenderingPath: 1
-  metroPackageName: Snake3D_Ilnur
+  metroPackageName: WildSnake
   metroPackageVersion: 
   metroCertificatePath: 
   metroCertificatePassword: 
   metroCertificateSubject: 
   metroCertificateIssuer: 
   metroCertificateNotAfter: 0000000000000000
-  metroApplicationDescription: Snake3D_Ilnur
+  metroApplicationDescription: WildSnake
   wsaImages: {}
   metroTileShortName: 
   metroTileShowName: 0

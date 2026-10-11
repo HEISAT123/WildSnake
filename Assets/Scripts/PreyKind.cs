@@ -1,4 +1,4 @@
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Виды добычи. Числовые значения используются как индексы массивов.</summary>
     public enum PreyKind

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Одно животное-добыча: жук, мышь, лягушка, птица, кролик, ёж или рыба. Бродит, замечает змею (если та не в траве),

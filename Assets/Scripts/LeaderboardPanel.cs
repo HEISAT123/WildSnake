@@ -3,7 +3,7 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Экран рекордов: топ-10 жизней змеи в колонках «место, сутки, добыча, длина, линьки» (заголовки — в разметке).

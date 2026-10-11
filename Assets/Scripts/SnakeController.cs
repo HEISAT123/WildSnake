@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Логика змейки: движение по желаемому направлению и темпу, прыжок, замах и бросок, рост и столкновения.

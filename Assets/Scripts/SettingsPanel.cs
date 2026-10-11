@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Экран настроек: связывает элементы UI с SettingsService; закрывается кнопкой «Готово» и по Esc.</summary>
     // Раньше GameManager: Esc забирается панелью и не снимает игру с паузы.

@@ -1,4 +1,4 @@
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Тип препятствия в клетке поля.</summary>
     public enum ObstacleType : byte

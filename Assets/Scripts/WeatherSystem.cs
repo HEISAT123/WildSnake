@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Погода: время от времени набегают тучи и идёт дождь. Дождь плавно усиливается и стихает (Rain01),

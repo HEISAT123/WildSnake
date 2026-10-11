@@ -1,6 +1,6 @@
 using System;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Температура холоднокровной змеи (0 — окоченела, 1 — прогрелась на камне). Тянется к «температуре места»,

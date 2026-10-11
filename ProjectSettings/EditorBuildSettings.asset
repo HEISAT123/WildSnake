@@ -6,6 +6,6 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Scenes/Snake3D.unity
+    path: Assets/Scenes/WildSnake.unity
     guid: c45eb4d79f8e7fc47b63ce0b82476867
   m_configObjects: {}

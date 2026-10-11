@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Отображение: экраны (меню, пауза, линька, итоги) и «тихий» HUD. На экране во время игры только то, что

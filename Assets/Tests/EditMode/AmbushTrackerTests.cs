@@ -1,6 +1,6 @@
 using NUnit.Framework;
 
-namespace Snake3D.Tests
+namespace WildSnake.Tests
 {
     /// <summary>Засада: маскировка после неподвижности, срыв движением, трава.</summary>
     public class AmbushTrackerTests

@@ -1,6 +1,6 @@
 using System;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Выносливость змеи. Обычный C#-класс без Unity API — легко тестировать.

@@ -1,6 +1,6 @@
 using NUnit.Framework;
 
-namespace Snake3D.Tests
+namespace WildSnake.Tests
 {
     /// <summary>Выносливость: траты, восстановление, «выдохлась», влияние голода.</summary>
     public class StaminaTests

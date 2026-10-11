@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Течение реки: сдвигает карту нормалей и цвет воды вдоль UV (у реки U идёт по руслу от истока),

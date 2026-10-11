@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Орёл — дневной хищник. Прилетает с криком, кружит над змеёй (по земле скользит его тень),

@@ -1,11 +1,11 @@
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Сохранение партии в PlayerPrefs (одна ячейка — одна жизнь змеи).</summary>
     public static class RunSaveStore
     {
-        private const string KEY = "Snake3D.Survival.Save";
+        private const string KEY = "WildSnake.Survival.Save";
 
         public static bool HasSave => PlayerPrefs.HasKey(KEY);
 

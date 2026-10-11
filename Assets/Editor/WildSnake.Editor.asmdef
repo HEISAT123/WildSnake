@@ -1,8 +1,8 @@
 {
-    "name": "Snake3D.Editor",
+    "name": "WildSnake.Editor",
     "rootNamespace": "",
     "references": [
-        "Snake3D",
+        "WildSnake",
         "UnityEngine.UI",
         "Unity.RenderPipelines.Core.Runtime",
         "Unity.RenderPipelines.Universal.Runtime",

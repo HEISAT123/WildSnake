@@ -1,6 +1,6 @@
 using System;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Звуки природы, синтезированные кодом: дождь, птицы днём, сверчки ночью, шорох травы. Каждый — бесшовная

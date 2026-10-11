@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Ничто не должно прятать змею от игрока: крона, ствол, пень, камень или бревно, которые действительно

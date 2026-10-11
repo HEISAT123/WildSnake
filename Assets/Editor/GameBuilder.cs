@@ -7,17 +7,17 @@ using UnityEngine;
 
 /// <summary>
 /// Сборка готовой игры для Windows одной командой: настраивает Player Settings (название, иконка,
-/// полный экран), собирает в Builds/Snake3D_Windows, убирает служебные файлы и пакует в zip,
+/// полный экран), собирает в Builds/WildSnake_Windows, убирает служебные файлы и пакует в zip,
 /// который можно просто отправить другу. Меню: Tools/Build Game (Windows).
 /// Batch: -executeMethod GameBuilder.BuildWindows
 /// </summary>
 public static class GameBuilder
 {
-    private const string SCENE_PATH = "Assets/Scenes/Snake3D.unity";
+    private const string SCENE_PATH = "Assets/Scenes/WildSnake.unity";
     private const string ICON_PATH = "Assets/Settings/GameIcon.png";
     private const string OUTPUT_ROOT = "Builds";
-    private const string FOLDER_NAME = "Snake3D_Windows";
-    private const string EXE_NAME = "Snake3D.exe";
+    private const string FOLDER_NAME = "WildSnake_Windows";
+    private const string EXE_NAME = "WildSnake.exe";
 
     [MenuItem("Tools/Build Game (Windows)")]
     public static void BuildWindows()
@@ -59,8 +59,8 @@ public static class GameBuilder
     /// <summary>Название, версия, иконка, полноэкранный режим и Mono (не требует доп. модулей Unity).</summary>
     private static void ApplyPlayerSettings()
     {
-        PlayerSettings.companyName = "Snake3D";
-        PlayerSettings.productName = "Змейка 3D";
+        PlayerSettings.companyName = "WildSnake";
+        PlayerSettings.productName = "Wild Snake";
         PlayerSettings.bundleVersion = "1.0";
         PlayerSettings.fullScreenMode = FullScreenMode.FullScreenWindow;
         PlayerSettings.defaultScreenWidth = 1600;

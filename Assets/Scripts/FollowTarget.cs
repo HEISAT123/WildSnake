@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Держит объект над целью (пыльца и светлячки летают вокруг змеи, а не по всему огромному миру).

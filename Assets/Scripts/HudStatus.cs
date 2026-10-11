@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Короткие слова-состояния над показателями: «В ТРАВЕ», «ЗАСАДА», «ХОЛОДНО», «ПЕРЕВАРИВАЕТ»…

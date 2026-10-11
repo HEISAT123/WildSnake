@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Смена дня и ночи: солнце идёт по небу и садится, ночью светит луна и проступают звёзды,

@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Центр экрана: тонкий прицел появляется только при замахе (ПКМ) и показывает силу броска кольцом,

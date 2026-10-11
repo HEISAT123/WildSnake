@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Правила выживания: голод и здоровье, охота, удары, орёл, смена дня и ночи, линька с улучшениями,

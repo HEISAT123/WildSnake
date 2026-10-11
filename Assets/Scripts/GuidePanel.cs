@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Справочник «Как выжить»: статичный текст из разметки и кнопка «Готово»; закрывается и по Esc.</summary>
     // Раньше GameManager: Esc забирается панелью и не снимает игру с паузы.

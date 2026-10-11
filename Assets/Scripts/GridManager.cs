@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Логика мира: размеры, рельеф (карта высот по TerrainShape — холмы внутри, горы по краю как граница),

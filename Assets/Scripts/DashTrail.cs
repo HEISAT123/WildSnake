@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Шлейф за головой, который рисуется только во время броска.</summary>
     [RequireComponent(typeof(TrailRenderer))]

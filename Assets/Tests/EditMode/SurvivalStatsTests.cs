@@ -1,6 +1,6 @@
 using NUnit.Framework;
 
-namespace Snake3D.Tests
+namespace WildSnake.Tests
 {
     /// <summary>Голод, восстановление и урон змеи.</summary>
     public class SurvivalStatsTests

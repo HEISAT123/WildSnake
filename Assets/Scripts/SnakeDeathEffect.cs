@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// При смерти тело рассыпается на шарики: меш и голова прячутся, а вдоль позвоночника

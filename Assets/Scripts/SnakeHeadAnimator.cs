@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Мелкая «жизнь» головы: змея периодически высовывает раздвоенный язык и моргает.</summary>
     public class SnakeHeadAnimator : MonoBehaviour

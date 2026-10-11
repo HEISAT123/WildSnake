@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Таблица из 10 самых долгих жизней змеи. При равном времени выше та, что поймала больше добычи.

@@ -1,7 +1,7 @@
 # Assets/Editor — сборка сцены, UI и окружения
 
 - `SnakeSceneBuilder` (`Tools/Build Snake Scene`, batch `-executeMethod SnakeSceneBuilder.Build`): создаёт сцену, текстуры, материалы,
-  GameConfig, поле, змей, живность, эффекты, звук, камеру, UI и сохраняет `Assets/Scenes/Snake3D.unity`. Сцену создаёт первой
+  GameConfig, поле, змей, живность, эффекты, звук, камеру, UI и сохраняет `Assets/Scenes/WildSnake.unity`. Сцену создаёт первой
   (NewScene выгружает ассеты). Ассеты переиспользует по пути, чтобы не ломать ссылки; устаревшие — в `ObsoleteMaterials`/`DeleteObsoleteAssets`.
   Поля компонентов — через `Wire`/`WireArray`/`SetBool`/`SetFloat`/`SetInt`.
 - `RenderPipelineSetup`: ассеты URP в `Assets/Settings/URP` (Low/Medium/High под 6 уровней Quality, общий рендерер, профиль с bloom),
@@ -13,6 +13,6 @@
   Стиль: Bahnschrift, чернильное затемнение слева поверх живой сцены, «костяной» текст, акцент — лайм, опасность — тлеющий красный;
   без карточек — заголовок с кикером, строки «01 02», тонкие линии, клавиши-подсказки; мелкий текст (≤22) без жирного.
 - `GameBuilder` (`Tools/Build Game (Windows)`): Mono, результат в `Builds/`; иконка рисуется кодом в `Assets/Settings/GameIcon.png`.
-- В Editor-коде `SettingsService` конфликтует с `UnityEditor.SettingsService` — `using SettingsService = Snake3D.SettingsService;`.
+- В Editor-коде `SettingsService` конфликтует с `UnityEditor.SettingsService` — `using SettingsService = WildSnake.SettingsService;`.
 - Если включат Input System — добавить `Unity.InputSystem` в оба asmdef.
 - Unity MCP (по желанию): пакет CoderGamester/mcp-unity; если подключён — ошибки читать из консоли редактора вместо batch.

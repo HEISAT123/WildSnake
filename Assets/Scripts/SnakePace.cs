@@ -1,4 +1,4 @@
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Темп ползания: красться (тихо и медленно), обычный шаг, быстро (тратит выносливость).</summary>
     public enum SnakePace

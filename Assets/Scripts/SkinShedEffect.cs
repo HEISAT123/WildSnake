@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Сброшенная при линьке кожа: полупрозрачная копия тела остаётся лежать на земле и медленно тает.

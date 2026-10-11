@@ -1,4 +1,4 @@
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Этапы главной цели «Продолжить род».</summary>
     public enum QuestStage

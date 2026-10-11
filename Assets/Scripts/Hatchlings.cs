@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Вылупившиеся змеёныши: несколько крошечных змеек расползаются от гнезда в разные стороны, виляя,

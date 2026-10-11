@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Карта на весь экран и журнал целей по Tab (вместо постоянной мини-карты): пока Tab зажат,

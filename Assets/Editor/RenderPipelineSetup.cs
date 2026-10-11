@@ -15,14 +15,14 @@ using UnityEngine.Rendering.Universal;
 public static class RenderPipelineSetup
 {
     private const string FOLDER = "Assets/Settings/URP";
-    private const string RENDERER_PATH = FOLDER + "/Snake3D_Renderer.asset";
+    private const string RENDERER_PATH = FOLDER + "/WildSnake_Renderer.asset";
     private const string PROFILE_PATH = FOLDER + "/PostProcess.asset";
     private const string DEFAULT_POST_PROCESS_DATA = "Packages/com.unity.render-pipelines.universal/Runtime/Data/PostProcessData.asset";
 
     [MenuItem("Tools/Setup URP")]
     private static void SetupMenu()
     {
-        Debug.Log(EnsureUrp() ? "Snake3D: URP назначен" : "Snake3D: пакет URP не установлен");
+        Debug.Log(EnsureUrp() ? "WildSnake: URP назначен" : "WildSnake: пакет URP не установлен");
     }
 
     /// <summary>Создать и назначить ассеты URP. false — пакета нет, остаёмся на Built-in.</summary>

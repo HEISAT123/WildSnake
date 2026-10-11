@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Камера от третьего лица, как в обычных играх: мышь вращает её вокруг змеи (орбита с ограничением

@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Лиса — наземный хищник, чаще приходит ночью. Появляется у края поля, рыщет по следу змеи

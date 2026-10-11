@@ -3,7 +3,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 #endif
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Единая точка чтения клавиатуры, мыши и геймпада. Бэкенд выбирается по настройке Active Input Handling,

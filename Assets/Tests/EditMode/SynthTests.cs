@@ -1,5 +1,5 @@
 using NUnit.Framework;
-using Snake3D;
+using WildSnake;
 
 /// <summary>Синтез звуков и музыки: всё рендерится, без NaN/бесконечностей и без перегрузки.</summary>
 public class SynthTests

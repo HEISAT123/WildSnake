@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Хищник глазами добычи: где голова змеи и насколько её легко заметить.</summary>
     public struct PreyThreat

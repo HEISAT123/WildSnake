@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Snake3D;
+using WildSnake;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;

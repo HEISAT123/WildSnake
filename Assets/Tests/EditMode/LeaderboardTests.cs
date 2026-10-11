@@ -1,6 +1,6 @@
 using NUnit.Framework;
 
-namespace Snake3D.Tests
+namespace WildSnake.Tests
 {
     /// <summary>Таблица рекордов выживания: порядок по прожитым секундам, ничья по добыче, лимит, места, сериализация.</summary>
     public class LeaderboardTests

@@ -1,6 +1,6 @@
 using System;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Синтез фоновой музыки в стиле synthwave / chill electronic: пэды на расстроенных пилах,

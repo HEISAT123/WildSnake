@@ -1,21 +1,21 @@
 using System;
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Пользовательские настройки: громкость, мышь, графика, экран. Хранятся в PlayerPrefs.</summary>
     public class SettingsService : MonoBehaviour
     {
-        private const string KEY_MASTER = "Snake3D.Settings.Master";
-        private const string KEY_MUSIC = "Snake3D.Settings.Music";
-        private const string KEY_SFX = "Snake3D.Settings.Sfx";
-        private const string KEY_MOUSE = "Snake3D.Settings.Mouse";
-        private const string KEY_INVERT_Y = "Snake3D.Settings.InvertY";
-        private const string KEY_QUALITY = "Snake3D.Settings.Quality";
-        private const string KEY_FULLSCREEN = "Snake3D.Settings.Fullscreen";
-        private const string KEY_HUD = "Snake3D.Settings.Hud";
-        private const string KEY_RIVAL = "Snake3D.Settings.Rival";
-        private const string KEY_MINIMAP = "Snake3D.Settings.Minimap";
+        private const string KEY_MASTER = "WildSnake.Settings.Master";
+        private const string KEY_MUSIC = "WildSnake.Settings.Music";
+        private const string KEY_SFX = "WildSnake.Settings.Sfx";
+        private const string KEY_MOUSE = "WildSnake.Settings.Mouse";
+        private const string KEY_INVERT_Y = "WildSnake.Settings.InvertY";
+        private const string KEY_QUALITY = "WildSnake.Settings.Quality";
+        private const string KEY_FULLSCREEN = "WildSnake.Settings.Fullscreen";
+        private const string KEY_HUD = "WildSnake.Settings.Hud";
+        private const string KEY_RIVAL = "WildSnake.Settings.Rival";
+        private const string KEY_MINIMAP = "WildSnake.Settings.Minimap";
 
         public event Action Changed;
 

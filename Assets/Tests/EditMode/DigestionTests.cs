@@ -1,6 +1,6 @@
 using NUnit.Framework;
 
-namespace Snake3D.Tests
+namespace WildSnake.Tests
 {
     /// <summary>Переваривание: бугор ползёт к хвосту, замедляет и проходит; обвивание крупной добычи.</summary>
     public class DigestionTests

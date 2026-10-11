@@ -1,12 +1,12 @@
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Все параметры баланса выживания в одном ассете: движение змеи, голод и здоровье,
     /// нюх, линька, добыча, смена дня и ночи, орёл. Подставляется в GameManager и системы.
     /// </summary>
-    [CreateAssetMenu(fileName = "GameConfig", menuName = "Snake3D/Game Config")]
+    [CreateAssetMenu(fileName = "GameConfig", menuName = "WildSnake/Game Config")]
     public class GameConfig : ScriptableObject
     {
         [Header("Змейка: движение")]

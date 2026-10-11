@@ -1,4 +1,4 @@
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Состояния игры.</summary>
     public enum GameState

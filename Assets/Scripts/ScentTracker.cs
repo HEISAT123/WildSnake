@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Нюх: змея высовывает язык — на несколько секунд от головы к ближайшей добыче тянется

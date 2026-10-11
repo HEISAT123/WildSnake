@@ -2,7 +2,7 @@ using System;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Сообщает меню, что мышь навели на пункт, — выделение следует за курсором.</summary>
     public class MenuItemHover : MonoBehaviour, IPointerEnterHandler

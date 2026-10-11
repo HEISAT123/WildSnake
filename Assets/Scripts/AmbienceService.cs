@@ -1,7 +1,7 @@
 using System.Threading.Tasks;
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Звуки окружения: птицы днём, сверчки ночью, шум дождя и шорох травы, когда змея ползёт в зарослях.

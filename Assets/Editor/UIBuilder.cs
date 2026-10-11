@@ -1,4 +1,4 @@
-using Snake3D;
+using WildSnake;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -7,7 +7,7 @@ using UnityEngine.UI;
 using UnityEngine.InputSystem.UI;
 #endif
 // В UnityEditor есть свой SettingsService — явно выбираем игровой.
-using SettingsService = Snake3D.SettingsService;
+using SettingsService = WildSnake.SettingsService;
 
 /// <summary>
 /// Интерфейс игры в едином стиле: крупная типографика (Bahnschrift), чернильный фон с затемнением
@@ -286,12 +286,12 @@ internal static class UIBuilder
 
         // Только название и пять строк — без слоганов, описаний и подсказок.
         RectTransform tag = Rect("Tag", screen);
-        TopLeft(tag, LEFT, -112f, 56f, 30f);
+        TopLeft(tag, LEFT, -112f, 150f, 30f);
         Img(tag, Venom, _chamfer);
-        Text tagText = Label(tag, "Text", "3D", 19, Ink, TextAnchor.MiddleCenter, true);
+        Text tagText = Label(tag, "Text", "ВЫЖИВАНИЕ", 17, Ink, TextAnchor.MiddleCenter, true);
         Stretch(tagText.rectTransform);
 
-        TopLeft(Label(screen, "Title", "ЗМЕЙКА", 164, Bone, TextAnchor.MiddleLeft, true), LEFT - 10f, -142f, 1000f, 200f);
+        TopLeft(Label(screen, "Title", "WILD SNAKE", 128, Bone, TextAnchor.MiddleLeft, true), LEFT - 10f, -142f, 1000f, 200f);
         TopLeft(Line(screen, Venom), LEFT, -350f, 72f, 5f);
 
         string[] items = { "ИГРАТЬ", "СПРАВОЧНИК", "РЕКОРДЫ", "НАСТРОЙКИ", "ВЫХОД" };

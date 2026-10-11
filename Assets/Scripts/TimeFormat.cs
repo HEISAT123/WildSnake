@@ -1,6 +1,6 @@
 using System.Globalization;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Форматирование времени для интерфейса: «2,4» суток, «3:07» минут. Вызывается по событиям, не каждый кадр.</summary>
     public static class TimeFormat

@@ -1,6 +1,6 @@
 using System;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Общие «кирпичики» синтеза для музыки (MusicSynth) и звуков (SfxSynth): осцилляторы без алиасинга,

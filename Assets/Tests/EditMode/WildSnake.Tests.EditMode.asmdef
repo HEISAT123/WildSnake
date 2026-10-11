@@ -1,8 +1,8 @@
 {
-    "name": "Snake3D.Tests.EditMode",
-    "rootNamespace": "Snake3D.Tests",
+    "name": "WildSnake.Tests.EditMode",
+    "rootNamespace": "WildSnake.Tests",
     "references": [
-        "Snake3D",
+        "WildSnake",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

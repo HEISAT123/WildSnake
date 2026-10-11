@@ -4,7 +4,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.TestTools;
 
-namespace Snake3D.Tests
+namespace WildSnake.Tests
 {
     /// <summary>
     /// Дымовые тесты сцены: партия, меню с живым фоном, ночь — всё живёт несколько секунд без ошибок в логе
@@ -12,7 +12,7 @@ namespace Snake3D.Tests
     /// </summary>
     public class GameSmokeTests
     {
-        private const string SCENE_NAME = "Snake3D";
+        private const string SCENE_NAME = "WildSnake";
         private const float RUN_SECONDS = 2f;
 
         private GameManager _game;

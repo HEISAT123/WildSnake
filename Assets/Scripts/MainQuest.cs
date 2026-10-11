@@ -1,6 +1,6 @@
 using System;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Главная цель жизни змеи — «Продолжить род», и она повторяется из поколения в поколение:

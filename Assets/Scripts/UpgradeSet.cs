@@ -1,6 +1,6 @@
 using System;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Набранные за партию улучшения и их эффекты в виде множителей. Обычный C#-класс — легко тестировать.

@@ -1,4 +1,4 @@
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Где сейчас змея — от этого зависит, греется она или остывает.</summary>
     public enum TemperatureSpot

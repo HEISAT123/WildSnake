@@ -1,4 +1,4 @@
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Можно ли отложить яйца прямо сейчас, а если нет — чего не хватает.</summary>
     public enum NestCheck

@@ -1,6 +1,6 @@
 {
-    "name": "Snake3D",
-    "rootNamespace": "Snake3D",
+    "name": "WildSnake",
+    "rootNamespace": "WildSnake",
     "references": [
         "UnityEngine.UI"
     ],

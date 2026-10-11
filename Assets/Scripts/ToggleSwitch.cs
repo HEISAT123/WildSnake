@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Вид «свитча» для Toggle: кружок плавно переезжает, дорожка меняет цвет.</summary>
     [RequireComponent(typeof(Toggle))]

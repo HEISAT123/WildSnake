@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Карта: подложка, нарисованная по данным поля (MapPainter), и значки поверх неё —

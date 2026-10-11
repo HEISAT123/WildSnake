@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Параметры одного вида добычи (настраиваются в GameConfig).</summary>
     [Serializable]

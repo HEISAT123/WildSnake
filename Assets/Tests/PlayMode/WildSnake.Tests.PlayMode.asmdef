@@ -1,8 +1,8 @@
 {
-    "name": "Snake3D.Tests.PlayMode",
-    "rootNamespace": "Snake3D.Tests",
+    "name": "WildSnake.Tests.PlayMode",
+    "rootNamespace": "WildSnake.Tests",
     "references": [
-        "Snake3D",
+        "WildSnake",
         "UnityEngine.TestRunner"
     ],
     "includePlatforms": [],

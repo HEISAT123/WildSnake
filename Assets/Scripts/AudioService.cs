@@ -1,7 +1,7 @@
 using System.Threading.Tasks;
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Звуки и музыка. Всё синтезируется кодом в фоновом потоке (SfxSynth, MusicSynth), чтобы не

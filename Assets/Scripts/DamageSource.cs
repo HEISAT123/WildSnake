@@ -1,4 +1,4 @@
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Откуда пришёл урон — для экрана итогов («отчего погибла»).</summary>
     public enum DamageSource

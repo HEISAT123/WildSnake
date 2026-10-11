@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Snake3D;
+using WildSnake;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -11,16 +11,16 @@ using UnityEngine.UI;
 using UnityEngine.InputSystem.UI;
 #endif
 // В UnityEditor есть свой SettingsService — явно выбираем игровой.
-using SettingsService = Snake3D.SettingsService;
+using SettingsService = WildSnake.SettingsService;
 
 /// <summary>
-/// Собирает сцену Snake3D с нуля: текстуры, материалы, конфиг, поле с зарослями, змеи, живность, орёл,
+/// Собирает сцену WildSnake с нуля: текстуры, материалы, конфиг, поле с зарослями, змеи, живность, орёл,
 /// смена дня и ночи, нюх, эффекты, звук, камеры, мини-карта и весь UI. Запуск: Tools/Build Snake Scene.
 /// Сцену можно пересобирать сколько угодно раз; GameConfig при этом сохраняет ваши значения.
 /// </summary>
 public static class SnakeSceneBuilder
 {
-    private const string SCENE_PATH = "Assets/Scenes/Snake3D.unity";
+    private const string SCENE_PATH = "Assets/Scenes/WildSnake.unity";
     private const string MATERIALS_FOLDER = "Assets/Materials";
     private const string SETTINGS_FOLDER = "Assets/Settings";
     private const string CANOPY_LAYER = "Canopy";
@@ -295,7 +295,7 @@ public static class SnakeSceneBuilder
         EditorSceneManager.SaveScene(scene, SCENE_PATH);
         AddSceneToBuildSettings(SCENE_PATH);
 
-        Debug.Log("Snake3D: сцена собрана и сохранена в " + SCENE_PATH + (_urp ? " (URP)" : " (Built-in)"));
+        Debug.Log("WildSnake: сцена собрана и сохранена в " + SCENE_PATH + (_urp ? " (URP)" : " (Built-in)"));
     }
 
     // ===================== Живность =====================
@@ -1301,7 +1301,8 @@ public static class SnakeSceneBuilder
     private static void AddSceneToBuildSettings(string path)
     {
         var scenes = new List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);
-        scenes.RemoveAll(s => s.path == path);
+        // Заодно убираем сцены, которых больше нет (например, после переименования).
+        scenes.RemoveAll(s => s.path == path || !System.IO.File.Exists(s.path));
         scenes.Insert(0, new EditorBuildSettingsScene(path, true));
         EditorBuildSettings.scenes = scenes.ToArray();
     }

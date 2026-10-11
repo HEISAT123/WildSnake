@@ -1,4 +1,4 @@
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Звуковые эффекты. Числовые значения используются как индексы массива клипов.</summary>
     public enum SoundId

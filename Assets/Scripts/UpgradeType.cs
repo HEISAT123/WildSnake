@@ -1,4 +1,4 @@
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Улучшения, которые змея выбирает при линьке. Значения — индексы массивов (и сохранений — не переставлять).</summary>
     public enum UpgradeType

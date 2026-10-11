@@ -1,6 +1,6 @@
 using NUnit.Framework;
 
-namespace Snake3D.Tests
+namespace WildSnake.Tests
 {
     /// <summary>Главная цель: повзрослеть, ночью и сытой отложить яйца, охранять кладку, вылупление — новое поколение.</summary>
     public class MainQuestTests

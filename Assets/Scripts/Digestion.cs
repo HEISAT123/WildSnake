@@ -1,6 +1,6 @@
 using System;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Переваривание: каждая съеденная добыча — бугор, который ползёт по телу от головы к хвосту.

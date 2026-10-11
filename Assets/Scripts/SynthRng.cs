@@ -1,4 +1,4 @@
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Быстрый детерминированный генератор шума (xorshift).</summary>
     public sealed class SynthRng

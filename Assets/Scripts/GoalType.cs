@@ -1,4 +1,4 @@
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Цели суток. Числовые значения — индексы массивов подписей в UI.</summary>
     public enum GoalType

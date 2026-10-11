@@ -1,6 +1,6 @@
 using System;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Сохранение партии у норы: всё, чтобы продолжить жизнь змеи с того же места.

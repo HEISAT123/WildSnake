@@ -1,6 +1,6 @@
 using NUnit.Framework;
 
-namespace Snake3D.Tests
+namespace WildSnake.Tests
 {
     /// <summary>Цели суток: выбор, прогресс, выполнение и награды.</summary>
     public class DailyGoalsTests

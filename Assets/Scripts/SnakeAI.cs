@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// ИИ змеи (соперницы или автопилота меню) в три слоя:

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using NUnit.Framework;
 
-namespace Snake3D.Tests
+namespace WildSnake.Tests
 {
     /// <summary>Улучшения линьки: уровни, предел, эффекты и выбор вариантов.</summary>
     public class UpgradeSetTests

@@ -1,4 +1,4 @@
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Статистика одной жизни змеи (для экрана итогов и таблицы рекордов).</summary>
     public struct RunStats

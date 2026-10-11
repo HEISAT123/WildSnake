@@ -1,4 +1,4 @@
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Одна строка таблицы рекордов: сколько прожила змея и чего добилась.</summary>
     public struct LeaderboardEntry

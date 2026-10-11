@@ -1,9 +1,9 @@
 ---
 name: unity-conventions
-description: Правила кода и архитектуры Unity для проекта Snake3D. Используй при написании или правке любых C# скриптов, Editor-скриптов и тестов.
+description: Правила кода и архитектуры Unity для проекта WildSnake. Используй при написании или правке любых C# скриптов, Editor-скриптов и тестов.
 ---
 
-# Unity conventions (Snake3D)
+# Unity conventions (WildSnake)
 
 - Поля инспектора: `[SerializeField] private` + `[Header]`/`[Tooltip]`; публичные поля только при необходимости.
 - В рантайме запрещены `FindObjectOfType`, `GameObject.Find`, `GetComponent` в `Update` (кэш в `Awake`).

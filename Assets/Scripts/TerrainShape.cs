@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Форма мира: пологие холмы внутри и кольцо гор по краю — это и есть граница, за которую не выйти.

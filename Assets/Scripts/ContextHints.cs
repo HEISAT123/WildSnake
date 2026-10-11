@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Контекстные подсказки вместо отдельного обучения: маленькая подпись с клавишей у центра экрана
@@ -39,7 +39,7 @@ namespace Snake3D
             Count
         }
 
-        private const string KEY_PREFIX = "Snake3D.Hints.";
+        private const string KEY_PREFIX = "WildSnake.Hints.";
 
         private static readonly string[] Keys =
         {

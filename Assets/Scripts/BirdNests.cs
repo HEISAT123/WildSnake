@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Птичьи гнёзда с яйцами — набег за лёгкой едой. Яйца не убегают: подползи и съешь касанием.

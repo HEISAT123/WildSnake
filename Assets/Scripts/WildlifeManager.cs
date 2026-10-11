@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Живность на арене: держит численность каждого вида (днём и ночью разную), подселяет новых

@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Состояние змеи по краям экрана — без полос и цифр. Остаются и в режиме «без интерфейса»:

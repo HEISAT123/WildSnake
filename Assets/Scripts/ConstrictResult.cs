@@ -1,4 +1,4 @@
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Чем закончился шаг обвивания.</summary>
     public enum ConstrictResult

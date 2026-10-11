@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Показатели змеи: три тонкие дуги вокруг маленького значка змеи (здоровье снаружи, сытость посередине,

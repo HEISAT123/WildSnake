@@ -1,6 +1,6 @@
 using System;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Цели суток: с каждым рассветом 1–2 простые задачи. GameManager сообщает о событиях (Report),

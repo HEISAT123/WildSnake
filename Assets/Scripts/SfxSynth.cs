@@ -1,6 +1,6 @@
 using System;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Звуковые эффекты в стиле саундтрека: те же расстроенные пилы с фильтром, FM-колокольчики,

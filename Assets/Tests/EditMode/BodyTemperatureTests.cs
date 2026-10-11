@@ -1,6 +1,6 @@
 using NUnit.Framework;
 
-namespace Snake3D.Tests
+namespace WildSnake.Tests
 {
     /// <summary>Температура: солнечный камень греет, ночь и вода остужают, холод замедляет.</summary>
     public class BodyTemperatureTests

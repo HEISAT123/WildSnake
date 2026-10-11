@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Ставит всем текстам интерфейса системный шрифт (Bahnschrift в Windows, DIN-подобный) — он современнее

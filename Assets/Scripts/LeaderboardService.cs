@@ -1,13 +1,13 @@
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Таблица рекордов выживания, хранится в PlayerPrefs.</summary>
     public class LeaderboardService : MonoBehaviour
     {
         [Header("Сохранение")]
         [Tooltip("Ключ PlayerPrefs")]
-        [SerializeField] private string _key = "Snake3D.Survival.Leaderboard";
+        [SerializeField] private string _key = "WildSnake.Survival.Leaderboard";
 
         private Leaderboard _board;
 

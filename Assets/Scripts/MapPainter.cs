@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Рисует подложку карты по данным поля: луг, трава и камыш, рощи и березняки, вода реки, озера и болота,

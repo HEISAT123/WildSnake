@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Визуал мира поверх рельефа (сам рельеф с горами-границей строит EnvironmentBuilder) — «дикие» препятствия

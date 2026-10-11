@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Где опасность — видно сразу. Метка орла или лисы — значок зверя, стрелка и расстояние:

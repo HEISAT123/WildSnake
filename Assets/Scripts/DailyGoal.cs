@@ -1,4 +1,4 @@
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>Одна цель суток: что сделать, сколько раз и сколько уже сделано.</summary>
     public struct DailyGoal

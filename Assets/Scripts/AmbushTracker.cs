@@ -1,4 +1,4 @@
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Засада: змея, неподвижная дольше Delay секунд, за Ramp секунд сливается с местностью.

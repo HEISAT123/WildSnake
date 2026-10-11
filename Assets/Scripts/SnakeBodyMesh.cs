@@ -1,7 +1,7 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace Snake3D
+namespace WildSnake
 {
     /// <summary>
     /// Гладкое тело змеи: процедурная «трубка» вдоль траектории головы.
