@@ -110,3 +110,11 @@ InitTestScene*.unity*
 
 # Claude Code local
 .claude/settings.local.json
+
+# Резервные копии сцен, которые Unity создаёт после сбоя/перезагрузки
+/[Aa]ssets/_Recovery/
+/[Aa]ssets/_Recovery.meta
+
+# Файлы ОС
+.DS_Store
+Thumbs.db
