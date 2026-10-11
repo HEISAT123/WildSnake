@@ -9,7 +9,7 @@ namespace WildSnake
     /// в погоню и кусает. Трава и засада прячут змею, в пруд лиса не заходит, в нору не пролезает.
     /// Бросок змеи в морду отпугивает лису, если змея ещё полна сил (решает GameManager через TryScare).
     /// Пока змея охраняет кладку (Raiding), лиса приходит чаще и идёт прямо к гнезду таскать яйца.
-    /// В полом бревне змеи лиса не видит и не достаёт.
+    /// В полом бревне змеи лиса не видит и не достаёт, в ежевику не лезет; ужаленная осами — убегает.
     /// Логика в данных, Transform только показывает результат.
     /// </summary>
     public class FoxHunter : MonoBehaviour
@@ -162,6 +162,17 @@ namespace WildSnake
             return true;
         }
 
+        /// <summary>Лису ужалили осы: она с визгом убегает. Возвращает true, если лиса была рядом и бросилась наутёк.</summary>
+        public bool Sting(Vector3 swarmPosition, float radius)
+        {
+            if (!IsActive || _phase == Phase.Retreat) return false;
+            Vector3 d = _pos - swarmPosition;
+            d.y = 0f;
+            if (d.sqrMagnitude > radius * radius) return false;
+            BeginRetreat();
+            return true;
+        }
+
         private void Update()
         {
             float dt = Time.deltaTime;
@@ -281,7 +292,8 @@ namespace WildSnake
             if (speed > 0f) MoveTowards(head, speed, dt);
             else MoveTowards(_pos - d.normalized, -speed, dt);
 
-            bool reachable = !_grid.IsWaterAt(head) && !_grid.IsHollowAt(head);
+            // В колючую ежевику лиса морду не суёт.
+            bool reachable = !_grid.IsWaterAt(head) && !_grid.IsHollowAt(head) && !_grid.IsBrambleAt(head);
             if (reachable && _biteTimer <= 0f && d.magnitude <= _biteRange * cs && _target.HeightAboveGround < 0.6f * cs)
             {
                 _biteTimer = _biteCooldown;

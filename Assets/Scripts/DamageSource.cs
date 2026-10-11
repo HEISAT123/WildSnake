@@ -16,6 +16,10 @@ namespace WildSnake
         /// <summary>Колючки свернувшегося ежа.</summary>
         Hedgehog,
         /// <summary>Птица, защищающая гнездо.</summary>
-        Bird
+        Bird,
+        /// <summary>Колючки ежевики.</summary>
+        Thorns,
+        /// <summary>Осиный рой.</summary>
+        Wasps
     }
 }

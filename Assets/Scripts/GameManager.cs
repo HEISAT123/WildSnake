@@ -65,6 +65,9 @@ namespace WildSnake
         [Tooltip("Змеёныши, расползающиеся при вылуплении")]
         [SerializeField] private Hatchlings _hatchlings;
 
+        [Tooltip("Осиные гнёзда на пнях")]
+        [SerializeField] private WaspNests _wasps;
+
         [Header("Гнездо")]
         [Tooltip("Яйца в гнезде: появляются, когда змея их отложит")]
         [SerializeField] private GameObject _nestEggs;
@@ -183,6 +186,15 @@ namespace WildSnake
         /// <summary>Бросок отогнал птицу от её гнезда.</summary>
         public event Action BirdScared;
 
+        /// <summary>Из гнезда вылетел осиный рой и погнался за змеёй.</summary>
+        public event Action WaspsSwarmed;
+
+        /// <summary>Рой ужалил лису, и та убежала.</summary>
+        public event Action FoxStungByWasps;
+
+        /// <summary>Змея закатила свёрнутого ежа в воду.</summary>
+        public event Action HedgehogSplashed;
+
         public GameState State { get; private set; } = GameState.Menu;
         public RunStats Stats => _stats;
         public SurvivalStats Survival => _survival;
@@ -263,6 +275,7 @@ namespace WildSnake
         private float _rivalHealth;
         private float _rivalRespawnTimer = -1f;
         private float _menuRespawnTimer = -1f;
+        private float _thornTimer;
 
         private bool RivalActive => _rival != null && _rival.gameObject.activeSelf;
 
@@ -298,6 +311,12 @@ namespace WildSnake
             _wildlife.Caught += OnPreyCaught;
             _wildlife.Grabbed += OnPreyGrabbed;
             _wildlife.Pricked += OnPricked;
+            _wildlife.Pushed += OnHedgehogPushed;
+            _wildlife.HedgehogSplashed += OnHedgehogSplashed;
+            _wildlife.MouseHid += OnMouseHid;
+            _wasps.SwarmStarted += OnWaspsSwarmed;
+            _wasps.Stung += OnWaspStung;
+            _wasps.FoxStung += OnFoxStung;
             _weather.RainStarted += OnRainStarted;
             _weather.RainStopped += OnRainStopped;
             _eagle.Screeched += OnEagleScreeched;
@@ -330,6 +349,12 @@ namespace WildSnake
             _wildlife.Caught -= OnPreyCaught;
             _wildlife.Grabbed -= OnPreyGrabbed;
             _wildlife.Pricked -= OnPricked;
+            _wildlife.Pushed -= OnHedgehogPushed;
+            _wildlife.HedgehogSplashed -= OnHedgehogSplashed;
+            _wildlife.MouseHid -= OnMouseHid;
+            _wasps.SwarmStarted -= OnWaspsSwarmed;
+            _wasps.Stung -= OnWaspStung;
+            _wasps.FoxStung -= OnFoxStung;
             _weather.RainStarted -= OnRainStarted;
             _weather.RainStopped -= OnRainStopped;
             _eagle.Screeched -= OnEagleScreeched;
@@ -475,6 +500,8 @@ namespace WildSnake
             SetNestVisuals(false, false);
             SetRaid(false);
             _birdNests.ResetAll();
+            _wasps.ResetAll();
+            _thornTimer = 0f;
             _hatchlings.Clear();
 
             if (_rival != null)
@@ -512,6 +539,7 @@ namespace WildSnake
             _cameraRig.OrbitInput = running;
             _wildlife.IsRunning = running || menu;
             _birdNests.IsRunning = running;
+            _wasps.IsRunning = running;
             _dayNight.Running = running;
             _eagle.HuntingAllowed = running && !_dayNight.IsNight;
             _fox.HuntingAllowed = running;
@@ -535,10 +563,12 @@ namespace WildSnake
             _eagle.HuntingAllowed = !_dayNight.IsNight;
             _fox.IsNight = _dayNight.IsNight;
             _birdNests.IsNight = _dayNight.IsNight;
+            _wasps.IsNight = _dayNight.IsNight;
 
             TickHunger(dt);
             if (State != GameState.Playing) return;
             TickConstriction(dt);
+            TickThorns(dt);
             // Голодная и замёрзшая змея медленнее восстанавливает силы.
             _snake.Stamina.RegenMultiplier = Mathf.Lerp(_config.HungryStaminaRegen, 1f, Mathf.Clamp01(_survival.Satiety01 * 2f))
                                              * _snake.Temperature.RegenMultiplier * _upgrades.StaminaRegenMultiplier;
@@ -1146,6 +1176,62 @@ namespace WildSnake
         private void OnPricked()
         {
             if (State == GameState.Playing) HedgehogPricked?.Invoke();
+        }
+
+        private void OnHedgehogPushed(Vector3 position)
+        {
+            if (State == GameState.Playing) _audio.Play(SoundId.Land);
+        }
+
+        private void OnHedgehogSplashed(Vector3 position)
+        {
+            if (State != GameState.Playing) return;
+            _audio.Play(SoundId.Splash);
+            HedgehogSplashed?.Invoke();
+        }
+
+        private void OnMouseHid(Vector3 position)
+        {
+            if (State != GameState.Playing) return;
+            Emit(_dustParticles, position, _dustParticleCount / 2);
+        }
+
+        // ---------------- Ежевика и осы ----------------
+
+        /// <summary>
+        /// Быстрое ползание по ежевике — колючки царапают; шагом и крадучись — нет. Бросок из засады в зарослях
+        /// не наказывается, иначе колючки сбивали бы его и ежевика была бы бесполезна для охоты.
+        /// </summary>
+        private void TickThorns(float dt)
+        {
+            if (_thornTimer > 0f) _thornTimer -= dt;
+            if (!_snake.InBramble || !_snake.IsHurrying || _snake.IsStriking || _thornTimer > 0f) return;
+            _thornTimer = _config.ThornInterval;
+            _snake.TakeHit(_config.ThornDamage, DamageSource.Thorns, Vector3.zero);
+        }
+
+        private void OnWaspsSwarmed(Vector3 nest)
+        {
+            if (State != GameState.Playing) return;
+            _audio.Play(SoundId.Buzz);
+            WaspsSwarmed?.Invoke();
+        }
+
+        private void OnWaspStung(Vector3 from)
+        {
+            if (State != GameState.Playing) return;
+            _audio.Play(SoundId.Buzz);
+            _snake.TakeHit(_config.WaspStingDamage, DamageSource.Wasps, _snake.HeadPosition - from);
+        }
+
+        /// <summary>Рой ужалил лису: засчитывается как отпугнутая — змея сама её сюда привела.</summary>
+        private void OnFoxStung()
+        {
+            if (State != GameState.Playing) return;
+            _stats.FoxesScared++;
+            _audio.Play(SoundId.FoxYip);
+            ReportGoal(GoalType.ScareFox);
+            FoxStungByWasps?.Invoke();
         }
 
         private void OnRainStarted()

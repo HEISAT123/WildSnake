@@ -18,6 +18,8 @@ namespace WildSnake
         Dawn = 12,
         Dusk = 13,
         FoxYip = 14,
-        Goal = 15
+        Goal = 15,
+        Buzz = 16,
+        Splash = 17
     }
 }

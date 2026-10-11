@@ -157,10 +157,17 @@ namespace WildSnake
                 if (InBurrow) return TemperatureSpot.Burrow;
                 if (_inWater) return TemperatureSpot.Water;
                 if (_grid.IsSunStoneAt(_headPos)) return TemperatureSpot.SunStone;
+                if (_grid.IsHotSpringAt(_headPos)) return TemperatureSpot.HotSpring;
                 if (_hidden || _grid.IsCanopyAt(_headPos)) return TemperatureSpot.Shade;
                 return TemperatureSpot.Open;
             }
         }
+
+        /// <summary>Голова в зарослях ежевики: укрытие, но ползти медленнее, а на бегу колючки царапают.</summary>
+        public bool InBramble => !InBurrow && _grounded && _grid.IsBrambleAt(_headPos);
+
+        /// <summary>Змея спешит: быстро ползёт или бросается (в ежевике за это платят царапинами).</summary>
+        public bool IsHurrying => IsStriking || (EffectivePace == SnakePace.Sprint && _speed > _config.SneakSpeed);
 
         /// <summary>Куда оттолкнуло последним ударом (от источника); нулевой — источник неизвестен.</summary>
         public Vector3 LastHitAway { get; private set; }
@@ -735,6 +742,7 @@ namespace WildSnake
                 target *= _digestion.SpeedMultiplier * _temperature.SpeedMultiplier;
                 if (_inWater) target *= _config.SwimSpeed * SwimSpeedScale;
                 else target *= SlopeSpeedMultiplier() * ClimbSpeedMultiplier();
+                if (InBramble) target *= _config.BrambleSpeed;
                 // Крутой разворот — сбавляем ход, иначе дуга вышла бы слишком широкой.
                 float turnAbs = Mathf.Abs(delta);
                 if (turnAbs > 90f) target *= Mathf.Lerp(1f, 0.55f, Mathf.InverseLerp(90f, 170f, turnAbs));

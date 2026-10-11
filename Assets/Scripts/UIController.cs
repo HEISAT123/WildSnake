@@ -71,6 +71,7 @@ namespace WildSnake
         [SerializeField] private GameObject _settingsPanel;
         [SerializeField] private GameObject _leaderboardPanel;
         [SerializeField] private GameObject _guidePanel;
+        [SerializeField] private GameObject _tutorialPanel;
 
         [Header("Линька")]
         [SerializeField] private Button[] _moltButtons = new Button[GameManager.MOLT_CHOICES];
@@ -130,6 +131,9 @@ namespace WildSnake
             _game.ClutchLost += OnClutchLost;
             _game.GenerationStarted += OnGenerationStarted;
             _game.BirdScared += OnBirdScared;
+            _game.WaspsSwarmed += OnWaspsSwarmed;
+            _game.FoxStungByWasps += OnFoxStungByWasps;
+            _game.HedgehogSplashed += OnHedgehogSplashed;
             _eagle.Missed += OnEagleMissed;
             _dayNight.DayStarted += OnDayStarted;
             _dayNight.NightStarted += OnNightStarted;
@@ -168,6 +172,9 @@ namespace WildSnake
             _game.ClutchRaided -= OnClutchRaided;
             _game.ClutchLost -= OnClutchLost;
             _game.GenerationStarted -= OnGenerationStarted;
+            _game.WaspsSwarmed -= OnWaspsSwarmed;
+            _game.FoxStungByWasps -= OnFoxStungByWasps;
+            _game.HedgehogSplashed -= OnHedgehogSplashed;
             _game.BirdScared -= OnBirdScared;
             _eagle.Missed -= OnEagleMissed;
             _dayNight.DayStarted -= OnDayStarted;
@@ -201,6 +208,7 @@ namespace WildSnake
             _settingsPanel.SetActive(false);
             _leaderboardPanel.SetActive(false);
             _guidePanel.SetActive(false);
+            _tutorialPanel.SetActive(false);
             OnStateChanged(_game.State);
         }
 
@@ -348,7 +356,22 @@ namespace WildSnake
 
         private void OnHedgehogPricked()
         {
-            ShowBanner("ЁЖ КОЛЮЧИЙ — ЖДИТЕ, ПОКА РАЗВЕРНЁТСЯ");
+            ShowBanner("ЁЖ КОЛЮЧИЙ — ТОЛКНИТЕ НОСОМ ИЛИ ЖДИТЕ");
+        }
+
+        private void OnHedgehogSplashed()
+        {
+            ShowBanner("ЁЖ В ВОДЕ — ХВАТАЙТЕ");
+        }
+
+        private void OnWaspsSwarmed()
+        {
+            ShowBanner("ОСЫ! · В ВОДУ, НОРУ ИЛИ БРЕВНО");
+        }
+
+        private void OnFoxStungByWasps()
+        {
+            ShowBanner("ОСЫ ПРОГНАЛИ ЛИСУ");
         }
 
         private void OnRainChanged(bool raining)
@@ -402,6 +425,7 @@ namespace WildSnake
                 _settingsPanel.SetActive(false);
                 _leaderboardPanel.SetActive(false);
                 _guidePanel.SetActive(false);
+                _tutorialPanel.SetActive(false);
             }
 
             ApplyCursor(state);
@@ -468,6 +492,8 @@ namespace WildSnake
                 case DamageSource.Hedgehog: return "ИСКОЛОТА ЁЖИКОМ";
                 case DamageSource.Rival: return "ПОБЕЖДЕНА СОПЕРНИЦЕЙ";
                 case DamageSource.Bird: return "ЗАКЛЁВАНА ПТИЦЕЙ";
+                case DamageSource.Thorns: return "ИЗОДРАНА ЕЖЕВИКОЙ";
+                case DamageSource.Wasps: return "ЗАЖАЛЕНА ОСАМИ";
                 default: return "СМЕРТЕЛЬНАЯ РАНА";
             }
         }

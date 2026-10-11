@@ -580,7 +580,14 @@ public static class EnvironmentBuilder
             z = _center.z + Mathf.Sin(angle) * r;
             Vector2Int cell = _grid.WorldToCell(new Vector3(x, 0f, z));
             if (!_grid.IsInside(cell) || _grid.GetObstacle(cell) != ObstacleType.None) return false;
-            if (_grid.IsWater(cell) || _grid.IsCover(cell) || _grid.IsBurrowCell(cell)) return false;
+            if (_grid.IsWater(cell) || _grid.IsCover(cell) || _grid.IsBurrowCell(cell) || _grid.IsColonyHole(cell)) return false;
+            // Лужица и корка тёплого ключа — без травы.
+            for (int i = 0; i < _grid.HotSpringCount; i++)
+            {
+                Vector3 d = _grid.GetHotSpring(i) - new Vector3(x, 0f, z);
+                d.y = 0f;
+                if (d.sqrMagnitude < 2.2f * 2.2f) return false;
+            }
         }
         else
         {

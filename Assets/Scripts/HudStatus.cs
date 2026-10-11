@@ -19,12 +19,14 @@ namespace WildSnake
         private const int TIRED = 1 << 7;
         private const int EXPOSED = 1 << 8;
         private const int RAIN = 1 << 9;
+        private const int BRAMBLE = 1 << 10;
+        private const int SPRING = 1 << 11;
 
-        private static readonly int[] Flags = { EXPOSED, TIRED, COLD, RAIN, AMBUSH, GRASS, CANOPY, WATER, DIGEST, WARM };
+        private static readonly int[] Flags = { EXPOSED, TIRED, COLD, RAIN, AMBUSH, BRAMBLE, GRASS, CANOPY, WATER, SPRING, DIGEST, WARM };
         private static readonly string[] Words =
         {
-            "ВЫДАЛА СЕБЯ", "НЕТ СИЛ", "ХОЛОДНО — МЕДЛЕННЕЕ", "ДОЖДЬ — ЗЯБНЕТ", "ЗАСАДА", "В ТРАВЕ — НЕ ВИДНО",
-            "ПОД КРОНАМИ — ОРЁЛ НЕ ВИДИТ", "В ВОДЕ", "ПЕРЕВАРИВАЕТ — ТЯЖЕЛЕЕ", "ПРОГРЕЛАСЬ"
+            "ВЫДАЛА СЕБЯ", "НЕТ СИЛ", "ХОЛОДНО — МЕДЛЕННЕЕ", "ДОЖДЬ — ЗЯБНЕТ", "ЗАСАДА", "В ЕЖЕВИКЕ — ЛИСА НЕ ДОСТАНЕТ",
+            "В ТРАВЕ — НЕ ВИДНО", "ПОД КРОНАМИ — ОРЁЛ НЕ ВИДИТ", "В ВОДЕ", "ТЁПЛЫЙ КЛЮЧ — ГРЕЕТ", "ПЕРЕВАРИВАЕТ — ТЯЖЕЛЕЕ", "ПРОГРЕЛАСЬ"
         };
 
         [Header("Источники")]
@@ -55,9 +57,11 @@ namespace WildSnake
             if (!_snake.InBurrow)
             {
                 if (_snake.Ambush.IsLuring) state |= AMBUSH;
+                else if (_snake.InBramble) state |= BRAMBLE;
                 else if (_snake.IsHidden) state |= GRASS;
                 if (_snake.UnderCanopy && !_snake.IsHidden) state |= CANOPY;
                 if (_snake.IsInWater) state |= WATER;
+                if (_snake.Spot == TemperatureSpot.HotSpring) state |= SPRING;
                 if (_snake.Temperature.IsCold) state |= COLD;
                 else if (_snake.Temperature.Warm01 > 0.5f) state |= WARM;
                 if (_snake.Digestion.IsDigesting) state |= DIGEST;
@@ -85,7 +89,7 @@ namespace WildSnake
         {
             if (flag == EXPOSED || flag == TIRED) return _badColor;
             if (flag == COLD || flag == WATER || flag == RAIN) return _coldColor;
-            if (flag == AMBUSH || flag == GRASS || flag == CANOPY || flag == WARM) return _goodColor;
+            if (flag == AMBUSH || flag == GRASS || flag == CANOPY || flag == WARM || flag == BRAMBLE || flag == SPRING) return _goodColor;
             return _infoColor;
         }
     }

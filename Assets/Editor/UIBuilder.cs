@@ -34,6 +34,7 @@ internal static class UIBuilder
         public DayNightCycle DayNight;
         public ScentTracker Scent;
         public BirdNests BirdNests;
+        public WaspNests Wasps;
         public Transform CameraTransform;
         public CameraRig Rig;
         public SnakeController Rival;
@@ -56,6 +57,10 @@ internal static class UIBuilder
     private static readonly Color MapFish = new Color(0.72f, 0.92f, 1f);
     private static readonly Color MapFox = new Color(1f, 0.5f, 0.12f);
     private static readonly Color MapSun = new Color(1f, 0.78f, 0.3f);
+    private static readonly Color MapSpring = new Color(0.5f, 0.92f, 0.9f);
+    private static readonly Color MapColony = new Color(0.86f, 0.74f, 0.58f);
+    private static readonly Color MapWasp = new Color(1f, 0.82f, 0.15f);
+    private static readonly Color MapBramble = new Color(0.52f, 0.36f, 0.42f);
 
     private const float LEFT = 96f;
     /// <summary>Радиус круга мини-карты, пикселей интерфейса.</summary>
@@ -120,7 +125,9 @@ internal static class UIBuilder
         GameObject over = BuildGameOver(root, pauseShade, out Row[] overRows, out CanvasGroup overGroup, out GameOverParts op);
         GameObject settings = BuildSettings(root, deepShade, out SettingsParts sp);
         GameObject board = BuildLeaderboard(root, deepShade, out Object[] columns, out Text empty, out Button boardBack);
-        GameObject guide = BuildGuide(root, deepShade, out Button guideBack);
+        GameObject guide = BuildGuide(root, deepShade, out Button guideBack, out Button guideWatch);
+        // Видео-обучение — поверх всего меню: открывается из настроек и из справочника.
+        GameObject tutorial = BuildTutorial(root, deepShade, out TutorialParts tp);
 
         // Карта по Tab — поверх HUD; во время партии остальные экраны скрыты, так что выше неё ничего нет.
         mapRoot.transform.SetAsLastSibling();
@@ -130,10 +137,11 @@ internal static class UIBuilder
         settings.SetActive(false);
         board.SetActive(false);
         guide.SetActive(false);
+        tutorial.SetActive(false);
 
         // ---------- Компоненты ----------
         canvasGo.AddComponent<UIFontApplier>();
-        var overlays = new Object[] { settings, board, guide };
+        var overlays = new Object[] { settings, board, guide, tutorial };
 
         WireList(menu, menuRows, menuGroup, r, overlays, 0);
         WireList(pause, pauseRows, pauseGroup, r, overlays, 0);
@@ -162,7 +170,7 @@ internal static class UIBuilder
 
         var hints = canvasGo.AddComponent<ContextHints>();
         SnakeSceneBuilder.Wire(hints, ("_game", r.Game), ("_config", r.Config), ("_snake", r.Player), ("_wildlife", r.Wildlife),
-            ("_grid", r.Grid), ("_eagle", r.Eagle), ("_fox", r.Fox), ("_scent", r.Scent), ("_birdNests", r.BirdNests),
+            ("_grid", r.Grid), ("_eagle", r.Eagle), ("_fox", r.Fox), ("_scent", r.Scent), ("_birdNests", r.BirdNests), ("_wasps", r.Wasps),
             ("_group", hp.HintGroup), ("_keycap", hp.HintKeycap), ("_keyText", hp.HintKey), ("_label", hp.HintLabel));
 
         var threat = hud.AddComponent<ThreatIndicator>();
@@ -180,12 +188,13 @@ internal static class UIBuilder
         SnakeSceneBuilder.WireArray(vignettes, "_damageEdges", op2.DamageEdges);
 
         var journal = mapRoot.AddComponent<MapJournal>();
-        SnakeSceneBuilder.Wire(journal, ("_game", r.Game), ("_dayNight", r.DayNight),
+        SnakeSceneBuilder.Wire(journal, ("_game", r.Game), ("_dayNight", r.DayNight), ("_hud", hp.HudGroup),
             ("_group", op2.MapGroup), ("_dayText", op2.MapDay), ("_summaryText", op2.Summary),
             ("_questText", op2.QuestText), ("_questNote", op2.QuestNote));
         SnakeSceneBuilder.WireArray(journal, "_goalLabels", op2.GoalLabels);
         SnakeSceneBuilder.WireArray(journal, "_goalNotes", op2.GoalNotes);
         SnakeSceneBuilder.WireArray(journal, "_goalChecks", op2.GoalChecks);
+        SnakeSceneBuilder.WireArray(journal, "_goalIndexes", op2.GoalIndexes);
 
         var mapIcons = mapRoot.AddComponent<MapIcons>();
         WireMapIcons(mapIcons, r, op2.MapIcons, op2.MapGroup);
@@ -201,7 +210,7 @@ internal static class UIBuilder
         SnakeSceneBuilder.SetFloat(minimap, "_beetleSize", 10f);
 
         var settingsComp = settings.AddComponent<SettingsPanel>();
-        SnakeSceneBuilder.Wire(settingsComp, ("_settings", r.Settings), ("_audio", r.Audio), ("_hints", hints),
+        SnakeSceneBuilder.Wire(settingsComp, ("_settings", r.Settings), ("_audio", r.Audio), ("_hints", hints), ("_tutorialPanel", tutorial),
             ("_masterSlider", sp.Master), ("_musicSlider", sp.Music), ("_sfxSlider", sp.Sfx), ("_mouseSlider", sp.Mouse), ("_invertYToggle", sp.InvertY),
             ("_fullscreenToggle", sp.Fullscreen), ("_hudToggle", sp.Hud), ("_rivalToggle", sp.Rival), ("_minimapToggle", sp.Minimap),
             ("_qualityButton", sp.Quality), ("_qualityLabel", sp.QualityLabel), ("_tutorialButton", sp.Tutorial), ("_backButton", sp.Back));
@@ -212,7 +221,19 @@ internal static class UIBuilder
         SnakeSceneBuilder.WireArray(boardComp, "_columns", columns);
 
         var guideComp = guide.AddComponent<GuidePanel>();
-        SnakeSceneBuilder.Wire(guideComp, ("_audio", r.Audio), ("_backButton", guideBack));
+        SnakeSceneBuilder.Wire(guideComp, ("_audio", r.Audio), ("_backButton", guideBack), ("_watchButton", guideWatch), ("_tutorialPanel", tutorial));
+
+        var player = tutorial.AddComponent<TutorialPlayer>();
+        SnakeSceneBuilder.Wire(player, ("_audio", r.Audio), ("_canvas", tp.Canvas), ("_chapterTitle", tp.Title), ("_chapterIndex", tp.Index),
+            ("_caption", tp.Caption), ("_clock", tp.Clock), ("_playLabel", tp.PlayLabel), ("_screenButton", tp.Screen),
+            ("_playButton", tp.Play), ("_prevButton", tp.Prev), ("_nextButton", tp.Next), ("_backButton", tp.Back));
+        SnakeSceneBuilder.WireArray(player, "_segmentFills", tp.Fills);
+        SnakeSceneBuilder.WireArray(player, "_chapterButtons", tp.ChapterButtons);
+        SnakeSceneBuilder.WireArray(player, "_chapterLabels", tp.ChapterLabels);
+        SnakeSceneBuilder.WireArray(tp.Canvas, "_labels", tp.Labels);
+        SnakeSceneBuilder.WireArray(tp.Canvas, "_keys", tp.Keys);
+        SnakeSceneBuilder.WireArray(tp.Canvas, "_keyFrames", tp.KeyFrames);
+        SnakeSceneBuilder.WireArray(tp.Canvas, "_keyTexts", tp.KeyTexts);
 
         var ui = canvasGo.AddComponent<UIController>();
         SnakeSceneBuilder.Wire(ui,
@@ -220,7 +241,7 @@ internal static class UIBuilder
             ("_eagle", r.Eagle), ("_dayNight", r.DayNight), ("_scent", r.Scent),
             ("_hudRoot", hud), ("_vignetteRoot", stateLayer), ("_bannerGroup", hp.BannerGroup), ("_bannerText", hp.BannerText),
             ("_menuPanel", menu), ("_pausePanel", pause), ("_moltPanel", molt), ("_gameOverPanel", over),
-            ("_settingsPanel", settings), ("_leaderboardPanel", board), ("_guidePanel", guide),
+            ("_settingsPanel", settings), ("_leaderboardPanel", board), ("_guidePanel", guide), ("_tutorialPanel", tutorial),
             ("_gameOverTitle", op.Title), ("_daysText", op.Days), ("_rankText", op.Rank),
             ("_playButton", menuRows[0].Button), ("_playLabel", menuRows[0].Label), ("_playDescription", menuRows[0].Description),
             ("_guideButton", menuRows[1].Button),
@@ -568,7 +589,7 @@ internal static class UIBuilder
     // Справочник
     // =====================================================================
 
-    private static GameObject BuildGuide(Transform root, Texture2D shade, out Button back)
+    private static GameObject BuildGuide(Transform root, Texture2D shade, out Button back, out Button watch)
     {
         RectTransform screen = Screen(root, "GuidePanel", shade, out _);
         Heading(screen, "КАК ВЫЖИТЬ", "СПРАВОЧНИК", 110);
@@ -578,8 +599,8 @@ internal static class UIBuilder
         string[] bodies =
         {
             "WASD — ползти, мышь — камера. CTRL — красться, SHIFT — быстрее.\n\nЖука хватит коснуться. Мышь, лягушку, птицу и рыбу ловят броском: ЛКМ — укус, ПКМ — замах.\n\nКролика бросок только хватает — держите F, чтобы задушить.\n\nВ птичьих гнёздах — яйца. Птица будет клевать; бросок её отгонит.",
-            "Замрите на пару секунд — змея сольётся с местностью, а в траве и камыше её почти не видно. Затаившаяся змея подманивает добычу кончиком хвоста.\n\nВ полом бревне змею не видят ни орёл, ни лиса.\n\nХолодно — грейтесь на солнечном камне.",
-            "Днём — орёл: метка у края экрана и тень. Спасают трава, кроны или бросок в последний миг.\n\nНочью приходит лиса: идёт по следу, в воду не заходит. Бросок в морду отпугнёт её, пока здоровья больше половины.\n\nЁж сворачивается в колючий шар — не кусайте.",
+            "Замрите на пару секунд — змея сольётся с местностью, а в траве и камыше её почти не видно. Затаившаяся змея подманивает добычу кончиком хвоста.\n\nВ мышиных городках мыши ныряют в норки — ждите в засаде.\n\nЁж свернулся — толкните шар носом в воду или ждите, пока выглянет.\n\nХолодно — солнечный камень, ночью — тёплый ключ.",
+            "Днём — орёл: спасают трава, кроны, полое бревно или бросок в последний миг.\n\nНочью — лиса: идёт по следу, в воду и ежевику не лезет. Бросок в морду отпугнёт её.\n\nЕжевика колет на бегу. Осы гонят шумную змею до воды, норы или бревна — и жалят лису.",
             "Повзрослейте, затем ночью, сытой, отложите яйца в гнезде (E) и охраняйте кладку — лиса придёт за яйцами. Вылупятся змеёныши — играете следующим поколением.\n\nE у норы — сохраниться. TAB — карта и цели. H — скрыть интерфейс."
         };
         for (int i = 0; i < titles.Length; i++)
@@ -596,6 +617,148 @@ internal static class UIBuilder
 
         back = PrimaryButton(screen, "Done", "ГОТОВО");
         TopLeft(back, LEFT, -918f, 220f, 60f);
+        watch = LinkButton(screen, "Watch", "СМОТРЕТЬ ВИДЕО-ОБУЧЕНИЕ   ›", 22, out Text watchLabel);
+        TopLeft(watch, LEFT + 252f, -918f, 420f, 60f);
+        watchLabel.alignment = TextAnchor.MiddleLeft;
+        return screen.gameObject;
+    }
+
+    // =====================================================================
+    // Видео-обучение
+    // =====================================================================
+
+    private sealed class TutorialParts
+    {
+        public TutorialCanvas Canvas;
+        public Text Title, Index, Caption, Clock, PlayLabel;
+        public Button Screen, Play, Prev, Next, Back;
+        public Object[] Fills, ChapterButtons, ChapterLabels;
+        public Object[] Labels, Keys, KeyFrames, KeyTexts;
+    }
+
+    /// <summary>
+    /// Плеер видео-обучения: «экран» 16:9 слева (кадр рисует TutorialCanvas, края обрезает RectMask2D),
+    /// под ним таймлайн из отрезков-глав, строка «глава · время» и субтитры; справа — список глав и кнопки.
+    /// </summary>
+    private static GameObject BuildTutorial(Transform root, Texture2D shade, out TutorialParts p)
+    {
+        int chapters = TutorialFilm.ChapterCount;
+        p = new TutorialParts
+        {
+            Fills = new Object[chapters], ChapterButtons = new Object[chapters], ChapterLabels = new Object[chapters],
+            Labels = new Object[5], Keys = new Object[3], KeyFrames = new Object[3], KeyTexts = new Object[3]
+        };
+        RectTransform screen = Screen(root, "TutorialPanel", shade, out _);
+        // Поверх виньетки — ровная тёмная подложка: ролик смотрится как в кинозале, сцена не отвлекает.
+        RectTransform dim = Rect("Dim", screen);
+        Stretch(dim);
+        Img(dim, new Color(Ink.r, Ink.g, Ink.b, 0.8f), null);
+        Heading(screen, "ВИДЕО-ОБУЧЕНИЕ", "КАК ИГРАТЬ", 84);
+
+        const float videoW = 1088f, videoH = 612f, videoTop = -262f;
+        RectTransform border = Rect("VideoBorder", screen);
+        TopLeft(border, LEFT - 2f, videoTop + 2f, videoW + 4f, videoH + 4f);
+        Img(border, Hair, null);
+        RectTransform frame = Rect("Video", screen);
+        TopLeft(frame, LEFT, videoTop, videoW, videoH);
+        Img(frame, Ink, null);
+        frame.gameObject.AddComponent<RectMask2D>();
+
+        RectTransform film = Rect("Film", frame);
+        Stretch(film);
+        p.Canvas = film.gameObject.AddComponent<TutorialCanvas>();
+        p.Canvas.raycastTarget = true;
+        p.Screen = film.gameObject.AddComponent<Button>();
+        p.Screen.transition = Selectable.Transition.None;
+        p.Screen.navigation = new Navigation { mode = Navigation.Mode.None };
+
+        for (int i = 0; i < p.Labels.Length; i++)
+        {
+            Text label = Label(film, "Label", "", 26, Bone, TextAnchor.MiddleCenter, true);
+            Anchor(label.rectTransform, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(420f, 40f));
+            AddShadow(label);
+            label.gameObject.SetActive(false);
+            p.Labels[i] = label;
+        }
+        for (int i = 0; i < p.Keys.Length; i++)
+        {
+            RectTransform key = Rect("Key", film);
+            Anchor(key, Vector2.zero, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(60f, 38f));
+            p.KeyFrames[i] = Img(key, new Color(Bone.r, Bone.g, Bone.b, 0.55f), _keycap);
+            Text keyText = Label(key, "Text", "", 18, Bone, TextAnchor.MiddleCenter, false);
+            Stretch(keyText.rectTransform);
+            p.KeyTexts[i] = keyText;
+            p.Keys[i] = key;
+            key.gameObject.SetActive(false);
+        }
+
+        // Таймлайн: отрезки по длительности глав, с зазорами.
+        const float gap = 6f;
+        float total = 0f;
+        for (int i = 0; i < chapters; i++) total += TutorialFilm.Durations[i];
+        float x = LEFT;
+        float usable = videoW - gap * (chapters - 1);
+        for (int i = 0; i < chapters; i++)
+        {
+            float w = usable * TutorialFilm.Durations[i] / total;
+            RectTransform seg = Rect("Segment_" + i, screen);
+            TopLeft(seg, x, videoTop - videoH - 16f, w, 5f);
+            Img(seg, Hair, null);
+            RectTransform fill = Rect("Fill", seg);
+            Stretch(fill);
+            Image fillImg = Img(fill, Venom, _solid);
+            fillImg.type = Image.Type.Filled;
+            fillImg.fillMethod = Image.FillMethod.Horizontal;
+            fillImg.fillOrigin = 0;
+            fillImg.fillAmount = 0f;
+            p.Fills[i] = fillImg;
+            x += w + gap;
+        }
+
+        float infoY = videoTop - videoH - 32f;
+        p.Index = Label(screen, "ChapterIndex", "01 / 09", 20, Venom, TextAnchor.MiddleLeft, true);
+        TopLeft(p.Index, LEFT, infoY, 110f, 34f);
+        p.Title = Label(screen, "ChapterTitle", "ДВИЖЕНИЕ", 28, Bone, TextAnchor.MiddleLeft, true);
+        TopLeft(p.Title, LEFT + 110f, infoY, 600f, 34f);
+        p.Clock = Label(screen, "Clock", "0:00 / 2:00", 20, Ash, TextAnchor.MiddleRight, false);
+        TopLeft(p.Clock, LEFT + videoW - 300f, infoY, 300f, 34f);
+        p.Caption = Label(screen, "Caption", "", 24, Bone, TextAnchor.UpperLeft, false);
+        p.Caption.horizontalOverflow = HorizontalWrapMode.Wrap;
+        p.Caption.lineSpacing = 1.1f;
+        TopLeft(p.Caption, LEFT, infoY - 42f, videoW, 70f);
+
+        // Справа — главы и кнопки.
+        float right = LEFT + videoW + 72f;
+        TopLeft(Label(screen, "ChaptersCaption", Spaced("ГЛАВЫ"), 17, Venom, TextAnchor.MiddleLeft, true), right, videoTop, 400f, 24f);
+        for (int i = 0; i < chapters; i++)
+        {
+            RectTransform row = Rect("Chapter_" + i, screen);
+            TopLeft(row, right, videoTop - 36f - i * 56f, 520f, 52f);
+            Img(row, new Color(0f, 0f, 0f, 0f), null).raycastTarget = true;
+            var button = row.gameObject.AddComponent<Button>();
+            button.transition = Selectable.Transition.None;
+            button.navigation = new Navigation { mode = Navigation.Mode.None };
+            Text label = Label(row, "Label", "<color=#757A7A>" + (i + 1).ToString("00") + "</color>    " + TutorialFilm.Titles[i], 26, Ash,
+                TextAnchor.MiddleLeft, true);
+            Stretch(label.rectTransform);
+            TopLeft(Line(row, Hair), 0f, -51f, 520f, 1f);
+            p.ChapterButtons[i] = button;
+            p.ChapterLabels[i] = label;
+        }
+
+        float controlsY = videoTop - 36f - chapters * 56f - 24f;
+        p.Prev = LinkButton(screen, "Prev", "‹  НАЗАД", 22, out _);
+        TopLeft(p.Prev, right, controlsY, 130f, 56f);
+        p.Play = PrimaryButton(screen, "Play", "ПАУЗА");
+        TopLeft(p.Play, right + 140f, controlsY, 240f, 56f);
+        p.PlayLabel = p.Play.GetComponentInChildren<Text>();
+        p.Next = LinkButton(screen, "Next", "ВПЕРЁД  ›", 22, out _);
+        TopLeft(p.Next, right + 390f, controlsY, 130f, 56f);
+
+        p.Back = PrimaryButton(screen, "Done", "ГОТОВО");
+        TopLeft(p.Back, right, controlsY - 80f, 220f, 56f);
+        TopLeft(Label(screen, "Keys", "SPACE — пауза    A / D — главы    ESC — закрыть", 18, Smoke, TextAnchor.MiddleLeft, false),
+            right, controlsY - 150f, 560f, 28f);
         return screen.gameObject;
     }
 
@@ -606,6 +769,7 @@ internal static class UIBuilder
     /// <summary>Элементы HUD, которые связываются с компонентами в Build.</summary>
     private sealed class HudParts
     {
+        public CanvasGroup HudGroup;
         public CanvasGroup VitalsGroup;
         public Object[] VitalFills = new Object[3];
         public Object[] VitalArcs = new Object[3];
@@ -643,6 +807,7 @@ internal static class UIBuilder
         public Object[] GoalLabels = new Object[DailyGoals.MAX_GOALS];
         public Object[] GoalNotes = new Object[DailyGoals.MAX_GOALS];
         public Object[] GoalChecks = new Object[DailyGoals.MAX_GOALS];
+        public Object[] GoalIndexes = new Object[DailyGoals.MAX_GOALS];
     }
 
     /// <summary>
@@ -655,6 +820,7 @@ internal static class UIBuilder
         p = new HudParts();
         RectTransform hud = Rect("HUD", root);
         Stretch(hud);
+        p.HudGroup = Group(hud);
 
         // Мягкие чернильные тени из углов: текст читается и над светлыми кронами, а краёв у тени не видно —
         // она гаснет и вбок, и вниз (раньше прямоугольные полосы давали заметную светлую «щель» между ними).
@@ -970,44 +1136,52 @@ internal static class UIBuilder
         // Подложку рисует MapIcons при старте; до этого — тёмный квадрат.
         RawImage mapRaw = Raw(mapImage, null);
         mapRaw.color = new Color(0.1f, 0.12f, 0.14f);
+        RegionLabels(mapImage, r.Grid, mapSize);
         p.MapIcons = BuildMapIcons(mapImage, r, 1f);
+        p.MapIcons.KnownRing = MapIcon(mapImage, "KnownRing", UISpriteFactory.ArcRing, new Color(Bone.r, Bone.g, Bone.b, 0.35f), 100f);
+        p.MapIcons.KnownRing.SetSiblingIndex(p.MapIcons.KnownRing.parent.childCount - 2);
         p.MapIcons.Map = mapRaw;
         RectTransform frame = Rect("Frame", mapImage);
         Stretch(frame);
         Img(frame, new Color(Bone.r, Bone.g, Bone.b, 0.35f), _frame);
 
+        // Колонка журнала привязана к середине экрана, как и карта: верх колонки — верх карты, низ — не ниже её низа.
+        // Раньше она шла от верха экрана и на экранах ниже 16:9 легенда наезжала на подсказку внизу.
         float x = LEFT + mapSize + 90f;
-        TopLeft(Label(map, "Kicker", Spaced("ЖУРНАЛ"), 20, Venom, TextAnchor.MiddleLeft, true), x, -128f, 600f, 30f);
+        MidLeft(Label(map, "Kicker", Spaced("ЖУРНАЛ"), 20, Venom, TextAnchor.MiddleLeft, true), x, -128f, 600f, 30f);
         p.MapDay = Label(map, "Day", "ДЕНЬ 1", 96, Bone, TextAnchor.MiddleLeft, true);
-        TopLeft(p.MapDay, x - 6f, -158f, 900f, 120f);
-        TopLeft(Line(map, Venom), x, -290f, 72f, 5f);
-        TopLeft(Label(map, "QuestCaption", Spaced("ГЛАВНАЯ ЦЕЛЬ · ПРОДОЛЖИТЬ РОД"), 17, Venom, TextAnchor.MiddleLeft, true), x, -318f, 700f, 24f);
+        MidLeft(p.MapDay, x - 6f, -158f, 900f, 120f);
+        MidLeft(Line(map, Venom), x, -290f, 72f, 5f);
+        MidLeft(Label(map, "QuestCaption", Spaced("ГЛАВНАЯ ЦЕЛЬ · ПРОДОЛЖИТЬ РОД"), 17, Venom, TextAnchor.MiddleLeft, true), x, -318f, 700f, 24f);
         p.QuestText = Label(map, "Quest", "1 из 2  ·  Повзрослеть", 30, Bone, TextAnchor.MiddleLeft, true);
-        TopLeft(p.QuestText, x, -346f, 800f, 40f);
+        MidLeft(p.QuestText, x, -346f, 800f, 40f);
         p.QuestNote = Label(map, "QuestNote", "", 19, Ash, TextAnchor.UpperLeft, false);
         p.QuestNote.horizontalOverflow = HorizontalWrapMode.Wrap;
-        TopLeft(p.QuestNote, x, -392f, 760f, 54f);
-        TopLeft(Label(map, "GoalsCaption", Spaced("ЦЕЛИ ДНЯ"), 17, Venom, TextAnchor.MiddleLeft, true), x, -470f, 400f, 24f);
+        MidLeft(p.QuestNote, x, -392f, 760f, 54f);
+        MidLeft(Label(map, "GoalsCaption", Spaced("ЦЕЛИ ДНЯ"), 17, Venom, TextAnchor.MiddleLeft, true), x, -470f, 400f, 24f);
         for (int i = 0; i < DailyGoals.MAX_GOALS; i++)
         {
-            float y = -506f - i * 100f;
-            TopLeft(Label(map, "Index", (i + 1).ToString("00"), 21, Smoke, TextAnchor.MiddleLeft, true), x, y - 4f, 60f, 30f);
+            float y = -506f - i * 96f;
+            Text index = Label(map, "Index", (i + 1).ToString("00"), 21, Smoke, TextAnchor.MiddleLeft, true);
+            MidLeft(index, x, y - 4f, 60f, 30f);
+            p.GoalIndexes[i] = index;
             Text label = Label(map, "Goal_" + i, "Цель", 34, Bone, TextAnchor.MiddleLeft, true);
-            TopLeft(label, x + 60f, y - 4f, 760f, 44f);
+            MidLeft(label, x + 60f, y - 4f, 760f, 44f);
             Text note = Label(map, "Note_" + i, "награда", 19, Ash, TextAnchor.MiddleLeft, false);
-            TopLeft(note, x + 62f, y - 52f, 760f, 26f);
+            MidLeft(note, x + 62f, y - 52f, 760f, 26f);
             RectTransform check = Line(map, Venom);
-            TopLeft(check, x - 22f, y - 6f, 4f, 72f);
+            MidLeft(check, x - 22f, y - 6f, 4f, 72f);
             check.gameObject.SetActive(false);
             p.GoalLabels[i] = label;
             p.GoalNotes[i] = note;
             p.GoalChecks[i] = check.gameObject;
         }
-        TopLeft(Line(map, Hair), x, -722f, 760f, 1f);
+        MidLeft(Line(map, Hair), x, -712f, 820f, 1f);
         p.Summary = Label(map, "Summary", "", 20, Ash, TextAnchor.MiddleLeft, false);
-        TopLeft(p.Summary, x, -742f, 760f, 28f);
-        Legend(map, x, -800f);
-        HintRow(map, new Vector2(0f, 0f), new Vector2(x, 64f), new Vector2(0f, 0.5f), ("TAB", "держать — карта и журнал"));
+        MidLeft(p.Summary, x, -730f, 760f, 28f);
+        Legend(map, x, -786f);
+        // Подсказка — в правом верхнем углу: внизу она спорила с легендой.
+        HintRow(map, new Vector2(1f, 1f), new Vector2(-LEFT, -60f), new Vector2(1f, 0.5f), ("TAB", "держать — карта и журнал"));
         return layer.gameObject;
     }
 
@@ -1016,7 +1190,8 @@ internal static class UIBuilder
     {
         public RawImage Map;
         public RectTransform PlayerIcon, PlayerRing, RivalIcon, EagleIcon, FoxIcon, NestIcon, NestRing;
-        public Object[] PreyIcons, BurrowIcons, BirdNestIcons, SunStoneIcons;
+        public Object[] PreyIcons, BurrowIcons, BirdNestIcons, SunStoneIcons, SpringIcons, ColonyIcons, WaspIcons;
+        public RectTransform KnownRing;
     }
 
     /// <summary>
@@ -1033,6 +1208,12 @@ internal static class UIBuilder
 
         p.SunStoneIcons = new Object[grid.SunStoneCount];
         for (int i = 0; i < p.SunStoneIcons.Length; i++) p.SunStoneIcons[i] = MapIcon(layer, "SunStone", UISpriteFactory.MapSun, MapSun, 16f * scale);
+        p.SpringIcons = new Object[grid.HotSpringCount];
+        for (int i = 0; i < p.SpringIcons.Length; i++) p.SpringIcons[i] = MapIcon(layer, "HotSpring", UISpriteFactory.MapSpring, MapSpring, 24f * scale);
+        p.ColonyIcons = new Object[grid.MouseColonyCount];
+        for (int i = 0; i < p.ColonyIcons.Length; i++) p.ColonyIcons[i] = MapIcon(layer, "MouseColony", UISpriteFactory.MapMouse, MapColony, 24f * scale);
+        p.WaspIcons = new Object[grid.WaspNestCount];
+        for (int i = 0; i < p.WaspIcons.Length; i++) p.WaspIcons[i] = MapIcon(layer, "WaspNest", UISpriteFactory.MapWasp, MapWasp, 26f * scale);
         p.BirdNestIcons = new Object[grid.BirdNestCount];
         for (int i = 0; i < p.BirdNestIcons.Length; i++) p.BirdNestIcons[i] = MapIcon(layer, "BirdNest", UISpriteFactory.MapBirdNest, Sky, 22f * scale);
         p.BurrowIcons = new Object[grid.BurrowCount];
@@ -1064,6 +1245,10 @@ internal static class UIBuilder
         SnakeSceneBuilder.WireArray(component, "_burrowIcons", p.BurrowIcons);
         SnakeSceneBuilder.WireArray(component, "_birdNestIcons", p.BirdNestIcons);
         SnakeSceneBuilder.WireArray(component, "_sunStoneIcons", p.SunStoneIcons);
+        SnakeSceneBuilder.WireArray(component, "_springIcons", p.SpringIcons);
+        SnakeSceneBuilder.WireArray(component, "_colonyIcons", p.ColonyIcons);
+        SnakeSceneBuilder.WireArray(component, "_waspIcons", p.WaspIcons);
+        if (p.KnownRing != null) SnakeSceneBuilder.Wire(component, ("_knownRing", p.KnownRing));
     }
 
     private static RectTransform MapIcon(RectTransform parent, string name, Sprite sprite, Color color, float size)
@@ -1074,29 +1259,54 @@ internal static class UIBuilder
         return icon;
     }
 
-    /// <summary>Обозначения карты: те же значки и цвета, три колонки под журналом.</summary>
+    /// <summary>Обозначения карты: те же значки и цвета, четыре колонки под журналом (звери, добыча, места).</summary>
     private static void Legend(RectTransform map, float x, float y)
     {
         (Sprite sprite, Color color, string text)[] items =
         {
             (UISpriteFactory.MapArrow, Venom, "вы"), (UISpriteFactory.MapArrow, MapRival, "соперница"),
-            (UISpriteFactory.MapPaw, MapPrey, "добыча"), (UISpriteFactory.MapFish, MapFish, "рыба"),
-            (UISpriteFactory.MapBeetle, MapPrey, "жуки"), (UISpriteFactory.MapEagle, Ember, "орёл"),
-            (UISpriteFactory.MapFox, MapFox, "лиса"), (UISpriteFactory.MapBurrow, Venom, "нора"),
-            (UISpriteFactory.MapNest, Bone, "гнездо для кладки"), (UISpriteFactory.MapBirdNest, Sky, "птичье гнездо"),
-            (UISpriteFactory.MapSun, MapSun, "солнечный камень")
+            (UISpriteFactory.MapEagle, Ember, "орёл"), (UISpriteFactory.MapFox, MapFox, "лиса"),
+            (UISpriteFactory.MapPaw, MapPrey, "добыча рядом"), (UISpriteFactory.MapFish, MapFish, "рыба"),
+            (UISpriteFactory.MapBeetle, MapPrey, "жуки"), (UISpriteFactory.MapBirdNest, Sky, "птичье гнездо"),
+            (UISpriteFactory.MapBurrow, Venom, "нора"), (UISpriteFactory.MapNest, Bone, "гнездо для кладки"),
+            (UISpriteFactory.MapSun, MapSun, "солнечный камень"), (UISpriteFactory.MapSpring, MapSpring, "тёплый ключ"),
+            (UISpriteFactory.MapMouse, MapColony, "мышиный городок"), (UISpriteFactory.MapWasp, MapWasp, "осиное гнездо"),
+            (UISpriteFactory.Dot, MapBramble, "ежевика")
         };
-        TopLeft(Label(map, "LegendCaption", Spaced("ОБОЗНАЧЕНИЯ"), 17, Venom, TextAnchor.MiddleLeft, true), x, y, 400f, 24f);
-        const int columns = 3;
+        MidLeft(Label(map, "LegendCaption", Spaced("ОБОЗНАЧЕНИЯ"), 17, Venom, TextAnchor.MiddleLeft, true), x, y, 400f, 24f);
+        const int columns = 4;
         for (int i = 0; i < items.Length; i++)
         {
-            float ix = x + (i % columns) * 260f;
-            float iy = y - 40f - (i / columns) * 38f;
+            float ix = x + (i % columns) * 205f;
+            float iy = y - 36f - (i / columns) * 34f;
             RectTransform icon = Rect("LegendIcon", map);
-            TopLeft(icon, ix, iy, 26f, 26f);
+            MidLeft(icon, ix, iy, 26f, 26f);
             Img(icon, items[i].color, items[i].sprite).preserveAspect = true;
-            TopLeft(Label(map, "LegendText", items[i].text, 19, Ash, TextAnchor.MiddleLeft, false), ix + 38f, iy, 220f, 26f);
+            MidLeft(Label(map, "LegendText", items[i].text, 18, Ash, TextAnchor.MiddleLeft, false), ix + 34f, iy, 170f, 26f);
         }
+    }
+
+    /// <summary>
+    /// Подписи регионов на карте журнала: позиции — из плана мира (клетки от центра), шрифт мелкий, с тенью —
+    /// читается и на траве, и на воде, но не спорит со значками (они выше).
+    /// </summary>
+    private static void RegionLabels(RectTransform mapImage, GridManager grid, float mapSize)
+    {
+        RectTransform layer = Rect("Regions", mapImage);
+        Stretch(layer);
+        float pixelsPerCell = mapSize / grid.Width;
+        for (int i = 0; i < WorldBlueprint.Regions.Length; i++)
+        {
+            Text label = Label(layer, "Region", Spaced(WorldBlueprint.Regions[i].name), 15, new Color(Bone.r, Bone.g, Bone.b, 0.85f), TextAnchor.MiddleCenter, false);
+            Anchor(label.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), WorldBlueprint.Regions[i].at * pixelsPerCell, new Vector2(320f, 22f));
+            AddShadow(label);
+        }
+    }
+
+    /// <summary>Привязка к левому краю и середине экрана по высоте; y — как от верха экрана 1080 (отрицательный).</summary>
+    private static void MidLeft(Component c, float x, float y, float w, float h)
+    {
+        Anchor((RectTransform)c.transform, new Vector2(0f, 0.5f), new Vector2(0f, 1f), new Vector2(x, y + 540f), new Vector2(w, h));
     }
 
     private static CanvasGroup FullLayer(RectTransform parent, string name, Texture2D texture, Color color)

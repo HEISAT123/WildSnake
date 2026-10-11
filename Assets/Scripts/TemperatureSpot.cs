@@ -12,6 +12,8 @@ namespace WildSnake
         /// <summary>Вода: быстро остужает.</summary>
         Water = 3,
         /// <summary>Нора: ровное умеренное тепло днём и ночью.</summary>
-        Burrow = 4
+        Burrow = 4,
+        /// <summary>Тёплый ключ: парящая земля греет и днём, и ночью.</summary>
+        HotSpring = 5
     }
 }

@@ -29,6 +29,8 @@ namespace WildSnake
 
         [Header("Элементы")]
         [SerializeField] private CanvasGroup _group;
+        [Tooltip("HUD: пока открыт журнал, он гаснет — мини-карта и надписи не просвечивают сквозь карту")]
+        [SerializeField] private CanvasGroup _hud;
         [SerializeField] private Text _dayText;
 
         [Tooltip("Главная цель: этап и что делать")]
@@ -43,6 +45,9 @@ namespace WildSnake
 
         [Tooltip("Отметки выполнения (лаймовая черта)")]
         [SerializeField] private GameObject[] _goalChecks = new GameObject[DailyGoals.MAX_GOALS];
+
+        [Tooltip("Номера целей «01», «02»: прячутся вместе со строкой, если цели нет")]
+        [SerializeField] private Text[] _goalIndexes = new Text[DailyGoals.MAX_GOALS];
 
         [SerializeField] private Text _summaryText;
 
@@ -97,6 +102,7 @@ namespace WildSnake
                 Refresh();
             }
             _group.alpha = Mathf.MoveTowards(_group.alpha, _open ? 1f : 0f, Time.unscaledDeltaTime * 10f);
+            if (_hud != null) _hud.alpha = 1f - _group.alpha;
         }
 
         private void Refresh()
@@ -129,6 +135,7 @@ namespace WildSnake
                 bool has = i < goals.Count;
                 _goalLabels[i].gameObject.SetActive(has);
                 _goalNotes[i].gameObject.SetActive(has);
+                if (i < _goalIndexes.Length && _goalIndexes[i] != null) _goalIndexes[i].gameObject.SetActive(has);
                 if (!has)
                 {
                     _goalChecks[i].SetActive(false);

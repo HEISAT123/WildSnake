@@ -56,6 +56,15 @@ namespace WildSnake
         /// <summary>Змея игрока укусила свернувшегося ежа и укололась.</summary>
         public event Action Pricked;
 
+        /// <summary>Змея игрока подтолкнула носом свёрнутого ежа (где он).</summary>
+        public event Action<Vector3> Pushed;
+
+        /// <summary>Испуганная мышь нырнула в норку мышиного городка (где).</summary>
+        public event Action<Vector3> MouseHid;
+
+        /// <summary>Свёрнутый ёж скатился в воду и поплыл (где).</summary>
+        public event Action<Vector3> HedgehogSplashed;
+
         /// <summary>Сила дождя 0..1: птицы, мыши и жуки прячутся, лягушек больше, шум дождя скрывает змею.</summary>
         public float Rain01 { get; set; }
 
@@ -72,6 +81,7 @@ namespace WildSnake
 
         private readonly float[] _spawnTimers = new float[KIND_COUNT];
         private float[] _startleTimers;
+        private bool[] _wasSwimming;
         private float _hideTimer;
         private bool _initialized;
 
@@ -85,6 +95,7 @@ namespace WildSnake
             if (_initialized) return;
             _initialized = true;
             _startleTimers = new float[_animals.Length];
+            _wasSwimming = new bool[_animals.Length];
             for (int i = 0; i < _animals.Length; i++) _animals[i].Initialize(_grid, _config);
         }
 
@@ -184,7 +195,8 @@ namespace WildSnake
                 if (!a.IsActive || a.IsFlying || a.IsHeld || a.IsCurled || _config.RequiresConstrict(a.Kind)) continue;
                 // Ёж колется — ИИ его обходит; до недоступной добычи (ignore) не тянется.
                 // Рыба в воде — змее ИИ туда лезть долго и неудобно.
-                if (a == ignore || a.Kind == PreyKind.Hedgehog || a.Kind == PreyKind.Fish) continue;
+                // Ежа в воде или мокрого на берегу соперница не упустит.
+                if (a == ignore || (a.Kind == PreyKind.Hedgehog && !a.IsDefenseless) || a.Kind == PreyKind.Fish) continue;
                 Vector3 d = a.Position - from;
                 d.y = 0f;
                 float dist = d.magnitude / cs;
@@ -217,6 +229,10 @@ namespace WildSnake
                 if (!a.IsActive) continue;
                 a.Tick(dt, playerThreat, rivalThreat, IsNight);
                 if (_startleTimers[i] > 0f) _startleTimers[i] -= dt;
+                if (a.IsActive && a.Kind == PreyKind.Mouse && a.IsFleeing) TryHideMouse(a);
+                bool swimming = a.IsActive && a.IsSwimming;
+                if (swimming && !_wasSwimming[i]) HedgehogSplashed?.Invoke(a.Position);
+                _wasSwimming[i] = swimming;
             }
 
             CheckCatches(_player);
@@ -271,6 +287,16 @@ namespace WildSnake
                 PreyStats stats = _config.GetPrey(a.Kind);
                 if (a.IsCurled)
                 {
+                    // Шар можно катить носом, если подползти не спеша; с разгона или укусом — уколешься.
+                    if (!snake.IsHurrying)
+                    {
+                        if (a.Push(head) && snake == _player && _startleTimers[i] <= 0f)
+                        {
+                            _startleTimers[i] = _startleCooldown;
+                            Pushed?.Invoke(a.Position);
+                        }
+                        continue;
+                    }
                     // Колючий шар: укус ранит саму змею, ёж остаётся.
                     snake.TakeHit(_config.HedgehogDamage, DamageSource.Hedgehog, head - a.Position);
                     snake.CancelStrike();
@@ -293,7 +319,7 @@ namespace WildSnake
                 }
 
                 // Уставшая добыча не успевает увернуться — её можно взять и касанием.
-                if (stats.RequiresStrike && !strike && !a.IsResting)
+                if (stats.RequiresStrike && !strike && !a.IsResting && !a.IsDefenseless)
                 {
                     a.Startle(head);
                     if (snake == _player && _startleTimers[i] <= 0f)
@@ -309,6 +335,17 @@ namespace WildSnake
                 ScheduleRespawn(a.Kind);
                 Caught?.Invoke(snake, a.Kind, pos);
             }
+        }
+
+        /// <summary>Мышь добежала до норки городка — ныряет под землю и вылезет позже, в другом месте.</summary>
+        private void TryHideMouse(PreyAnimal mouse)
+        {
+            if (_grid.NearestColonyHole(mouse.Position, out float dist) < 0) return;
+            if (dist > _config.ColonyHideRadius * _grid.CellSize) return;
+            Vector3 pos = mouse.Position;
+            mouse.Despawn();
+            ScheduleRespawn(PreyKind.Mouse);
+            if (IsRunning) MouseHid?.Invoke(pos);
         }
 
         private void MaintainPopulation(float dt)
@@ -408,6 +445,8 @@ namespace WildSnake
                 Vector2Int cell;
                 if (kind == PreyKind.Fish) found = _grid.TryGetRandomWaterCell(out cell);
                 else if (kind == PreyKind.Frog) found = _grid.TryGetRandomShoreCell(out cell);
+                // Часть мышей живёт в мышиных городках.
+                else if (kind == PreyKind.Mouse && UnityEngine.Random.value < _config.ColonyMouseShare && _grid.TryGetColonyCell(out cell)) found = true;
                 else found = _grid.TryGetRandomFreeCell(out cell);
                 if (!found) break;
                 Vector3 pos = _grid.CellToWorld(cell);

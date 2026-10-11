@@ -35,6 +35,8 @@ namespace WildSnake
         public static bool Confirm => Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter);
         public static bool MenuUp => Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.W);
         public static bool MenuDown => Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.S);
+        public static bool MenuLeft => Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A);
+        public static bool MenuRight => Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D);
 #elif ENABLE_INPUT_SYSTEM
         private static Keyboard K => Keyboard.current;
         private static Mouse M => Mouse.current;
@@ -84,6 +86,8 @@ namespace WildSnake
         public static bool Confirm => K != null && (K.spaceKey.wasPressedThisFrame || K.enterKey.wasPressedThisFrame || K.numpadEnterKey.wasPressedThisFrame);
         public static bool MenuUp => K != null && (K.upArrowKey.wasPressedThisFrame || K.wKey.wasPressedThisFrame);
         public static bool MenuDown => K != null && (K.downArrowKey.wasPressedThisFrame || K.sKey.wasPressedThisFrame);
+        public static bool MenuLeft => K != null && (K.leftArrowKey.wasPressedThisFrame || K.aKey.wasPressedThisFrame);
+        public static bool MenuRight => K != null && (K.rightArrowKey.wasPressedThisFrame || K.dKey.wasPressedThisFrame);
 #else
         public static Vector2 Move => Vector2.zero;
         public static Vector2 Look => Vector2.zero;
@@ -103,6 +107,8 @@ namespace WildSnake
         public static bool Confirm => false;
         public static bool MenuUp => false;
         public static bool MenuDown => false;
+        public static bool MenuLeft => false;
+        public static bool MenuRight => false;
 #endif
 
         private static int _pauseConsumedFrame = -1;

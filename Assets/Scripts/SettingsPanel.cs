@@ -13,6 +13,8 @@ namespace WildSnake
         [SerializeField] private AudioService _audio;
         [Tooltip("Контекстные подсказки: «Показать обучение» сбрасывает их счётчики")]
         [SerializeField] private ContextHints _hints;
+        [Tooltip("Видео-обучение: «Показать обучение» открывает его")]
+        [SerializeField] private GameObject _tutorialPanel;
 
         [Header("Элементы")]
         [SerializeField] private Slider _masterSlider;
@@ -106,7 +108,9 @@ namespace WildSnake
         private void OnTutorialClicked()
         {
             _audio.Play(SoundId.Click);
+            // Подсказки в игре тоже покажутся заново — обучение и в ролике, и в деле.
             _hints.ResetCounters();
+            _tutorialPanel.SetActive(true);
         }
 
         private void OnBackClicked()

@@ -333,6 +333,61 @@ namespace WildSnake
         [Tooltip("Какую долю роста до линьки даёт выполненная охотничья цель")]
         [SerializeField, Range(0f, 1f)] private float _goalMoltReward = 0.5f;
 
+        [Header("Ёж")]
+        [Tooltip("С какой скоростью катится свёрнутый ёж, если подтолкнуть его носом, клеток в секунду")]
+        [SerializeField, Min(0.5f)] private float _hedgehogRollSpeed = 4.5f;
+
+        [Tooltip("Скорость ежа, плывущего к берегу (беззащитен — свернуться в воде не может), клеток в секунду")]
+        [SerializeField, Min(0.1f)] private float _hedgehogSwimSpeed = 0.8f;
+
+        [Tooltip("Сколько секунд ёж выглядывает перед тем, как развернуться: укус в мордочку в это время ловит его")]
+        [SerializeField, Min(0.2f)] private float _hedgehogPeekTime = 1.1f;
+
+        [Tooltip("Сколько секунд мокрый ёж отряхивается на берегу и не может свернуться")]
+        [SerializeField, Min(0f)] private float _hedgehogWetTime = 2.2f;
+
+        [Header("Ежевика и тёплые ключи")]
+        [Tooltip("Скорость змеи в ежевике (множитель)")]
+        [SerializeField, Range(0.2f, 1f)] private float _brambleSpeed = 0.7f;
+
+        [Tooltip("Урон от колючек, когда змея спешит в ежевике")]
+        [SerializeField, Min(0f)] private float _thornDamage = 4f;
+
+        [Tooltip("Как часто колючки царапают спешащую змею, сек")]
+        [SerializeField, Min(0.1f)] private float _thornInterval = 0.9f;
+
+        [Header("Мышиные городки")]
+        [Tooltip("Доля мышей, появляющихся у мышиных городков")]
+        [SerializeField, Range(0f, 1f)] private float _colonyMouseShare = 0.45f;
+
+        [Tooltip("С какого расстояния до норки испуганная мышь в неё ныряет, клеток")]
+        [SerializeField, Min(0.2f)] private float _colonyHideRadius = 1.3f;
+
+        [Header("Осы")]
+        [Tooltip("В каком радиусе от гнезда осы замечают шум, клеток")]
+        [SerializeField, Min(1f)] private float _waspAlertRadius = 4.5f;
+
+        [Tooltip("Сколько «злости» в секунду набирают осы от змеи рядом: шагом, быстро; крадущаяся змея их не тревожит")]
+        [SerializeField] private Vector2 _waspAngerRate = new Vector2(0.35f, 1.2f);
+
+        [Tooltip("Скорость роя, клеток в секунду (чуть быстрее быстрого ползания)")]
+        [SerializeField, Min(0.5f)] private float _waspSpeed = 6.2f;
+
+        [Tooltip("Урон от укуса осы")]
+        [SerializeField, Min(0f)] private float _waspStingDamage = 4f;
+
+        [Tooltip("Как часто жалит рой, сек")]
+        [SerializeField, Min(0.1f)] private float _waspStingInterval = 0.85f;
+
+        [Tooltip("Сколько секунд рой гонится, прежде чем вернуться к гнезду")]
+        [SerializeField, Min(1f)] private float _waspChaseTime = 8f;
+
+        [Tooltip("Дальше этого расстояния от гнезда рой отстаёт, клеток")]
+        [SerializeField, Min(2f)] private float _waspLeash = 16f;
+
+        [Tooltip("Сколько секунд гнездо успокаивается после атаки, прежде чем снова разозлиться")]
+        [SerializeField, Min(0f)] private float _waspCalmTime = 20f;
+
         [Header("Соперница")]
         [Tooltip("Задержка возрождения змеи-соперницы, сек")]
         [SerializeField, Min(0f)] private float _rivalRespawnDelay = 6f;
@@ -462,6 +517,24 @@ namespace WildSnake
         public float FoxRaidInterval => _foxRaidInterval;
         public float GuardFoxEagerness => _guardFoxEagerness;
         public float GenerationLengthStep => _generationLengthStep;
+
+        public float HedgehogRollSpeed => _hedgehogRollSpeed;
+        public float HedgehogSwimSpeed => _hedgehogSwimSpeed;
+        public float HedgehogPeekTime => _hedgehogPeekTime;
+        public float HedgehogWetTime => _hedgehogWetTime;
+        public float BrambleSpeed => _brambleSpeed;
+        public float ThornDamage => _thornDamage;
+        public float ThornInterval => _thornInterval;
+        public float ColonyMouseShare => _colonyMouseShare;
+        public float ColonyHideRadius => _colonyHideRadius;
+        public float WaspAlertRadius => _waspAlertRadius;
+        public Vector2 WaspAngerRate => _waspAngerRate;
+        public float WaspSpeed => _waspSpeed;
+        public float WaspStingDamage => _waspStingDamage;
+        public float WaspStingInterval => _waspStingInterval;
+        public float WaspChaseTime => _waspChaseTime;
+        public float WaspLeash => _waspLeash;
+        public float WaspCalmTime => _waspCalmTime;
 
         public float RivalRespawnDelay => _rivalRespawnDelay;
         public float RivalMaxHealth => _rivalMaxHealth;

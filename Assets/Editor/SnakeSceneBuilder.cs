@@ -148,7 +148,16 @@ public static class SnakeSceneBuilder
             ("_mushroomCapMaterial", arena.MushroomCap), ("_mushroomStemMaterial", arena.MushroomStem),
             ("_lilyPadMaterial", arena.LilyPad), ("_birdEggMaterial", arena.BirdEgg));
         SetInt(board, "_canopyLayer", canopyLayer);
+        Material hotSpringWater = CreateLitMaterial("HotSpringWater", new Color(0.35f, 0.78f, 0.78f, 0.82f), 0.92f);
+        MakeTransparent(hotSpringWater);
+        Wire(board, ("_brambleMaterial", CreateLitMaterial("Bramble", new Color(0.16f, 0.25f, 0.13f), 0.25f)),
+            ("_berryMaterial", CreateLitMaterial("BrambleBerry", new Color(0.22f, 0.05f, 0.12f), 0.75f)),
+            ("_hotSpringMaterial", hotSpringWater),
+            ("_mineralMaterial", CreateLitMaterial("SpringMineral", new Color(0.86f, 0.82f, 0.7f), 0.2f)),
+            ("_waspNestMaterial", CreateLitMaterial("WaspNestPaper", new Color(0.62f, 0.58f, 0.52f), 0.1f)),
+            ("_waspStripeMaterial", CreateLitMaterial("WaspNestStripe", new Color(0.42f, 0.38f, 0.33f), 0.1f)));
         board.Build();
+        BuildSpringSteam(grid, particles);
         EnvironmentBuilder.Build(grid, particles, out ParticleSystem pollen, out Renderer stars, out Transform clouds);
 
         var particleFloor = new GameObject("ParticleFloor").transform;
@@ -189,6 +198,7 @@ public static class SnakeSceneBuilder
         FoxHunter fox = BuildFox(config, grid, player.Controller);
         BirdNests birdNests = BuildBirdNests(config, grid, board, player.Controller);
         Hatchlings hatchlings = BuildHatchlings(grid, skin);
+        WaspNests wasps = BuildWasps(config, grid, board, player.Controller, fox);
 
         // ================= Нюх и линька =================
         var scent = new GameObject("Scent").AddComponent<ScentTracker>();
@@ -274,7 +284,7 @@ public static class SnakeSceneBuilder
             ("_config", config), ("_grid", grid),
             ("_snake", player.Controller), ("_headAnimator", player.Animator), ("_rival", rival.Controller), ("_playerAutopilot", playerAi), ("_playerInput", playerInput),
             ("_wildlife", wildlife), ("_eagle", eagle), ("_fox", fox), ("_dayNight", dayNight), ("_weather", weather), ("_scent", scent), ("_skinShed", shed),
-            ("_nestEggs", board.NestEggs), ("_nestBeacon", board.NestBeacon), ("_birdNests", birdNests), ("_hatchlings", hatchlings),
+            ("_nestEggs", board.NestEggs), ("_nestBeacon", board.NestBeacon), ("_birdNests", birdNests), ("_hatchlings", hatchlings), ("_wasps", wasps),
             ("_leaderboard", leaderboard), ("_settings", settings), ("_audio", audio), ("_cameraRig", rig),
             ("_eatParticles", eatFx), ("_deathParticles", deathFx), ("_dustParticles", dustFx), ("_moltParticles", moltFx));
 
@@ -283,7 +293,7 @@ public static class SnakeSceneBuilder
         {
             Game = game, Config = config, Player = player.Controller, Settings = settings, Audio = audio, Leaderboard = leaderboard,
             Wildlife = wildlife, Eagle = eagle, Fox = fox, DayNight = dayNight, Scent = scent, Grid = grid, Weather = weather, BirdNests = birdNests,
-            CameraTransform = camGo.transform, Rig = rig, Rival = rival.Controller
+            Wasps = wasps, CameraTransform = camGo.transform, Rig = rig, Rival = rival.Controller
         });
 
         Wire(ambience, ("_game", game));
@@ -559,6 +569,78 @@ public static class SnakeSceneBuilder
         WireArray(nests, "_leftWings", lefts);
         WireArray(nests, "_rightWings", rights);
         return nests;
+    }
+
+    /// <summary>
+    /// Осы: пул роя (12 штук) и по две дежурные осы у каждого гнезда. Оса — жёлтое брюшко с чёрными поясками,
+    /// тёмная голова и два светлых крылышка; тени не отбрасывают.
+    /// </summary>
+    private static WaspNests BuildWasps(GameConfig config, GridManager grid, BoardView board, SnakeController snake, FoxHunter fox)
+    {
+        const int swarmSize = 12;
+        Material yellow = CreateLitMaterial("WaspBody", new Color(0.95f, 0.75f, 0.12f), 0.6f);
+        Material black = CreateLitMaterial("WaspStripe", new Color(0.05f, 0.04f, 0.03f), 0.5f);
+        Material wing = CreateLitMaterial("WaspWing", new Color(0.92f, 0.95f, 1f, 0.45f), 0.9f);
+        MakeTransparent(wing);
+
+        var root = new GameObject("WaspNests");
+        var swarm = new Object[swarmSize];
+        var guards = new Object[grid.WaspNestCount * 2];
+        for (int i = 0; i < swarm.Length + guards.Length; i++)
+        {
+            var w = new GameObject(i < swarmSize ? "SwarmWasp" : "GuardWasp");
+            w.transform.SetParent(root.transform, false);
+            w.transform.localScale = Vector3.one * 1.5f;
+            Part(PrimitiveType.Sphere, "Abdomen", w.transform, yellow, new Vector3(0f, 0f, -0.05f), new Vector3(0.06f, 0.06f, 0.1f));
+            Part(PrimitiveType.Sphere, "Band", w.transform, black, new Vector3(0f, 0f, -0.06f), new Vector3(0.062f, 0.062f, 0.025f));
+            Part(PrimitiveType.Sphere, "Head", w.transform, black, new Vector3(0f, 0f, 0.03f), Vector3.one * 0.045f);
+            for (int side = -1; side <= 1; side += 2)
+            {
+                GameObject wingGo = Part(PrimitiveType.Sphere, "Wing", w.transform, wing, new Vector3(0.04f * side, 0.03f, -0.01f), new Vector3(0.07f, 0.008f, 0.04f));
+                wingGo.transform.localRotation = Quaternion.Euler(0f, 0f, 20f * side);
+            }
+            foreach (Renderer r in w.GetComponentsInChildren<Renderer>()) r.shadowCastingMode = ShadowCastingMode.Off;
+            if (i < swarmSize)
+            {
+                swarm[i] = w.transform;
+                w.SetActive(false);
+            }
+            else guards[i - swarmSize] = w.transform;
+        }
+        var wasps = root.AddComponent<WaspNests>();
+        Wire(wasps, ("_config", config), ("_grid", grid), ("_snake", snake), ("_fox", fox), ("_board", board));
+        WireArray(wasps, "_swarm", swarm);
+        WireArray(wasps, "_guards", guards);
+        return wasps;
+    }
+
+    /// <summary>Пар над тёплыми ключами: медленные светлые клубы, всё время поднимающиеся над лужицей.</summary>
+    private static void BuildSpringSteam(GridManager grid, Material mat)
+    {
+        var root = new GameObject("SpringSteam");
+        for (int i = 0; i < grid.HotSpringCount; i++)
+        {
+            ParticleSystem ps = CreateParticles("Steam", mat, new Color(1f, 1f, 1f, 0.5f), new Color(0.9f, 0.95f, 1f, 0.32f),
+                0.25f, 0.6f, -0.02f, 0.6f, 1.3f, 2.5f, 4f, 0.7f);
+            ps.transform.SetParent(root.transform, false);
+            ps.transform.position = grid.GetHotSpring(i) + Vector3.up * 0.1f;
+            ps.transform.rotation = Quaternion.Euler(-90f, 0f, 0f);
+            ParticleSystem.MainModule main = ps.main;
+            main.loop = true;
+            main.playOnAwake = true;
+            main.duration = 4f;
+            main.maxParticles = 40;
+            ParticleSystem.EmissionModule emission = ps.emission;
+            emission.rateOverTime = 8f;
+            ParticleSystem.ShapeModule shape = ps.shape;
+            shape.shapeType = ParticleSystemShapeType.Cone;
+            shape.angle = 8f;
+            shape.radius = 0.7f;
+            // Клубы растут, поднимаясь, — а не сжимаются, как искры.
+            ParticleSystem.SizeOverLifetimeModule sol = ps.sizeOverLifetime;
+            sol.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.Linear(0f, 0.6f, 1f, 1.6f));
+            ps.Play();
+        }
     }
 
     /// <summary>Змеёныши: шесть крошечных змеек из шариков (голова крупнее), скрыты до вылупления.</summary>

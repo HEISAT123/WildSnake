@@ -5,7 +5,8 @@ namespace WildSnake
 {
     /// <summary>
     /// Карта: подложка, нарисованная по данным поля (MapPainter), и значки поверх неё —
-    /// стрелки змей по направлению головы, следы добычи, рыбы и жуки, орёл и лиса, норы, гнёзда, солнечные камни.
+    /// стрелки змей по направлению головы, следы добычи, рыбы и жуки, орёл и лиса, норы, гнёзда, солнечные камни,
+    /// тёплые ключи, мышиные городки и осиные гнёзда. На карте журнала добыча видна только вокруг змеи (_knownRadius).
     /// Два режима одного компонента:
     /// • карта журнала (Tab) — всё поле целиком, север вверху;
     /// • мини-карта HUD (_follow) — круглое окно вокруг змеи, повёрнутое по камере (вверху — куда смотрит камера),
@@ -75,6 +76,9 @@ namespace WildSnake
         [SerializeField] private RectTransform[] _burrowIcons = new RectTransform[0];
         [SerializeField] private RectTransform[] _birdNestIcons = new RectTransform[0];
         [SerializeField] private RectTransform[] _sunStoneIcons = new RectTransform[0];
+        [SerializeField] private RectTransform[] _springIcons = new RectTransform[0];
+        [SerializeField] private RectTransform[] _colonyIcons = new RectTransform[0];
+        [SerializeField] private RectTransform[] _waspIcons = new RectTransform[0];
 
         [Header("Добыча")]
         [SerializeField] private Sprite _pawSprite;
@@ -86,6 +90,12 @@ namespace WildSnake
         [SerializeField] private Color _hedgehogColor = new Color(0.72f, 0.68f, 0.62f);
         [SerializeField] private float _preySize = 18f;
         [SerializeField] private float _beetleSize = 12f;
+
+        [Tooltip("Карта журнала показывает добычу только в этом радиусе от змеи, м (0 — всю): дальнее — ищите нюхом и глазами")]
+        [SerializeField, Min(0f)] private float _knownRadius = 40f;
+
+        [Tooltip("Тонкое кольцо «что змея знает» вокруг неё на карте журнала (может отсутствовать)")]
+        [SerializeField] private RectTransform _knownRing;
 
         private Texture2D _texture;
         private Vector3 _origin;
@@ -127,10 +137,20 @@ namespace WildSnake
                 Vector3 stone = has ? _grid.CellToWorld(_grid.GetSunStone(i)) + new Vector3(0.5f, 0f, 0.5f) * _grid.CellSize : Vector3.zero;
                 PlaceStatic(_sunStoneIcons[i], has, stone);
             }
+            for (int i = 0; i < _springIcons.Length; i++) PlaceStatic(_springIcons[i], i < _grid.HotSpringCount, i < _grid.HotSpringCount ? _grid.GetHotSpring(i) : Vector3.zero);
+            for (int i = 0; i < _colonyIcons.Length; i++) PlaceStatic(_colonyIcons[i], i < _grid.MouseColonyCount, i < _grid.MouseColonyCount ? _grid.GetMouseColony(i) : Vector3.zero);
+            for (int i = 0; i < _waspIcons.Length; i++) PlaceStatic(_waspIcons[i], i < _grid.WaspNestCount, i < _grid.WaspNestCount ? _grid.GetWaspNest(i) : Vector3.zero);
             PlaceStatic(_nestIcon, _grid.HasNest, _grid.HasNest ? _grid.NestPosition : Vector3.zero);
             if (_nestRing != null) _nestRing.anchoredPosition = _nestIcon.anchoredPosition;
 
             SetupPreyIcons();
+            if (_knownRing != null)
+            {
+                bool known = !_follow && _knownRadius > 0f;
+                _knownRing.gameObject.SetActive(known);
+                float diameter = 2f * _knownRadius * _mapSize.x / _worldSize.x;
+                if (known) _knownRing.sizeDelta = new Vector2(diameter, diameter);
+            }
         }
 
         private void OnDestroy()
@@ -169,6 +189,7 @@ namespace WildSnake
 
             SetArrow(_playerIcon, _player, true);
             _playerRing.anchoredPosition = _playerIcon.anchoredPosition;
+            if (_knownRing != null) _knownRing.anchoredPosition = ToMap(_player.HeadPosition);
             float pulse = 1f + 0.22f * Mathf.Sin(t * 5f);
             _playerRing.localScale = new Vector3(pulse, pulse, 1f);
 
@@ -177,7 +198,9 @@ namespace WildSnake
             SetThreat(_foxIcon, _fox.IsActive, _fox.Position);
 
             Vector3 head = _player.HeadPosition;
-            float range = _viewRadius * 1.15f;
+            // Мини-карта — окно; карта журнала — то, что змея знает вокруг себя.
+            float range = _follow ? _viewRadius * 1.15f : _knownRadius > 0f ? _knownRadius : float.MaxValue;
+            float rangeSqr = range * range;
             int count = Mathf.Min(_preyIcons.Length, _wildlife.AnimalCount);
             for (int i = 0; i < count; i++)
             {
@@ -185,7 +208,8 @@ namespace WildSnake
                 RectTransform icon = _preyIcons[i].rectTransform;
                 Vector3 p = animal.Position;
                 // На мини-карте дальнюю добычу не двигаем — она всё равно за краем круга.
-                bool show = animal.IsActive && (!_follow || (Mathf.Abs(p.x - head.x) < range && Mathf.Abs(p.z - head.z) < range));
+                float dx = p.x - head.x, dz = p.z - head.z;
+                bool show = animal.IsActive && dx * dx + dz * dz < rangeSqr;
                 if (icon.gameObject.activeSelf != show) icon.gameObject.SetActive(show);
                 if (!show) continue;
                 icon.anchoredPosition = ToMap(p);
@@ -219,6 +243,9 @@ namespace WildSnake
             for (int i = 0; i < _burrowIcons.Length; i++) _burrowIcons[i].localRotation = _upright;
             for (int i = 0; i < _birdNestIcons.Length; i++) _birdNestIcons[i].localRotation = _upright;
             for (int i = 0; i < _sunStoneIcons.Length; i++) _sunStoneIcons[i].localRotation = _upright;
+            for (int i = 0; i < _springIcons.Length; i++) _springIcons[i].localRotation = _upright;
+            for (int i = 0; i < _colonyIcons.Length; i++) _colonyIcons[i].localRotation = _upright;
+            for (int i = 0; i < _waspIcons.Length; i++) _waspIcons[i].localRotation = _upright;
             _nestIcon.localRotation = _upright;
             _eagleIcon.localRotation = _upright;
             _foxIcon.localRotation = _upright;

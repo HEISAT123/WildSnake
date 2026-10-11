@@ -36,6 +36,13 @@ namespace WildSnake
             ScareBird,
             Hollow,
             GuardClutch,
+            HedgehogPeek,
+            HedgehogSwim,
+            WaspSwarm,
+            WaspNest,
+            Bramble,
+            HotSpring,
+            MouseColony,
             Count
         }
 
@@ -43,7 +50,8 @@ namespace WildSnake
 
         private static readonly string[] Keys =
         {
-            "F", "E", "ЛКМ", "ЛКМ", "ПКМ", "ЛКМ", "E", "", "SPACE", "CTRL", "WASD", "", "E", "", "E", "", "", "", "", "ЛКМ", "", ""
+            "F", "E", "ЛКМ", "ЛКМ", "ПКМ", "ЛКМ", "E", "", "SPACE", "CTRL", "WASD", "", "E", "", "E", "", "", "", "", "ЛКМ", "", "",
+            "ЛКМ", "", "", "CTRL", "", "", ""
         };
 
         private static readonly string[] Texts =
@@ -65,15 +73,22 @@ namespace WildSnake
             "отложить яйца",
             "гнездо — вернитесь ночью",
             "гнездо — сначала наешьтесь",
-            "ёж свернулся — уколетесь, подождите",
+            "ёж свернулся — толкните носом в воду или ждите",
             "птичье гнездо — подползите к яйцам",
             "бросок отгонит птицу",
             "в бревне не видят ни орёл, ни лиса",
-            "лиса идёт к кладке — отгоните её"
+            "лиса идёт к кладке — отгоните её",
+            "ёж выглядывает — кусайте!",
+            "ёж в воде — хватайте, пока не выбрался",
+            "осы! — в воду, нору или бревно",
+            "осиное гнездо — крадитесь мимо",
+            "ежевика — не спешите, колючки",
+            "тёплый ключ — греет и ночью",
+            "мышиный городок — мыши ныряют в норки, ждите в засаде"
         };
 
         // Сколько раз показывать каждую подсказку.
-        private static readonly int[] Limits = { 6, 4, 4, 4, 4, 3, 4, 3, 3, 3, 3, 3, 3, 3, 99, 99, 99, 4, 3, 4, 3, 99 };
+        private static readonly int[] Limits = { 6, 4, 4, 4, 4, 3, 4, 3, 3, 3, 3, 3, 3, 3, 99, 99, 99, 4, 3, 4, 3, 99, 4, 4, 4, 4, 3, 3, 3 };
 
         [Header("Источники")]
         [SerializeField] private GameManager _game;
@@ -85,6 +100,7 @@ namespace WildSnake
         [SerializeField] private FoxHunter _fox;
         [SerializeField] private ScentTracker _scent;
         [SerializeField] private BirdNests _birdNests;
+        [SerializeField] private WaspNests _wasps;
 
         [Header("Элементы")]
         [SerializeField] private CanvasGroup _group;
@@ -207,6 +223,17 @@ namespace WildSnake
                 preyDist = d.magnitude / cs;
             }
 
+            if (_wasps.IsChasing && Allow(Hint.WaspSwarm) != Hint.None) return Hint.WaspSwarm;
+            if (hasPrey && prey.IsPeeking && preyDist <= _config.ChargedStrikeDistance)
+            {
+                Hint h = Allow(Hint.HedgehogPeek);
+                if (h != Hint.None) return h;
+            }
+            if (hasPrey && prey.IsDefenseless && preyDist <= _config.ChargedStrikeDistance + 2f)
+            {
+                Hint h = Allow(Hint.HedgehogSwim);
+                if (h != Hint.None) return h;
+            }
             if (hasPrey && prey.IsCurled && preyDist <= _config.ChargedStrikeDistance)
             {
                 Hint h = Allow(Hint.Hedgehog);
@@ -233,6 +260,11 @@ namespace WildSnake
             if (_game.NearbyBurrow >= 0 && Allow(Hint.BurrowEnter) != Hint.None) return Hint.BurrowEnter;
             if (_eagle.IsThreatening && !_snake.IsHidden && Allow(Hint.Eagle) != Hint.None) return Hint.Eagle;
             if (_grid.IsHollowAt(head) && Allow(Hint.Hollow) != Hint.None) return Hint.Hollow;
+            if (!_wasps.IsSwarming && _wasps.NearestAnger(head, out float waspDist) >= 0f && waspDist < _config.WaspAlertRadius * cs
+                && _snake.Pace != SnakePace.Sneak && Allow(Hint.WaspNest) != Hint.None) return Hint.WaspNest;
+            if (_snake.InBramble && _snake.IsMoving && Allow(Hint.Bramble) != Hint.None) return Hint.Bramble;
+            if (_snake.Spot == TemperatureSpot.HotSpring && Allow(Hint.HotSpring) != Hint.None) return Hint.HotSpring;
+            if (_grid.NearestColonyHole(head, out float holeDist) >= 0 && holeDist < 5f * cs && Allow(Hint.MouseColony) != Hint.None) return Hint.MouseColony;
             if (_birdNests.TryGetNearest(head, 4f * cs, out _, out _) && Allow(Hint.BirdEggs) != Hint.None) return Hint.BirdEggs;
             if (_snake.IsMoving && LogAhead() && Allow(Hint.Jump) != Hint.None) return Hint.Jump;
 

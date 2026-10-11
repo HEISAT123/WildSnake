@@ -8,7 +8,8 @@ namespace WildSnake
     /// из раскладки GridManager: низкие стенки — поваленные брёвна, колонны — сломанные пни и стоячие камни (на гряде),
     /// сухие деревья (в болоте), блоки — валуны; в рощах — деревья и берёзы с кронами, лесная подстилка, папоротники
     /// и грибы; плюс высокая трава и камыш с рогозом, озеро и пруды, текущая река с брёвнами-мостами, болотные бочаги
-    /// с кувшинками, полые брёвна, галька на гряде, птичьи гнёзда с яйцами, солнечные камни, норы и гнездо
+    /// с кувшинками, полые брёвна, галька на гряде, птичьи гнёзда с яйцами, солнечные камни, норы, заросли ежевики,
+    /// тёплые ключи, норки мышиных городков, осиные гнёзда на пнях и гнездо
     /// (кладка — главная цель; яйца и маяк над гнездом включает GameManager).
     /// Строится один раз (в редакторе SnakeSceneBuilder'ом или в Start, если раскладку поменяли в инспекторе).
     /// </summary>
@@ -99,6 +100,25 @@ namespace WildSnake
         [Tooltip("Яйца в птичьих гнёздах")]
         [SerializeField] private Material _birdEggMaterial;
 
+        [Header("Ежевика, мышиные городки, тёплые ключи, осы")]
+        [Tooltip("Листва ежевики")]
+        [SerializeField] private Material _brambleMaterial;
+
+        [Tooltip("Ягоды ежевики")]
+        [SerializeField] private Material _berryMaterial;
+
+        [Tooltip("Тёплая бирюзовая вода ключа")]
+        [SerializeField] private Material _hotSpringMaterial;
+
+        [Tooltip("Светлая минеральная корка вокруг ключа")]
+        [SerializeField] private Material _mineralMaterial;
+
+        [Tooltip("Серая «бумага» осиного гнезда")]
+        [SerializeField] private Material _waspNestMaterial;
+
+        [Tooltip("Тёмные полосы на осином гнезде")]
+        [SerializeField] private Material _waspStripeMaterial;
+
         [Header("Гнездо")]
         [Tooltip("Яйца в гнезде")]
         [SerializeField] private Material _eggMaterial;
@@ -133,6 +153,10 @@ namespace WildSnake
         [SerializeField, HideInInspector] private GameObject _nestEggs;
         [SerializeField, HideInInspector] private GameObject _nestBeacon;
         [SerializeField, HideInInspector] private Renderer[] _birdEggs = new Renderer[0];
+        [SerializeField, HideInInspector] private Vector3[] _waspNestPoints = new Vector3[0];
+
+        /// <summary>Центры осиных гнёзд на пнях, по порядку гнёзд GridManager (отсюда вылетает рой).</summary>
+        public Vector3[] WaspNestPoints => _waspNestPoints;
 
         /// <summary>Яйца птичьих гнёзд: по три на гнездо, по порядку гнёзд GridManager.</summary>
         public Renderer[] BirdEggs => _birdEggs;
@@ -184,6 +208,10 @@ namespace WildSnake
             BuildSunStones(cs);
             BuildBurrows(cs);
             BuildTallGrass(cs);
+            BuildBrambles(cs);
+            BuildHotSprings(cs);
+            BuildMouseColonies(cs);
+            BuildWaspNests(cs);
 
             _builtLayoutVersion = _grid.LayoutVersion;
             _isBuilt = true;
@@ -202,7 +230,8 @@ namespace WildSnake
                         case ObstacleType.Pillar:
                             if (_grid.IsForest(cell) && _crownMesh != null) BuildTree(cell, cs);
                             else if (_grid.IsSwamp(cell)) BuildDeadTree(cell, cs);
-                            else if (!_grid.IsRidge(cell) && Hash(x, y) < 0.55f) BuildStump(cell, cs);
+                            // Под осиным гнездом — всегда пень.
+                            else if (!_grid.IsRidge(cell) && (Hash(x, y) < 0.55f || IsWaspNestCell(cell))) BuildStump(cell, cs);
                             else BuildStandingStone(cell, cs);
                             break;
                         case ObstacleType.Block:
@@ -222,7 +251,7 @@ namespace WildSnake
         {
             Vector3 basePos = _grid.CellToWorld(cell);
             float d = _grid.GetObstacleHalfSize(cell) * 2f;
-            float h = _stumpHeight * cs * (0.85f + 0.3f * Hash(cell.y, cell.x));
+            float h = StumpHeight(cell, cs);
             float yaw = Hash(cell.x, cell.y) * 360f;
             Quaternion turn = Quaternion.Euler(0f, yaw, 0f);
 
@@ -242,6 +271,18 @@ namespace WildSnake
                     new Vector3(d * 0.32f, 0.22f * cs, d * 0.6f), _barkMaterial);
                 root.transform.rotation = around * Quaternion.Euler(18f, 0f, 0f);
             }
+        }
+
+        private float StumpHeight(Vector2Int cell, float cs)
+        {
+            return _stumpHeight * cs * (0.85f + 0.3f * Hash(cell.y, cell.x));
+        }
+
+        private bool IsWaspNestCell(Vector2Int cell)
+        {
+            for (int i = 0; i < _grid.WaspNestCount; i++)
+                if (_grid.GetWaspNestCell(i) == cell) return true;
+            return false;
         }
 
         /// <summary>
@@ -547,7 +588,7 @@ namespace WildSnake
             int count = 0;
             for (int y = 0; y < _grid.Height; y++)
                 for (int x = 0; x < _grid.Width; x++)
-                    if (_grid.IsCover(new Vector2Int(x, y)) && !_grid.IsReed(new Vector2Int(x, y)) && !_grid.IsHollow(new Vector2Int(x, y))) count += _tuftsPerCell;
+                    if (_grid.IsCover(new Vector2Int(x, y)) && !_grid.IsReed(new Vector2Int(x, y)) && !_grid.IsHollow(new Vector2Int(x, y)) && !_grid.IsBramble(new Vector2Int(x, y))) count += _tuftsPerCell;
             if (count == 0) return;
 
             var combine = new CombineInstance[count];
@@ -558,7 +599,7 @@ namespace WildSnake
                 for (int x = 0; x < _grid.Width; x++)
                 {
                     var cell = new Vector2Int(x, y);
-                    if (!_grid.IsCover(cell) || _grid.IsReed(cell) || _grid.IsHollow(cell)) continue;
+                    if (!_grid.IsCover(cell) || _grid.IsReed(cell) || _grid.IsHollow(cell) || _grid.IsBramble(cell)) continue;
                     Vector3 c = _grid.CellToWorld(cell) - origin;
                     for (int t = 0; t < _tuftsPerCell; t++)
                     {
@@ -952,6 +993,179 @@ namespace WildSnake
                 }
             }
             _birdEggs = eggs.ToArray();
+        }
+
+        // ---------------- Ежевика, тёплые ключи, мышиные городки, осы ----------------
+
+        /// <summary>
+        /// Ежевика: на клетку два-три плотных тёмных куста, дуги колючих плетей и россыпь ягод. Ниже камеры, как трава,
+        /// но плотнее и темнее — заросли читаются издалека. Всё в два меша.
+        /// </summary>
+        private void BuildBrambles(float cs)
+        {
+            if (_brambleMaterial == null) return;
+            Mesh sphere = PrimitiveMesh(PrimitiveType.Sphere);
+            // Плети и ягоды — кубики: у сфер и цилиндров Unity сотни вершин, и тысячи ягод раздували сцену за 100 МБ.
+            Mesh cube = PrimitiveMesh(PrimitiveType.Cube);
+            // Гранёный икосаэдр даёт кусту рваный силуэт (гладкие шары выглядели игрушечно) и весит в десятки раз меньше
+            // меша камня: кустов сотни, а объединённый меш сохраняется прямо в сцене.
+            Mesh bush = Icosahedron();
+            var bushes = new System.Collections.Generic.List<CombineInstance>();
+            var berries = new System.Collections.Generic.List<CombineInstance>();
+            Vector3 origin = transform.position;
+            for (int y = 0; y < _grid.Height; y++)
+            {
+                for (int x = 0; x < _grid.Width; x++)
+                {
+                    var cell = new Vector2Int(x, y);
+                    if (!_grid.IsBramble(cell)) continue;
+                    Vector3 c = _grid.CellToWorld(cell) - origin;
+                    for (int k = 0; k < 3; k++)
+                    {
+                        float hx = Hash(x * 3 + k, y * 7 + 2) - 0.5f;
+                        float hz = Hash(x * 11 + 4, y * 5 + k) - 0.5f;
+                        float hs = Hash(x + k * 17, y + 3);
+                        float w = (0.62f + 0.3f * hs) * cs;
+                        float h = (0.42f + 0.22f * hs) * cs;
+                        Vector3 p = c + new Vector3(hx * 0.7f * cs, h * 0.32f, hz * 0.7f * cs);
+                        bushes.Add(Instance(bush, p, hs * 360f + k * 97f, new Vector3(w, h, w * 0.9f)));
+                        // Колючая плеть — тонкая дуга, торчащая из куста.
+                        float yaw = hs * 360f + k * 120f;
+                        Quaternion arch = Quaternion.Euler(0f, yaw, 0f) * Quaternion.Euler(55f, 0f, 0f);
+                        bushes.Add(new CombineInstance
+                        {
+                            mesh = cube,
+                            transform = Matrix4x4.TRS(p + Quaternion.Euler(0f, yaw, 0f) * new Vector3(0f, h * 0.35f, w * 0.35f), arch, new Vector3(0.04f * cs, 0.64f * cs, 0.04f * cs))
+                        });
+                        if (_berryMaterial == null) continue;
+                        for (int b = 0; b < 1; b++)
+                        {
+                            float a = (hs * 6.283f) + b * 2.4f + k;
+                            Vector3 bp = p + new Vector3(Mathf.Cos(a) * w * 0.42f, h * (0.15f + 0.25f * b), Mathf.Sin(a) * w * 0.42f);
+                            berries.Add(Instance(cube, bp, hs * 90f, Vector3.one * (0.08f * cs)));
+                        }
+                    }
+                }
+            }
+            Combined("Brambles", bushes, _brambleMaterial, true);
+            Combined("BrambleBerries", berries, _berryMaterial, false);
+        }
+
+        /// <summary>Тёплый ключ: бирюзовая лужица в светлой минеральной корке с камешками по краю (пар — частицы сцены).</summary>
+        private void BuildHotSprings(float cs)
+        {
+            if (_hotSpringMaterial == null || _mineralMaterial == null) return;
+            for (int i = 0; i < _grid.HotSpringCount; i++)
+            {
+                Vector3 center = _grid.GetHotSpring(i);
+                // Корку кладём по самой высокой точке под ней, чтобы рельеф её не прорезал.
+                for (int k = 0; k < 8; k++)
+                {
+                    float a = k * Mathf.PI * 0.25f;
+                    center.y = Mathf.Max(center.y, _grid.GroundHeight(center + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * (1.4f * cs)));
+                }
+                var root = new GameObject("HotSpring");
+                root.transform.SetParent(transform, false);
+                root.transform.position = center;
+                float yaw = Hash(i, 91) * 360f;
+                Renderer crust = CreateShape(PrimitiveType.Cylinder, "Crust", center + Vector3.up * (0.02f * cs), new Vector3(2.9f * cs, 0.02f * cs, 2.5f * cs), _mineralMaterial);
+                crust.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+                crust.shadowCastingMode = ShadowCastingMode.Off;
+                Parent(crust, root);
+                Renderer pool = CreateShape(PrimitiveType.Cylinder, "Pool", center + Vector3.up * (0.05f * cs), new Vector3(1.8f * cs, 0.015f * cs, 1.5f * cs), _hotSpringMaterial);
+                pool.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
+                pool.shadowCastingMode = ShadowCastingMode.Off;
+                Parent(pool, root);
+                for (int k = 0; k < 11; k++)
+                {
+                    float a = k * Mathf.PI * 2f / 11f + Hash(k, i) * 0.4f;
+                    var dir = new Vector3(Mathf.Cos(a) * 1.0f, 0f, Mathf.Sin(a) * 0.85f);
+                    Vector3 p = center + Quaternion.Euler(0f, yaw, 0f) * dir * cs + Vector3.up * (0.05f * cs);
+                    float s = (0.18f + 0.14f * Hash(i, k)) * cs;
+                    Parent(CreateShape(PrimitiveType.Sphere, "RimStone", p, new Vector3(s * 1.3f, s * 0.6f, s), _mineralMaterial), root);
+                }
+            }
+        }
+
+        /// <summary>Мышиный городок: у каждой норки — холмик выброшенной земли и тёмный лаз.</summary>
+        private void BuildMouseColonies(float cs)
+        {
+            if (_dirtMaterial == null || _holeMaterial == null) return;
+            for (int i = 0; i < _grid.ColonyHoleCount; i++)
+            {
+                Vector3 pos = _grid.GetColonyHole(i);
+                float s = 0.85f + 0.3f * Hash(i, 57);
+                Renderer mound = CreateShape(PrimitiveType.Sphere, "MouseMound", pos, new Vector3(0.62f, 0.2f, 0.55f) * (cs * s), _dirtMaterial);
+                mound.transform.rotation = Quaternion.Euler(0f, Hash(57, i) * 360f, 0f);
+                Renderer hole = CreateShape(PrimitiveType.Sphere, "MouseHole", pos + Vector3.up * (0.085f * cs * s), new Vector3(0.28f, 0.06f, 0.26f) * (cs * s), _holeMaterial);
+                hole.shadowCastingMode = ShadowCastingMode.Off;
+            }
+        }
+
+        /// <summary>
+        /// Осиное гнездо на пне: серый «бумажный» шар с тёмными поясами и лазом снизу, сбоку от обломка ствола.
+        /// Центры гнёзд запоминаются — оттуда вылетает рой.
+        /// </summary>
+        private void BuildWaspNests(float cs)
+        {
+            _waspNestPoints = new Vector3[_grid.WaspNestCount];
+            for (int i = 0; i < _grid.WaspNestCount; i++)
+            {
+                Vector2Int cell = _grid.GetWaspNestCell(i);
+                Vector3 basePos = _grid.CellToWorld(cell);
+                float d = _grid.GetObstacleHalfSize(cell) * 2f;
+                float h = StumpHeight(cell, cs);
+                Quaternion turn = Quaternion.Euler(0f, Hash(cell.x, cell.y) * 360f, 0f);
+                Vector3 center = basePos + turn * new Vector3(-d * 0.18f, 0f, 0f) + Vector3.up * (h + 0.3f * cs);
+                _waspNestPoints[i] = center;
+                if (_waspNestMaterial == null) continue;
+                var root = new GameObject("WaspNest");
+                root.transform.SetParent(transform, false);
+                root.transform.position = center;
+                Parent(Occlude(CreateShape(PrimitiveType.Sphere, "Nest", center, new Vector3(0.46f, 0.6f, 0.46f) * cs, _waspNestMaterial)), root);
+                if (_waspStripeMaterial != null)
+                {
+                    for (int k = 0; k < 3; k++)
+                    {
+                        float y = (-0.14f + k * 0.13f) * cs;
+                        float r = Mathf.Sqrt(1f - Mathf.Pow(y / (0.3f * cs), 2f)) * 0.47f * cs;
+                        Parent(CreateShape(PrimitiveType.Sphere, "Stripe", center + Vector3.up * y, new Vector3(r, 0.035f * cs, r), _waspStripeMaterial), root);
+                    }
+                }
+                if (_holeMaterial != null)
+                    Parent(CreateShape(PrimitiveType.Sphere, "Entrance", center + Vector3.down * (0.27f * cs), Vector3.one * (0.12f * cs), _holeMaterial), root);
+            }
+        }
+
+        /// <summary>Икосаэдр радиуса 0.5 с плоскими гранями (вершины не общие — нормали граней).</summary>
+        private static Mesh Icosahedron()
+        {
+            float t = (1f + Mathf.Sqrt(5f)) * 0.5f;
+            var p = new[]
+            {
+                new Vector3(-1, t, 0), new Vector3(1, t, 0), new Vector3(-1, -t, 0), new Vector3(1, -t, 0),
+                new Vector3(0, -1, t), new Vector3(0, 1, t), new Vector3(0, -1, -t), new Vector3(0, 1, -t),
+                new Vector3(t, 0, -1), new Vector3(t, 0, 1), new Vector3(-t, 0, -1), new Vector3(-t, 0, 1)
+            };
+            int[] f =
+            {
+                0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11, 1, 5, 9, 5, 11, 4, 11, 10, 2, 10, 7, 6, 7, 1, 8,
+                3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9, 4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1
+            };
+            var verts = new Vector3[f.Length];
+            var tris = new int[f.Length];
+            float scale = 0.5f / p[0].magnitude;
+            // Список граней — против часовой снаружи; в Unity лицевая сторона — по часовой, поэтому меняем порядок.
+            for (int i = 0; i < f.Length; i += 3)
+            {
+                verts[i] = p[f[i]] * scale;
+                verts[i + 1] = p[f[i + 2]] * scale;
+                verts[i + 2] = p[f[i + 1]] * scale;
+            }
+            for (int i = 0; i < f.Length; i++) tris[i] = i;
+            var mesh = new Mesh { name = "BushIco", vertices = verts, triangles = tris };
+            mesh.RecalculateNormals();
+            return mesh;
         }
 
         private static CombineInstance Instance(Mesh mesh, Vector3 localPos, float yaw, Vector3 scale)

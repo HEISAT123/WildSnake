@@ -10,7 +10,7 @@ namespace WildSnake
     /// </summary>
     public static class SfxSynth
     {
-        public const int SOUND_COUNT = 16;
+        public const int SOUND_COUNT = 18;
         private const int SR = SynthDsp.SAMPLE_RATE;
 
         /// <summary>Все звуки по индексу SoundId; каждый — чередующиеся стерео-сэмплы.</summary>
@@ -159,6 +159,27 @@ namespace WildSnake
                     int[] goal = { 76, 83, 88 };
                     for (int i = 0; i < goal.Length; i++) t.Pluck(i * 0.09, goal[i], 0.7, 0.4f, i == 1 ? 0.3f : -0.3f, 0.6f, 3.0, 1.8);
                     return t.Finish(0.45f, 0.6f);
+
+                case SoundId.Buzz:
+                    // Осиный рой: частые короткие пилы с дрожащей высотой — злое жужжание, гуляющее по стерео.
+                    t = new Track(1.3f, 27);
+                    for (int i = 0; i < 22; i++)
+                    {
+                        double at = i * 0.045;
+                        double pitch = 55 + (i % 3) * 0.7 + (i % 5) * 0.3;
+                        float pan = (float)Math.Sin(i * 0.9) * 0.6f;
+                        t.SuperSaw(at, 0.07, pitch, pitch - 0.4, 2, 25, 3200, 1800, 0.004, 0.05, 0.11f, 0.15f);
+                        t.Noise(at, 0.04, 5000, 3000, 1500, pan, -pan, 0.003, 0.05f, 0.1f);
+                    }
+                    return t.Finish(0.25f, 0.6f);
+
+                case SoundId.Splash:
+                    // Всплеск: шум воды с закрывающимся фильтром и «бульк» вниз.
+                    t = new Track(0.9f, 28);
+                    t.Noise(0.0, 0.35, 6000, 700, 200, -0.3f, 0.3f, 0.004, 0.45f, 0.35f);
+                    t.Sine(0.02, 0.16, 720, 260, 0.004, 0.3f, 0f, 0.3f);
+                    t.Sine(0.12, 0.1, 900, 500, 0.004, 0.12f, 0.2f, 0.4f);
+                    return t.Finish(0.35f, 0.6f);
 
                 default:
                     return new float[2];

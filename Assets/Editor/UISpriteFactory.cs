@@ -90,6 +90,23 @@ internal static class UISpriteFactory
 
     private static readonly float[] EagleWings = { 4f, 38f, 17f, 46f, 32f, 36f, 47f, 46f, 60f, 38f };
 
+    /// <summary>Тёплый ключ: чаша-лужица и две струйки пара.</summary>
+    public static Sprite MapSpring => CreateIcon("MapSpring", (x, y) =>
+        InEllipse(x, y, 32f, 15f, 25f, 9f) || NearPolyline(x, y, SteamLeft, 3.4f) || NearPolyline(x, y, SteamRight, 3.4f));
+
+    private static readonly float[] SteamLeft = { 24f, 29f, 19f, 38f, 25f, 47f, 20f, 57f };
+    private static readonly float[] SteamRight = { 41f, 29f, 36f, 38f, 42f, 47f, 37f, 57f };
+
+    /// <summary>Мышиный городок: голова мыши с круглыми ушами.</summary>
+    public static Sprite MapMouse => CreateIcon("MapMouse", (x, y) =>
+        (InCircle(x, y, 32f, 25f, 15f) || InCircle(x, y, 17f, 44f, 10.5f) || InCircle(x, y, 47f, 44f, 10.5f) || InTriangle(x, y, 22f, 18f, 42f, 18f, 32f, 4f))
+        && !InCircle(x, y, 26f, 28f, 2.6f) && !InCircle(x, y, 38f, 28f, 2.6f));
+
+    /// <summary>Осиное гнездо: полосатая оса с крыльями (пояски — тёмные прорези).</summary>
+    public static Sprite MapWasp => CreateIcon("MapWasp", (x, y) =>
+        (InEllipse(x, y, 32f, 24f, 11f, 17f) && !(y > 17f && y < 21f) && !(y > 27f && y < 31f))
+        || InCircle(x, y, 32f, 47f, 7f) || InEllipse(x, y, 17f, 42f, 11f, 7f) || InEllipse(x, y, 47f, 42f, 11f, 7f));
+
     /// <summary>Голова лисы: морда треугольником, уши и глаза-прорези.</summary>
     public static Sprite MapFox => CreateIcon("MapFox", (x, y) =>
         (InTriangle(x, y, 7f, 42f, 57f, 42f, 32f, 7f) || InTriangle(x, y, 7f, 42f, 11f, 60f, 26f, 42f)

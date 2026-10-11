@@ -123,3 +123,10 @@ Thumbs.db
 CLAUDE.md
 .claude/
 .vscode/
+# Сцену целиком строит код (Tools/Build Snake Scene) — в git не храним, она больше 100 МБ
+Assets/Scenes/WildSnake.unity
+Assets/Scenes/WildSnake.unity.meta
+
+# Сцену целиком строит код (Tools/Build Snake Scene) — в git не храним, она больше 100 МБ
+Assets/Scenes/WildSnake.unity
+Assets/Scenes/WildSnake.unity.meta

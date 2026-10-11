@@ -66,6 +66,8 @@ namespace WildSnake
                 case TemperatureSpot.SunStone: return Lerp(0.25f, 1f, d);
                 case TemperatureSpot.Water: return Lerp(0.05f, 0.4f, d);
                 case TemperatureSpot.Burrow: return 0.55f;
+                // Ключ греет ровно, но не жарче полуденного камня: ночное убежище от холода, а не замена солнцу.
+                case TemperatureSpot.HotSpring: return 0.85f;
                 default: return Lerp(0.05f, 0.75f, d);
             }
         }
@@ -77,7 +79,7 @@ namespace WildSnake
             if (spot != TemperatureSpot.Burrow) target = Math.Max(0f, target - Chill);
             if (Value01 < target)
             {
-                float rate = HeatRate * (spot == TemperatureSpot.SunStone ? StoneBonus : 1f);
+                float rate = HeatRate * (spot == TemperatureSpot.SunStone ? StoneBonus : spot == TemperatureSpot.HotSpring ? 2f : 1f);
                 Value01 = Math.Min(target, Value01 + rate * dt);
             }
             else

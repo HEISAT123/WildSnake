@@ -3,8 +3,8 @@ using UnityEngine;
 namespace WildSnake
 {
     /// <summary>
-    /// Рисует подложку карты по данным поля: луг, трава и камыш, рощи и березняки, вода реки, озера и болота,
-    /// гряда и горы, брёвна и камни, солнечные камни, мосты и полые брёвна. Рельеф — отмывка со светом с северо-запада
+    /// Рисует подложку карты по данным поля: луг, трава, камыш и ежевика, рощи и березняки, вода реки, озера и болота,
+    /// гряда и горы, брёвна и камни, солнечные камни, мосты и полые брёвна, тёплые ключи, мышиные городки и осиные гнёзда. Рельеф — отмывка со светом с северо-запада
     /// и сглаженные горизонтали. Цвета не зависят от времени суток, поэтому карта одинаково читается днём и ночью.
     /// Чтобы не было «клеточек», области (вода, рощи, почва) сначала размываются по сетке, а края потом собираются
     /// плавным порогом — получаются ровные сглаженные контуры; деревья и камни — круглые точки, мосты — линии.
@@ -28,6 +28,12 @@ namespace WildSnake
         private static readonly Color SunStone = new Color(0.9f, 0.76f, 0.46f);
         private static readonly Color Rock = new Color(0.4f, 0.39f, 0.36f);
         private static readonly Color Shore = new Color(0.07f, 0.11f, 0.13f);
+        private static readonly Color Bramble = new Color(0.44f, 0.33f, 0.36f);
+        private static readonly Color Spring = new Color(0.45f, 0.86f, 0.84f);
+        private static readonly Color Mineral = new Color(0.9f, 0.87f, 0.76f);
+        private static readonly Color Clearing = new Color(0.58f, 0.56f, 0.36f);
+        private static readonly Color Burrow = new Color(0.22f, 0.16f, 0.1f);
+        private static readonly Color Wasp = new Color(0.98f, 0.78f, 0.15f);
 
         /// <summary>Шаг горизонталей, м.</summary>
         private const float ContourStep = 2.5f;
@@ -203,6 +209,34 @@ namespace WildSnake
                 DrawDisc(pixels, tw, th, (stone.x + 1f) * ppc, (stone.y + 1f) * ppc, 0.95f * ppc, SunStone, 1f);
             }
 
+            // Тёплые ключи — бирюзовая лужица в светлой корке.
+            for (int i = 0; i < grid.HotSpringCount; i++)
+            {
+                Vector2 p = ToPixel(grid.GetHotSpring(i), origin, cs, ppc);
+                DrawDisc(pixels, tw, th, p.x, p.y, 1.5f * ppc, Mineral, 0.9f);
+                DrawDisc(pixels, tw, th, p.x, p.y, 0.95f * ppc, Spring, 1f);
+            }
+
+            // Мышиные городки — вытоптанная полянка и точки норок.
+            for (int i = 0; i < grid.MouseColonyCount; i++)
+            {
+                Vector2 p = ToPixel(grid.GetMouseColony(i), origin, cs, ppc);
+                DrawDisc(pixels, tw, th, p.x, p.y, 3f * ppc, Clearing, 0.45f);
+            }
+            for (int i = 0; i < grid.ColonyHoleCount; i++)
+            {
+                Vector2 p = ToPixel(grid.GetColonyHole(i), origin, cs, ppc);
+                DrawDisc(pixels, tw, th, p.x, p.y, 0.32f * ppc, Burrow, 0.9f);
+            }
+
+            // Осиные гнёзда — жёлтая точка с тёмной каймой: видно, куда лучше не соваться.
+            for (int i = 0; i < grid.WaspNestCount; i++)
+            {
+                Vector2 p = ToPixel(grid.GetWaspNest(i), origin, cs, ppc);
+                DrawDisc(pixels, tw, th, p.x, p.y, 0.9f * ppc, Shore, 0.85f);
+                DrawDisc(pixels, tw, th, p.x, p.y, 0.6f * ppc, Wasp, 1f);
+            }
+
             for (int i = 0; i < grid.BridgeCount; i++)
             {
                 grid.GetBridge(i, out Vector3 a, out Vector3 b);
@@ -267,6 +301,7 @@ namespace WildSnake
         {
             // Под горами — цвет подножия, чтобы размытие не тянуло в долину ни белого, ни зелёного.
             if (grid.IsMountain(cell)) return MountainLow;
+            if (grid.IsBramble(cell)) return Bramble;
             if (grid.IsReed(cell)) return Reed;
             if (grid.IsCover(cell)) return TallGrass;
             if (grid.IsSwamp(cell)) return Swamp;
