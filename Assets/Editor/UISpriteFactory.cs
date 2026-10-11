@@ -6,7 +6,7 @@ using Object = UnityEngine.Object;
 
 /// <summary>
 /// Графика интерфейса, нарисованная кодом: плашка со скошенными углами и её контур (9-slice),
-/// кольца-дуги, точки, шеврон, значок змеи, рамка, градиенты краёв и иней. Спрайты — PNG в Assets/Materials/UI,
+/// кольца-дуги, точки, шеврон, значок змеи, рамка, значки карты, градиенты краёв и иней. Спрайты — PNG в Assets/Materials/UI,
 /// градиенты — текстуры-ассеты там же.
 /// </summary>
 internal static class UISpriteFactory
@@ -53,6 +53,73 @@ internal static class UISpriteFactory
 
     /// <summary>Квадратная рамка толщиной 2 px (мини-карта).</summary>
     public static Sprite Frame => CreateSprite("Frame", (x, y) => x < 2f || y < 2f || x > SIZE - 2f || y > SIZE - 2f, 6);
+
+    // ---------- Значки карты ----------
+    // Белая заливка с тёмной обводкой: цвет задаёт Image.color (тёмная обводка от умножения не меняется),
+    // поэтому значок читается и на светлой траве, и на тёмном лесу. Мелкие зазоры внутри формы становятся тёмными линиями.
+
+    /// <summary>Стрелка-дротик носом вверх: вы и соперница (поворачивается по направлению головы).</summary>
+    public static Sprite MapArrow => CreateIcon("MapArrow", (x, y) =>
+        InTriangle(x, y, 32f, 59f, 9f, 7f, 32f, 19f) || InTriangle(x, y, 32f, 59f, 32f, 19f, 55f, 7f));
+
+    /// <summary>Тонкое кольцо вокруг вашей стрелки — пульсирует, чтобы себя было легко найти.</summary>
+    public static Sprite MapRing => CreateIcon("MapRing", (x, y) =>
+    {
+        float d = Vector2.Distance(new Vector2(x, y), new Vector2(32f, 32f));
+        return d <= 27f && d >= 23f;
+    }, 2.5f);
+
+    /// <summary>След лапы: мышь, лягушка, птица, кролик, ёж.</summary>
+    public static Sprite MapPaw => CreateIcon("MapPaw", (x, y) =>
+        InEllipse(x, y, 32f, 22f, 14f, 11.5f) || InCircle(x, y, 13f, 38f, 6.5f) || InCircle(x, y, 25f, 49f, 6.5f)
+        || InCircle(x, y, 39f, 49f, 6.5f) || InCircle(x, y, 51f, 38f, 6.5f));
+
+    /// <summary>Рыба носом влево, с глазом.</summary>
+    public static Sprite MapFish => CreateIcon("MapFish", (x, y) =>
+        (InEllipse(x, y, 27f, 32f, 19f, 11f) || InTriangle(x, y, 40f, 32f, 59f, 47f, 59f, 17f)) && !InCircle(x, y, 17f, 35f, 3f));
+
+    /// <summary>Жук: тело с бороздкой между надкрыльями и голова.</summary>
+    public static Sprite MapBeetle => CreateIcon("MapBeetle", (x, y) =>
+        (InEllipse(x, y, 32f, 28f, 13f, 17f) && Mathf.Abs(x - 32f) > 1.2f) || InCircle(x, y, 32f, 50f, 7f));
+
+    /// <summary>Орёл с расправленными крыльями.</summary>
+    public static Sprite MapEagle => CreateIcon("MapEagle", (x, y) =>
+        NearPolyline(x, y, EagleWings, 4.5f) || InEllipse(x, y, 32f, 30f, 6.5f, 13f) || InTriangle(x, y, 32f, 22f, 24f, 8f, 40f, 8f));
+
+    private static readonly float[] EagleWings = { 4f, 38f, 17f, 46f, 32f, 36f, 47f, 46f, 60f, 38f };
+
+    /// <summary>Голова лисы: морда треугольником, уши и глаза-прорези.</summary>
+    public static Sprite MapFox => CreateIcon("MapFox", (x, y) =>
+        (InTriangle(x, y, 7f, 42f, 57f, 42f, 32f, 7f) || InTriangle(x, y, 7f, 42f, 11f, 60f, 26f, 42f)
+         || InTriangle(x, y, 57f, 42f, 53f, 60f, 38f, 42f))
+        && !InCircle(x, y, 23f, 31f, 3.2f) && !InCircle(x, y, 41f, 31f, 3.2f));
+
+    /// <summary>Нора: холмик-купол с тёмным входом.</summary>
+    public static Sprite MapBurrow => CreateIcon("MapBurrow", (x, y) =>
+        y >= 12f && InCircle(x, y, 32f, 12f, 25f) && !InCircle(x, y, 32f, 12f, 11f));
+
+    /// <summary>Гнездо для кладки: чаша и три яйца.</summary>
+    public static Sprite MapNest => CreateIcon("MapNest", (x, y) =>
+        (y <= 22f && InEllipse(x, y, 32f, 22f, 27f, 14f))
+        || InEllipse(x, y, 21f, 33f, 8f, 10.5f) || InEllipse(x, y, 43f, 33f, 8f, 10.5f) || InEllipse(x, y, 32f, 45f, 8f, 10.5f));
+
+    /// <summary>Птичье гнездо: яйцо, утопленное в чашу (между ними тёмный зазор).</summary>
+    public static Sprite MapBirdNest => CreateIcon("MapBirdNest", (x, y) =>
+        InEllipse(x, y, 32f, 34f, 10f, 13f)
+        || (y <= 28f && InEllipse(x, y, 32f, 28f, 26f, 18f) && !InEllipse(x, y, 32f, 34f, 13f, 16f)));
+
+    /// <summary>Солнечный камень: солнце с лучами.</summary>
+    public static Sprite MapSun => CreateIcon("MapSun", (x, y) =>
+    {
+        if (InCircle(x, y, 32f, 32f, 12f)) return true;
+        for (int i = 0; i < 8; i++)
+        {
+            float a = i * Mathf.PI * 0.25f;
+            float cx = Mathf.Cos(a), cy = Mathf.Sin(a);
+            if (DistanceToSegment(x, y, 32f + cx * 18f, 32f + cy * 18f, 32f + cx * 26f, 32f + cy * 26f) <= 3f) return true;
+        }
+        return false;
+    });
 
     /// <summary>Горизонтальное затемнение: плотное слева, прозрачное справа (меню, пауза, итоги).</summary>
     public static Texture2D Vignette(string name, float leftAlpha, float midAlpha, float rightAlpha)
@@ -188,6 +255,30 @@ internal static class UISpriteFactory
         return Save(tex);
     }
 
+    private static bool InCircle(float x, float y, float cx, float cy, float r) => (x - cx) * (x - cx) + (y - cy) * (y - cy) <= r * r;
+
+    private static bool InEllipse(float x, float y, float cx, float cy, float rx, float ry)
+    {
+        float u = (x - cx) / rx, v = (y - cy) / ry;
+        return u * u + v * v <= 1f;
+    }
+
+    private static float DistanceToSegment(float px, float py, float ax, float ay, float bx, float by)
+    {
+        float dx = bx - ax, dy = by - ay;
+        float t = Mathf.Clamp01(((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy));
+        float ex = ax + dx * t - px, ey = ay + dy * t - py;
+        return Mathf.Sqrt(ex * ex + ey * ey);
+    }
+
+    /// <summary>Точка ближе width к ломаной (x0, y0, x1, y1, ...).</summary>
+    private static bool NearPolyline(float x, float y, float[] points, float width)
+    {
+        for (int i = 0; i + 3 < points.Length; i += 2)
+            if (DistanceToSegment(x, y, points[i], points[i + 1], points[i + 2], points[i + 3]) <= width) return true;
+        return false;
+    }
+
     private static bool InTriangle(float px, float py, float ax, float ay, float bx, float by, float cx, float cy)
     {
         float d1 = (px - bx) * (ay - by) - (ax - bx) * (py - by);
@@ -221,7 +312,11 @@ internal static class UISpriteFactory
         tex.Apply();
         File.WriteAllBytes(path, tex.EncodeToPNG());
         Object.DestroyImmediate(tex);
+        return ImportSprite(path, border);
+    }
 
+    private static Sprite ImportSprite(string path, int border)
+    {
         AssetDatabase.ImportAsset(path);
         var importer = (TextureImporter)AssetImporter.GetAtPath(path);
         importer.textureType = TextureImporterType.Sprite;
@@ -234,6 +329,57 @@ internal static class UISpriteFactory
         importer.textureCompression = TextureImporterCompression.Uncompressed;
         importer.SaveAndReimport();
         return AssetDatabase.LoadAssetAtPath<Sprite>(path);
+    }
+
+    /// <summary>Значок карты: белая заливка формы и тёмная обводка толщиной outline пикселей (из 64).</summary>
+    private static Sprite CreateIcon(string name, Func<float, float, bool> inside, float outline = 4f)
+    {
+        string path = FOLDER + "/" + name + ".png";
+        var cached = AssetDatabase.LoadAssetAtPath<Sprite>(path);
+        if (cached != null) return cached;
+        EnsureFolder();
+
+        var ink = new Color(0.03f, 0.04f, 0.05f);
+        const int directions = 16;
+        var tex = new Texture2D(SIZE, SIZE, TextureFormat.RGBA32, false);
+        for (int y = 0; y < SIZE; y++)
+        {
+            for (int x = 0; x < SIZE; x++)
+            {
+                int fill = 0, ring = 0;
+                for (int sy = 0; sy < 4; sy++)
+                {
+                    for (int sx = 0; sx < 4; sx++)
+                    {
+                        float px = x + (sx + 0.5f) / 4f, py = y + (sy + 0.5f) / 4f;
+                        if (inside(px, py))
+                        {
+                            fill++;
+                            continue;
+                        }
+                        // Обводка — форма, раздутая на outline: проверяем точки на двух окружностях вокруг.
+                        for (int d = 0; d < directions; d++)
+                        {
+                            float a = d * Mathf.PI * 2f / directions;
+                            if (inside(px + Mathf.Cos(a) * outline, py + Mathf.Sin(a) * outline)
+                                || inside(px + Mathf.Cos(a) * outline * 0.5f, py + Mathf.Sin(a) * outline * 0.5f))
+                            {
+                                ring++;
+                                break;
+                            }
+                        }
+                    }
+                }
+                float fillA = fill / 16f, alpha = (fill + ring * 0.9f) / 16f;
+                Color c = alpha > 0f ? Color.Lerp(ink, Color.white, fillA / alpha) : Color.white;
+                c.a = alpha;
+                tex.SetPixel(x, y, c);
+            }
+        }
+        tex.Apply();
+        File.WriteAllBytes(path, tex.EncodeToPNG());
+        Object.DestroyImmediate(tex);
+        return ImportSprite(path, 0);
     }
 
     private static Texture2D Save(Texture2D tex)

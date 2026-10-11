@@ -23,7 +23,6 @@ public static class SnakeSceneBuilder
     private const string SCENE_PATH = "Assets/Scenes/Snake3D.unity";
     private const string MATERIALS_FOLDER = "Assets/Materials";
     private const string SETTINGS_FOLDER = "Assets/Settings";
-    private const string MINIMAP_LAYER = "Minimap";
     private const string CANOPY_LAYER = "Canopy";
     private const int SCENT_WISPS = 16;
 
@@ -33,7 +32,9 @@ public static class SnakeSceneBuilder
         "TileLight", "TileDark", "SnakeStripe", "SnakeEyeWhite", "Ground",
         "Food", "FoodGolden", "FoodRotten", "AppleStem", "AppleLeaf", "MarkerFood",
         "PowerUpSpeed", "PowerUpSlowTime", "PowerUpShield", "PowerUpMagnet", "PowerUpDoubleScore",
-        "SpinnerBeam", "SpinnerPost", "DangerWall", "ObstaclePillar", "PickupParticles"
+        "SpinnerBeam", "SpinnerPost", "DangerWall", "ObstaclePillar", "PickupParticles",
+        // Диски-метки камеры карты: карту теперь рисует MapIcons — подложка по данным поля и значки интерфейса.
+        "MarkerPlayer", "MarkerRival", "MarkerPrey", "MarkerEagle", "MarkerFox", "MarkerBurrow", "MarkerNest", "MarkerBirdNest"
     };
 
     private static bool _urp;
@@ -46,7 +47,6 @@ public static class SnakeSceneBuilder
         public Material Eye;
         public Material Pupil;
         public Material Tongue;
-        public Material Marker;
         public Color PieceColor;
     }
 
@@ -71,7 +71,6 @@ public static class SnakeSceneBuilder
         EnsureFolder("Assets", "Materials");
         EnsureFolder("Assets", "Settings");
         _urp = GraphicsSettings.currentRenderPipeline != null;
-        int minimapLayer = EnsureLayer(MINIMAP_LAYER);
         int canopyLayer = EnsureLayer(CANOPY_LAYER);
         DeleteObsoleteAssets();
 
@@ -90,7 +89,6 @@ public static class SnakeSceneBuilder
             Eye = CreateLitMaterial("SnakeEye", new Color(0.95f, 0.8f, 0.25f), 0.9f),
             Pupil = CreateLitMaterial("SnakePupil", new Color(0.02f, 0.02f, 0.02f), 0.9f),
             Tongue = CreateLitMaterial("SnakeTongue", new Color(0.8f, 0.1f, 0.18f), 0.6f),
-            Marker = CreateUnlitMaterial("MarkerPlayer", new Color(0.3f, 1f, 0.4f)),
             PieceColor = new Color(0.36f, 0.5f, 0.2f)
         };
         playerLook.Body.mainTexture = skin;
@@ -102,7 +100,6 @@ public static class SnakeSceneBuilder
             Eye = CreateLitMaterial("RivalEye", new Color(0.9f, 0.35f, 0.15f), 0.9f),
             Pupil = playerLook.Pupil,
             Tongue = playerLook.Tongue,
-            Marker = CreateUnlitMaterial("MarkerRival", new Color(1f, 0.55f, 0.15f)),
             PieceColor = new Color(0.65f, 0.35f, 0.15f)
         };
         rivalLook.Body.mainTexture = skin;
@@ -148,7 +145,6 @@ public static class SnakeSceneBuilder
             ("_lilyPadMaterial", arena.LilyPad), ("_birdEggMaterial", arena.BirdEgg));
         SetInt(board, "_canopyLayer", canopyLayer);
         board.Build();
-        BuildBurrowMarkers(grid, minimapLayer);
         EnvironmentBuilder.Build(grid, particles, out ParticleSystem pollen, out Renderer stars, out Transform clouds);
 
         var particleFloor = new GameObject("ParticleFloor").transform;
@@ -166,12 +162,12 @@ public static class SnakeSceneBuilder
         ParticleSystem piecesFx = CreatePiecesParticles(pieces, particleFloor);
 
         // ================= Змеи =================
-        SnakeParts player = BuildSnake("Snake", playerLook, true, 1f, config, grid, piecesFx, trail, minimapLayer);
-        SnakeParts rival = BuildSnake("RivalSnake", rivalLook, false, 0.85f, config, grid, piecesFx, null, minimapLayer);
+        SnakeParts player = BuildSnake("Snake", playerLook, true, 1f, config, grid, piecesFx, trail);
+        SnakeParts rival = BuildSnake("RivalSnake", rivalLook, false, 0.85f, config, grid, piecesFx, null);
 
         // ================= Живность =================
         var wildlife = new GameObject("Wildlife").AddComponent<WildlifeManager>();
-        PreyAnimal[] animals = BuildPreyPool(wildlife.transform, config, minimapLayer);
+        PreyAnimal[] animals = BuildPreyPool(wildlife.transform, config);
         Wire(wildlife, ("_config", config), ("_grid", grid), ("_player", player.Controller), ("_rival", rival.Controller));
         WireArray(wildlife, "_animals", animals);
 
@@ -185,8 +181,8 @@ public static class SnakeSceneBuilder
         playerAi.enabled = false;
 
         // ================= Хищники =================
-        EagleHunter eagle = BuildEagle(config, grid, player.Controller, minimapLayer);
-        FoxHunter fox = BuildFox(config, grid, player.Controller, minimapLayer);
+        EagleHunter eagle = BuildEagle(config, grid, player.Controller);
+        FoxHunter fox = BuildFox(config, grid, player.Controller);
         BirdNests birdNests = BuildBirdNests(config, grid, board, player.Controller);
         Hatchlings hatchlings = BuildHatchlings(grid, skin);
 
@@ -230,8 +226,6 @@ public static class SnakeSceneBuilder
         var cam = camGo.AddComponent<Camera>();
         cam.fieldOfView = 60f;
         cam.nearClipPlane = 0.1f;
-        // Слой 0 — Default: если отдельный слой создать не удалось, не прячем им всю сцену.
-        cam.cullingMask = minimapLayer > 0 ? ~(1 << minimapLayer) : ~0;
         camGo.AddComponent<AudioListener>();
         EnvironmentBuilder.SetupSky(light, cam);
         var rig = camGo.AddComponent<CameraRig>();
@@ -269,26 +263,6 @@ public static class SnakeSceneBuilder
         WireArray(ambience, "_sources", ambienceSources);
         Wire(ambience, ("_settings", settings), ("_dayNight", dayNight), ("_weather", weather), ("_snake", player.Controller));
 
-        // Карта показывается на весь экран по Tab — текстура покрупнее.
-        RenderTexture minimapTexture = LoadOrCreateRenderTexture(SETTINGS_FOLDER + "/Minimap.renderTexture", 1024);
-        var miniGo = new GameObject("Minimap Camera");
-        var miniCam = miniGo.AddComponent<Camera>();
-        miniCam.orthographic = true;
-        miniCam.orthographicSize = Mathf.Max(grid.Width, grid.Height) * grid.CellSize * 0.5f + 1f;
-        miniCam.clearFlags = CameraClearFlags.SolidColor;
-        miniCam.backgroundColor = new Color(0.1f, 0.12f, 0.16f);
-        miniCam.nearClipPlane = 0.3f;
-        miniCam.farClipPlane = 40f;
-        miniCam.depth = -10f;
-        miniCam.targetTexture = minimapTexture;
-        // Кроны рощ на карте не рисуем — иначе они закрыли бы метки; рощу видно по подстилке и стволам.
-        if (canopyLayer > 0) miniCam.cullingMask = ~(1 << canopyLayer);
-        // Камеру карты включает журнал (Tab), пока он открыт.
-        miniCam.enabled = false;
-        // Камера карты выше самых высоких гор поля.
-        miniCam.farClipPlane = 260f;
-        miniGo.transform.SetPositionAndRotation(grid.Center + Vector3.up * 140f, Quaternion.Euler(90f, 0f, 0f));
-
         // ================= GameManager =================
         var game = new GameObject("GameManager").AddComponent<GameManager>();
         Wire(game,
@@ -304,7 +278,7 @@ public static class SnakeSceneBuilder
         {
             Game = game, Config = config, Player = player.Controller, Settings = settings, Audio = audio, Leaderboard = leaderboard,
             Wildlife = wildlife, Eagle = eagle, Fox = fox, DayNight = dayNight, Scent = scent, Grid = grid, Weather = weather, BirdNests = birdNests,
-            CameraTransform = camGo.transform, MinimapCamera = miniCam, MinimapTexture = minimapTexture
+            CameraTransform = camGo.transform, Rival = rival.Controller
         });
 
         Wire(ambience, ("_game", game));
@@ -321,7 +295,7 @@ public static class SnakeSceneBuilder
     // ===================== Живность =====================
 
     /// <summary>Пул животных: каждого вида столько, сколько нужно днём или ночью, плюс запас на улетающих птиц.</summary>
-    private static PreyAnimal[] BuildPreyPool(Transform parent, GameConfig config, int markerLayer)
+    private static PreyAnimal[] BuildPreyPool(Transform parent, GameConfig config)
     {
         Material beetleShell = CreateLitMaterial("PreyBeetle", new Color(0.08f, 0.32f, 0.28f), 0.92f);
         SetEmission(beetleShell, new Color(0.02f, 0.08f, 0.06f));
@@ -343,7 +317,6 @@ public static class SnakeSceneBuilder
         Material scent = CreateLitMaterial("ScentMark", new Color(0.8f, 1f, 0.3f, 0.35f), 0f);
         SetEmission(scent, new Color(0.6f, 0.9f, 0.15f));
         MakeTransparent(scent);
-        Material marker = CreateUnlitMaterial("MarkerPrey", new Color(1f, 0.92f, 0.55f));
 
         var list = new List<Object>();
         int kinds = System.Enum.GetValues(typeof(PreyKind)).Length;
@@ -377,7 +350,6 @@ public static class SnakeSceneBuilder
                 mark.transform.localScale = new Vector3(0.1f, 1.3f, 0.1f);
                 mark.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
                 mark.SetActive(false);
-                CreateMarker(root.transform, marker, markerLayer, kind == PreyKind.Beetle ? 0.7f : 1.1f);
 
                 foreach (Renderer r in root.GetComponentsInChildren<Renderer>(true))
                     if (r.gameObject != mark) r.shadowCastingMode = kind == PreyKind.Beetle ? ShadowCastingMode.Off : ShadowCastingMode.On;
@@ -619,7 +591,7 @@ public static class SnakeSceneBuilder
     }
 
     /// <summary>Орёл: модель (тело, белая голова, клюв, хвост, крылья на шарнирах), тень на земле и маркер мини-карты.</summary>
-    private static EagleHunter BuildEagle(GameConfig config, GridManager grid, SnakeController target, int markerLayer)
+    private static EagleHunter BuildEagle(GameConfig config, GridManager grid, SnakeController target)
     {
         Material feather = CreateLitMaterial("EagleFeather", new Color(0.3f, 0.2f, 0.12f), 0.15f);
         Material tip = CreateLitMaterial("EagleWingTip", new Color(0.12f, 0.09f, 0.07f), 0.15f);
@@ -649,10 +621,7 @@ public static class SnakeSceneBuilder
             end.transform.localRotation = Quaternion.Euler(0f, -12f * side, 0f);
             wings[w] = pivot;
         }
-        Material redMarker = CreateUnlitMaterial("MarkerEagle", new Color(1f, 0.25f, 0.2f));
-        CreateMarker(model, redMarker, markerLayer, 3f);
-        foreach (Renderer r in model.GetComponentsInChildren<Renderer>(true))
-            if (r.gameObject.layer != markerLayer) r.shadowCastingMode = ShadowCastingMode.Off;
+        foreach (Renderer r in model.GetComponentsInChildren<Renderer>(true)) r.shadowCastingMode = ShadowCastingMode.Off;
 
         // Тень — мягкое пятно на земле: при высоком полёте настоящая тень почти не видна.
         Material shadowMat = CreateLitMaterial("EagleShadow", Color.black, 0f);
@@ -670,7 +639,7 @@ public static class SnakeSceneBuilder
     }
 
     /// <summary>Лиса: рыжее тело, белая грудь и кончик хвоста, тёмные лапы и уши, вытянутая морда.</summary>
-    private static FoxHunter BuildFox(GameConfig config, GridManager grid, SnakeController target, int markerLayer)
+    private static FoxHunter BuildFox(GameConfig config, GridManager grid, SnakeController target)
     {
         Material fur = CreateLitMaterial("FoxFur", new Color(0.86f, 0.42f, 0.14f), 0.12f);
         Material white = CreateLitMaterial("FoxWhite", new Color(0.95f, 0.92f, 0.86f), 0.1f);
@@ -713,8 +682,6 @@ public static class SnakeSceneBuilder
         Part(PrimitiveType.Sphere, "Brush", tail, fur, new Vector3(0f, 0f, -0.36f), new Vector3(0.26f, 0.26f, 0.8f));
         Part(PrimitiveType.Sphere, "Tip", tail, white, new Vector3(0f, 0f, -0.74f), new Vector3(0.18f, 0.18f, 0.26f));
 
-        Material marker = CreateUnlitMaterial("MarkerFox", new Color(1f, 0.5f, 0.1f));
-        CreateMarker(model, marker, markerLayer, 2.4f);
         model.gameObject.SetActive(false);
 
         var fox = root.AddComponent<FoxHunter>();
@@ -754,7 +721,7 @@ public static class SnakeSceneBuilder
     // ===================== Змея =====================
 
     private static SnakeParts BuildSnake(string name, SnakeLook look, bool isPlayer, float speedScale, GameConfig config,
-        GridManager grid, ParticleSystem pieces, Material trailMaterial, int markerLayer)
+        GridManager grid, ParticleSystem pieces, Material trailMaterial)
     {
         var root = new GameObject(name);
         var snake = root.AddComponent<SnakeController>();
@@ -776,7 +743,6 @@ public static class SnakeSceneBuilder
         Transform leftEye = CreateEye(headVisual, new Vector3(-0.27f, 0.15f, 0.28f), -30f, look.Eye, look.Pupil);
         Transform rightEye = CreateEye(headVisual, new Vector3(0.27f, 0.15f, 0.28f), 30f, look.Eye, look.Pupil);
         Transform tongue = CreateTongue(headVisual, look.Tongue);
-        CreateMarker(head, look.Marker, markerLayer, 2.2f);
 
         // Тело — процедурный меш в мировых координатах, поэтому объект стоит в нуле.
         var bodyGo = new GameObject("Body");
@@ -859,48 +825,6 @@ public static class SnakeSceneBuilder
 
         foreach (Renderer r in root.GetComponentsInChildren<Renderer>()) r.shadowCastingMode = ShadowCastingMode.Off;
         return root;
-    }
-
-    /// <summary>Лаймовые метки нор и светлая метка гнезда — видны только на карте (Tab).</summary>
-    private static void BuildBurrowMarkers(GridManager grid, int markerLayer)
-    {
-        Material mat = CreateUnlitMaterial("MarkerBurrow", new Color(0.78f, 0.96f, 0.2f));
-        var root = new GameObject("BurrowMarkers").transform;
-        if (grid.HasNest)
-        {
-            var nest = new GameObject("Nest").transform;
-            nest.SetParent(root, false);
-            nest.position = grid.NestPosition;
-            CreateMarker(nest, CreateUnlitMaterial("MarkerNest", new Color(0.95f, 0.93f, 0.88f)), markerLayer, 3.2f);
-        }
-        for (int i = 0; i < grid.BurrowCount; i++)
-        {
-            var point = new GameObject("Burrow" + i).transform;
-            point.SetParent(root, false);
-            point.position = grid.GetBurrow(i);
-            CreateMarker(point, mat, markerLayer, 2f);
-        }
-        // Птичьи гнёзда — голубые точки: за яйцами туда стоит заглянуть.
-        Material birdNest = CreateUnlitMaterial("MarkerBirdNest", new Color(0.55f, 0.82f, 0.95f));
-        for (int i = 0; i < grid.BirdNestCount; i++)
-        {
-            var point = new GameObject("BirdNest" + i).transform;
-            point.SetParent(root, false);
-            point.position = grid.GetBirdNest(i);
-            CreateMarker(point, birdNest, markerLayer, 1.6f);
-        }
-    }
-
-    /// <summary>Яркий диск над объектом, видимый только камере мини-карты.</summary>
-    private static void CreateMarker(Transform parent, Material mat, int layer, float size)
-    {
-        GameObject marker = CreatePrimitive(PrimitiveType.Cylinder, "MinimapMarker", parent, mat);
-        marker.transform.localPosition = new Vector3(0f, 3f, 0f);
-        marker.transform.localScale = new Vector3(size, 0.02f, size);
-        marker.layer = layer;
-        var r = marker.GetComponent<Renderer>();
-        r.shadowCastingMode = ShadowCastingMode.Off;
-        r.receiveShadows = false;
     }
 
     // ===================== Объекты =====================
@@ -1124,23 +1048,6 @@ public static class SnakeSceneBuilder
         return tex;
     }
 
-    private static RenderTexture LoadOrCreateRenderTexture(string path, int size)
-    {
-        var rt = AssetDatabase.LoadAssetAtPath<RenderTexture>(path);
-        if (rt != null && rt.width == size) return rt;
-        if (rt != null)
-        {
-            rt.Release();
-            rt.width = size;
-            rt.height = size;
-            EditorUtility.SetDirty(rt);
-            return rt;
-        }
-        rt = new RenderTexture(size, size, 16) { name = "Minimap" };
-        AssetDatabase.CreateAsset(rt, path);
-        return rt;
-    }
-
     // ===================== Материалы =====================
 
     internal static Material CreateLitMaterial(string name, Color color, float smoothness)
@@ -1261,6 +1168,10 @@ public static class SnakeSceneBuilder
             string path = "Assets/Materials/UI/" + name;
             if (AssetDatabase.LoadAssetAtPath<Object>(path) != null) AssetDatabase.DeleteAsset(path);
         }
+
+        // Камеры карты больше нет — карту рисует MapIcons.
+        const string minimapPath = SETTINGS_FOLDER + "/Minimap.renderTexture";
+        if (AssetDatabase.LoadAssetAtPath<RenderTexture>(minimapPath) != null) AssetDatabase.DeleteAsset(minimapPath);
 
         // Шахматная текстура пола заменена травой из EnvironmentBuilder.
         const string checkerPath = MATERIALS_FOLDER + "/FloorChecker.asset";

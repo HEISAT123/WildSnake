@@ -29,7 +29,7 @@ namespace Snake3D
         public static bool Interact => Input.GetKeyDown(KeyCode.E) || Input.GetKeyDown(KeyCode.JoystickButton3);
         public static bool MapHeld => Input.GetKey(KeyCode.Tab) || Input.GetKey(KeyCode.JoystickButton6);
         public static bool ToggleHud => Input.GetKeyDown(KeyCode.H);
-        public static bool Pause => Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.JoystickButton7);
+        private static bool PausePressed => Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.JoystickButton7);
         public static bool Restart => Input.GetKeyDown(KeyCode.R);
         public static bool ToggleFullscreen => Input.GetKeyDown(KeyCode.F11);
         public static bool Confirm => Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter);
@@ -78,7 +78,7 @@ namespace Snake3D
         public static bool Interact => (K != null && K.eKey.wasPressedThisFrame) || (G != null && G.buttonNorth.wasPressedThisFrame);
         public static bool MapHeld => (K != null && K.tabKey.isPressed) || (G != null && G.selectButton.isPressed);
         public static bool ToggleHud => K != null && K.hKey.wasPressedThisFrame;
-        public static bool Pause => (K != null && K.escapeKey.wasPressedThisFrame) || (G != null && G.startButton.wasPressedThisFrame);
+        private static bool PausePressed => (K != null && K.escapeKey.wasPressedThisFrame) || (G != null && G.startButton.wasPressedThisFrame);
         public static bool Restart => K != null && K.rKey.wasPressedThisFrame;
         public static bool ToggleFullscreen => K != null && K.f11Key.wasPressedThisFrame;
         public static bool Confirm => K != null && (K.spaceKey.wasPressedThisFrame || K.enterKey.wasPressedThisFrame || K.numpadEnterKey.wasPressedThisFrame);
@@ -97,12 +97,26 @@ namespace Snake3D
         public static bool Interact => false;
         public static bool MapHeld => false;
         public static bool ToggleHud => false;
-        public static bool Pause => false;
+        private static bool PausePressed => false;
         public static bool Restart => false;
         public static bool ToggleFullscreen => false;
         public static bool Confirm => false;
         public static bool MenuUp => false;
         public static bool MenuDown => false;
 #endif
+
+        private static int _pauseConsumedFrame = -1;
+
+        /// <summary>Esc / Start в этом кадре, если его ещё не забрал открытый раздел меню.</summary>
+        public static bool Pause => PausePressed && _pauseConsumedFrame != Time.frameCount;
+
+        /// <summary>
+        /// Раздел меню (настройки, рекорды, справочник) закрывается по Esc и забирает нажатие себе,
+        /// чтобы та же клавиша не сняла игру с паузы. Разделы обновляются раньше GameManager (DefaultExecutionOrder).
+        /// </summary>
+        public static void ConsumePause()
+        {
+            _pauseConsumedFrame = Time.frameCount;
+        }
     }
 }

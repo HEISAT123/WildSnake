@@ -5,7 +5,12 @@ using UnityEngine.UI;
 
 namespace Snake3D
 {
-    /// <summary>Экран рекордов: топ-10 жизней змеи в колонках «место, сутки, добыча, длина, линьки» (заголовки — в разметке).</summary>
+    /// <summary>
+    /// Экран рекордов: топ-10 жизней змеи в колонках «место, сутки, добыча, длина, линьки» (заголовки — в разметке).
+    /// Закрывается кнопкой «Готово» и по Esc.
+    /// </summary>
+    // Раньше GameManager: Esc забирается панелью и не снимает игру с паузы.
+    [DefaultExecutionOrder(-100)]
     public class LeaderboardPanel : MonoBehaviour
     {
         private const int COLUMN_COUNT = 5;
@@ -35,6 +40,13 @@ namespace Snake3D
         private void OnDisable()
         {
             _backButton.onClick.RemoveListener(OnBackClicked);
+        }
+
+        private void Update()
+        {
+            if (!GameInput.Pause) return;
+            GameInput.ConsumePause();
+            OnBackClicked();
         }
 
         /// <summary>Строится при открытии экрана, а не каждый кадр.</summary>

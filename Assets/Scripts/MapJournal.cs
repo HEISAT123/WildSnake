@@ -5,7 +5,7 @@ namespace Snake3D
 {
     /// <summary>
     /// Карта на весь экран и журнал целей по Tab (вместо постоянной мини-карты): пока Tab зажат,
-    /// камера карты рисует поле, справа — цели суток с отметками и короткая сводка жизни.
+    /// видна карта (её рисует MapIcons), справа — главная цель, цели суток с отметками и короткая сводка жизни.
     /// Тексты журнала обновляются только при открытии и при изменении целей.
     /// </summary>
     public class MapJournal : MonoBehaviour
@@ -26,9 +26,6 @@ namespace Snake3D
         [Header("Источники")]
         [SerializeField] private GameManager _game;
         [SerializeField] private DayNightCycle _dayNight;
-
-        [Tooltip("Камера карты: включается только пока открыт журнал")]
-        [SerializeField] private Camera _mapCamera;
 
         [Header("Элементы")]
         [SerializeField] private CanvasGroup _group;
@@ -59,7 +56,6 @@ namespace Snake3D
         private void Awake()
         {
             _group.alpha = 0f;
-            _mapCamera.enabled = false;
         }
 
         private void OnEnable()
@@ -74,7 +70,6 @@ namespace Snake3D
             _game.GoalsRolled -= MarkDirty;
             _game.GoalCompleted -= OnGoalCompleted;
             _game.QuestAdvanced -= OnQuestAdvanced;
-            if (_mapCamera != null) _mapCamera.enabled = false;
         }
 
         /// <summary>Название цели для баннера при выполнении.</summary>
@@ -94,7 +89,6 @@ namespace Snake3D
             if (open != _open)
             {
                 _open = open;
-                _mapCamera.enabled = open;
                 if (open) _dirty = true;
             }
             if (_open && _dirty)
@@ -120,7 +114,7 @@ namespace Snake3D
             else if (quest.Stage == QuestStage.Nest)
             {
                 _questText.text = generation + "2 из 3  ·  Отложить яйца в гнезде";
-                _questNote.text = "Гнездо — светлая метка на карте и столб света на поле. Нужны ночь и сытость "
+                _questNote.text = "Гнездо — значок с яйцами в кольце на карте и столб света на поле. Нужны ночь и сытость "
                                   + Mathf.RoundToInt(quest.NestSatiety * 100f) + "%.";
             }
             else

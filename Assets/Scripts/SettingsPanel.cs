@@ -3,7 +3,9 @@ using UnityEngine.UI;
 
 namespace Snake3D
 {
-    /// <summary>Экран настроек: связывает элементы UI с SettingsService.</summary>
+    /// <summary>Экран настроек: связывает элементы UI с SettingsService; закрывается кнопкой «Готово» и по Esc.</summary>
+    // Раньше GameManager: Esc забирается панелью и не снимает игру с паузы.
+    [DefaultExecutionOrder(-100)]
     public class SettingsPanel : MonoBehaviour
     {
         [Header("Ссылки")]
@@ -55,6 +57,13 @@ namespace Snake3D
             _qualityButton.onClick.RemoveListener(OnQualityClicked);
             _tutorialButton.onClick.RemoveListener(OnTutorialClicked);
             _backButton.onClick.RemoveListener(OnBackClicked);
+        }
+
+        private void Update()
+        {
+            if (!GameInput.Pause) return;
+            GameInput.ConsumePause();
+            OnBackClicked();
         }
 
         /// <summary>Значения ставим без вызова событий, чтобы не сохранять то, что и так сохранено.</summary>

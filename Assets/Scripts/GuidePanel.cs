@@ -3,7 +3,9 @@ using UnityEngine.UI;
 
 namespace Snake3D
 {
-    /// <summary>Справочник «Как выжить»: статичный текст из разметки и кнопка «Готово».</summary>
+    /// <summary>Справочник «Как выжить»: статичный текст из разметки и кнопка «Готово»; закрывается и по Esc.</summary>
+    // Раньше GameManager: Esc забирается панелью и не снимает игру с паузы.
+    [DefaultExecutionOrder(-100)]
     public class GuidePanel : MonoBehaviour
     {
         [Header("Ссылки")]
@@ -22,8 +24,9 @@ namespace Snake3D
 
         private void Update()
         {
-            // Справочник открывается из меню — закрываем и по Esc, как привычно.
-            if (GameInput.Pause) Close();
+            if (!GameInput.Pause) return;
+            GameInput.ConsumePause();
+            Close();
         }
 
         private void OnBackClicked()

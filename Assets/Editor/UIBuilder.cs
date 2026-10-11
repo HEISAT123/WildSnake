@@ -35,8 +35,7 @@ internal static class UIBuilder
         public ScentTracker Scent;
         public BirdNests BirdNests;
         public Transform CameraTransform;
-        public Camera MinimapCamera;
-        public RenderTexture MinimapTexture;
+        public SnakeController Rival;
     }
 
     // ---------- Палитра ----------
@@ -49,6 +48,13 @@ internal static class UIBuilder
     private static readonly Color Ember = new Color(1f, 0.42f, 0.3f);
     private static readonly Color Hair = new Color(0.95f, 0.93f, 0.88f, 0.14f);
     private static readonly Color HudCaption = new Color(0.95f, 0.93f, 0.88f, 0.78f);
+
+    // ---------- Цвета значков карты ----------
+    private static readonly Color MapRival = new Color(1f, 0.55f, 0.15f);
+    private static readonly Color MapPrey = new Color(1f, 0.9f, 0.55f);
+    private static readonly Color MapFish = new Color(0.72f, 0.92f, 1f);
+    private static readonly Color MapFox = new Color(1f, 0.5f, 0.12f);
+    private static readonly Color MapSun = new Color(1f, 0.78f, 0.3f);
 
     private const float LEFT = 96f;
 
@@ -170,12 +176,23 @@ internal static class UIBuilder
         SnakeSceneBuilder.WireArray(vignettes, "_damageEdges", op2.DamageEdges);
 
         var journal = mapRoot.AddComponent<MapJournal>();
-        SnakeSceneBuilder.Wire(journal, ("_game", r.Game), ("_dayNight", r.DayNight), ("_mapCamera", r.MinimapCamera),
+        SnakeSceneBuilder.Wire(journal, ("_game", r.Game), ("_dayNight", r.DayNight),
             ("_group", op2.MapGroup), ("_dayText", op2.MapDay), ("_summaryText", op2.Summary),
             ("_questText", op2.QuestText), ("_questNote", op2.QuestNote));
         SnakeSceneBuilder.WireArray(journal, "_goalLabels", op2.GoalLabels);
         SnakeSceneBuilder.WireArray(journal, "_goalNotes", op2.GoalNotes);
         SnakeSceneBuilder.WireArray(journal, "_goalChecks", op2.GoalChecks);
+
+        var mapIcons = mapRoot.AddComponent<MapIcons>();
+        SnakeSceneBuilder.Wire(mapIcons, ("_game", r.Game), ("_grid", r.Grid), ("_player", r.Player), ("_rival", r.Rival),
+            ("_wildlife", r.Wildlife), ("_eagle", r.Eagle), ("_fox", r.Fox), ("_map", op2.Map), ("_group", op2.MapGroup),
+            ("_playerIcon", op2.PlayerIcon), ("_playerRing", op2.PlayerRing), ("_rivalIcon", op2.RivalIcon),
+            ("_eagleIcon", op2.EagleIcon), ("_foxIcon", op2.FoxIcon), ("_nestIcon", op2.NestIcon), ("_nestRing", op2.NestRing),
+            ("_pawSprite", UISpriteFactory.MapPaw), ("_fishSprite", UISpriteFactory.MapFish), ("_beetleSprite", UISpriteFactory.MapBeetle));
+        SnakeSceneBuilder.WireArray(mapIcons, "_preyIcons", op2.PreyIcons);
+        SnakeSceneBuilder.WireArray(mapIcons, "_burrowIcons", op2.BurrowIcons);
+        SnakeSceneBuilder.WireArray(mapIcons, "_birdNestIcons", op2.BirdNestIcons);
+        SnakeSceneBuilder.WireArray(mapIcons, "_sunStoneIcons", op2.SunStoneIcons);
 
         var settingsComp = settings.AddComponent<SettingsPanel>();
         SnakeSceneBuilder.Wire(settingsComp, ("_settings", r.Settings), ("_audio", r.Audio), ("_hints", hints),
@@ -572,7 +589,6 @@ internal static class UIBuilder
 
         back = PrimaryButton(screen, "Done", "ГОТОВО");
         TopLeft(back, LEFT, -918f, 220f, 60f);
-        HintRow(screen, new Vector2(0f, 0f), new Vector2(LEFT + 260f, 108f), new Vector2(0f, 0.5f), ("ESC", "закрыть"));
         return screen.gameObject;
     }
 
@@ -612,6 +628,9 @@ internal static class UIBuilder
         public Object[] DamageEdges = new Object[4];
         public CanvasGroup LowHealth, Frost, Warmth, Ambush;
         public CanvasGroup MapGroup;
+        public RawImage Map;
+        public RectTransform PlayerIcon, PlayerRing, RivalIcon, EagleIcon, FoxIcon, NestIcon, NestRing;
+        public Object[] PreyIcons, BurrowIcons, BirdNestIcons, SunStoneIcons;
         public Text MapDay, Summary, QuestText, QuestNote;
         public Object[] GoalLabels = new Object[DailyGoals.MAX_GOALS];
         public Object[] GoalNotes = new Object[DailyGoals.MAX_GOALS];
@@ -876,14 +895,16 @@ internal static class UIBuilder
         p.MapGroup = Group(map);
         p.MapGroup.alpha = 0f;
 
-        const float mapSize = 820f;
+        const float mapSize = 840f;
         RectTransform mapImage = Rect("Map", map);
-        Anchor(mapImage, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(LEFT, 10f), new Vector2(mapSize, mapSize));
-        Raw(mapImage, r.MinimapTexture);
+        Anchor(mapImage, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(LEFT, 0f), new Vector2(mapSize, mapSize));
+        // Подложку рисует MapIcons при старте; до этого — тёмный квадрат.
+        p.Map = Raw(mapImage, null);
+        p.Map.color = new Color(0.1f, 0.12f, 0.14f);
+        BuildMapIcons(mapImage, r, p);
         RectTransform frame = Rect("Frame", mapImage);
         Stretch(frame);
         Img(frame, new Color(Bone.r, Bone.g, Bone.b, 0.35f), _frame);
-        Legend(map, LEFT, -488f);
 
         float x = LEFT + mapSize + 90f;
         TopLeft(Label(map, "Kicker", Spaced("ЖУРНАЛ"), 20, Venom, TextAnchor.MiddleLeft, true), x, -128f, 600f, 30f);
@@ -915,26 +936,72 @@ internal static class UIBuilder
         TopLeft(Line(map, Hair), x, -722f, 760f, 1f);
         p.Summary = Label(map, "Summary", "", 20, Ash, TextAnchor.MiddleLeft, false);
         TopLeft(p.Summary, x, -742f, 760f, 28f);
+        Legend(map, x, -800f);
         HintRow(map, new Vector2(0f, 0f), new Vector2(x, 64f), new Vector2(0f, 0.5f), ("TAB", "держать — карта и журнал"));
         return layer.gameObject;
     }
 
-    /// <summary>Подписи к меткам карты: точки тех же цветов, что и маркеры камеры карты.</summary>
+    /// <summary>
+    /// Значки карты поверх подложки. Порядок слоёв: неподвижное (камни, гнёзда, норы), добыча, змеи и хищники, вы — сверху.
+    /// Неподвижных значков столько, сколько объектов на поле этого сида; MapIcons расставит их и скроет лишние.
+    /// </summary>
+    private static void BuildMapIcons(RectTransform mapImage, Refs r, OverlayParts p)
+    {
+        RectTransform layer = Rect("Icons", mapImage);
+        Stretch(layer);
+        GridManager grid = r.Grid;
+
+        p.SunStoneIcons = new Object[grid.SunStoneCount];
+        for (int i = 0; i < p.SunStoneIcons.Length; i++) p.SunStoneIcons[i] = MapIcon(layer, "SunStone", UISpriteFactory.MapSun, MapSun, 15f);
+        p.BirdNestIcons = new Object[grid.BirdNestCount];
+        for (int i = 0; i < p.BirdNestIcons.Length; i++) p.BirdNestIcons[i] = MapIcon(layer, "BirdNest", UISpriteFactory.MapBirdNest, Sky, 22f);
+        p.BurrowIcons = new Object[grid.BurrowCount];
+        for (int i = 0; i < p.BurrowIcons.Length; i++) p.BurrowIcons[i] = MapIcon(layer, "Burrow", UISpriteFactory.MapBurrow, Venom, 26f);
+        p.NestRing = MapIcon(layer, "NestRing", UISpriteFactory.MapRing, Venom, 62f);
+        p.NestIcon = MapIcon(layer, "Nest", UISpriteFactory.MapNest, Bone, 38f);
+
+        // Значки добычи — по одному на животное пула; вид (лапа, рыба, жук) MapIcons выставит по животному.
+        p.PreyIcons = new Object[r.Wildlife.AnimalCount];
+        for (int i = 0; i < p.PreyIcons.Length; i++)
+            p.PreyIcons[i] = MapIcon(layer, "Prey", UISpriteFactory.MapPaw, MapPrey, 18f).GetComponent<Image>();
+
+        p.RivalIcon = MapIcon(layer, "Rival", UISpriteFactory.MapArrow, MapRival, 30f);
+        p.FoxIcon = MapIcon(layer, "Fox", UISpriteFactory.MapFox, MapFox, 32f);
+        p.EagleIcon = MapIcon(layer, "Eagle", UISpriteFactory.MapEagle, Ember, 38f);
+        p.PlayerRing = MapIcon(layer, "PlayerRing", UISpriteFactory.MapRing, Venom, 56f);
+        p.PlayerIcon = MapIcon(layer, "Player", UISpriteFactory.MapArrow, Venom, 36f);
+    }
+
+    private static RectTransform MapIcon(RectTransform parent, string name, Sprite sprite, Color color, float size)
+    {
+        RectTransform icon = Rect(name, parent);
+        Anchor(icon, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(size, size));
+        Img(icon, color, sprite).preserveAspect = true;
+        return icon;
+    }
+
+    /// <summary>Обозначения карты: те же значки и цвета, три колонки под журналом.</summary>
     private static void Legend(RectTransform map, float x, float y)
     {
-        (Color color, string text)[] items =
+        (Sprite sprite, Color color, string text)[] items =
         {
-            (new Color(0.3f, 1f, 0.4f), "вы"), (new Color(1f, 0.92f, 0.55f), "добыча"), (Venom, "норы"),
-            (new Color(1f, 0.5f, 0.1f), "хищники"), (new Color(1f, 0.55f, 0.15f), "соперница")
+            (UISpriteFactory.MapArrow, Venom, "вы"), (UISpriteFactory.MapArrow, MapRival, "соперница"),
+            (UISpriteFactory.MapPaw, MapPrey, "добыча"), (UISpriteFactory.MapFish, MapFish, "рыба"),
+            (UISpriteFactory.MapBeetle, MapPrey, "жуки"), (UISpriteFactory.MapEagle, Ember, "орёл"),
+            (UISpriteFactory.MapFox, MapFox, "лиса"), (UISpriteFactory.MapBurrow, Venom, "нора"),
+            (UISpriteFactory.MapNest, Bone, "гнездо для кладки"), (UISpriteFactory.MapBirdNest, Sky, "птичье гнездо"),
+            (UISpriteFactory.MapSun, MapSun, "солнечный камень")
         };
+        TopLeft(Label(map, "LegendCaption", Spaced("ОБОЗНАЧЕНИЯ"), 17, Venom, TextAnchor.MiddleLeft, true), x, y, 400f, 24f);
+        const int columns = 3;
         for (int i = 0; i < items.Length; i++)
         {
-            float ix = x + i * 150f;
-            RectTransform dot = Rect("LegendDot", map);
-            Anchor(dot, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(ix, y), new Vector2(12f, 12f));
-            Img(dot, items[i].color, UISpriteFactory.Dot);
-            Text t = Label(map, "LegendText", items[i].text, 18, Ash, TextAnchor.MiddleLeft, false);
-            Anchor(t.rectTransform, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(ix + 20f, y), new Vector2(130f, 24f));
+            float ix = x + (i % columns) * 260f;
+            float iy = y - 40f - (i / columns) * 38f;
+            RectTransform icon = Rect("LegendIcon", map);
+            TopLeft(icon, ix, iy, 26f, 26f);
+            Img(icon, items[i].color, items[i].sprite).preserveAspect = true;
+            TopLeft(Label(map, "LegendText", items[i].text, 19, Ash, TextAnchor.MiddleLeft, false), ix + 38f, iy, 220f, 26f);
         }
     }
 
