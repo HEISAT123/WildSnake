@@ -118,3 +118,8 @@ InitTestScene*.unity*
 # Файлы ОС
 .DS_Store
 Thumbs.db
+
+
+CLAUDE.md
+.claude/
+.vscode/
