@@ -10,6 +10,7 @@ namespace Snake3D
     {
         private static readonly int BumpMapId = Shader.PropertyToID("_BumpMap");
         private static readonly int MainTexId = Shader.PropertyToID("_MainTex");
+        private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
 
         [Header("Ссылки")]
         [Tooltip("Рендерер воды реки")]
@@ -41,6 +42,12 @@ namespace Snake3D
             _offset += _speed * Time.deltaTime;
             _offset.x = Mathf.Repeat(_offset.x, 100f);
             _offset.y = Mathf.Repeat(_offset.y, 100f);
+            // В URP у Lit один тайлинг на все карты (_BaseMap) — сдвигаем его; в Built-in — нормали и цвет отдельно.
+            if (_material.HasProperty(BaseMapId))
+            {
+                _material.SetTextureOffset(BaseMapId, _offset);
+                return;
+            }
             if (_material.HasProperty(BumpMapId)) _material.SetTextureOffset(BumpMapId, _offset);
             if (_material.HasProperty(MainTexId)) _material.SetTextureOffset(MainTexId, _offset * 0.5f);
         }

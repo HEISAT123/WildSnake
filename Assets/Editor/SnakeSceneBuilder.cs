@@ -34,7 +34,9 @@ public static class SnakeSceneBuilder
         "PowerUpSpeed", "PowerUpSlowTime", "PowerUpShield", "PowerUpMagnet", "PowerUpDoubleScore",
         "SpinnerBeam", "SpinnerPost", "DangerWall", "ObstaclePillar", "PickupParticles",
         // Диски-метки камеры карты: карту теперь рисует MapIcons — подложка по данным поля и значки интерфейса.
-        "MarkerPlayer", "MarkerRival", "MarkerPrey", "MarkerEagle", "MarkerFox", "MarkerBurrow", "MarkerNest", "MarkerBirdNest"
+        "MarkerPlayer", "MarkerRival", "MarkerPrey", "MarkerEagle", "MarkerFox", "MarkerBurrow", "MarkerNest", "MarkerBirdNest",
+        // Остались на шейдере Standard и нигде не используются.
+        "LanternLamp", "LanternPost", "Water"
     };
 
     private static bool _urp;
@@ -70,6 +72,8 @@ public static class SnakeSceneBuilder
         EnsureFolder("Assets", "Scenes");
         EnsureFolder("Assets", "Materials");
         EnsureFolder("Assets", "Settings");
+        // Конвейер — URP: ассеты создаются и назначаются до материалов, чтобы те получили шейдеры URP.
+        RenderPipelineSetup.EnsureUrp();
         _urp = GraphicsSettings.currentRenderPipeline != null;
         int canopyLayer = EnsureLayer(CANOPY_LAYER);
         DeleteObsoleteAssets();
@@ -228,6 +232,7 @@ public static class SnakeSceneBuilder
         cam.nearClipPlane = 0.1f;
         camGo.AddComponent<AudioListener>();
         EnvironmentBuilder.SetupSky(light, cam);
+        if (_urp) RenderPipelineSetup.CreatePostProcessing(cam);
         var rig = camGo.AddComponent<CameraRig>();
         Wire(rig, ("_snake", player.Controller), ("_grid", grid));
 
@@ -284,6 +289,7 @@ public static class SnakeSceneBuilder
         Wire(ambience, ("_game", game));
 
         // ================= Сохранение =================
+        if (_urp) RenderPipelineSetup.FixupMaterials(MATERIALS_FOLDER);
         AssetDatabase.SaveAssets();
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene, SCENE_PATH);
@@ -1088,6 +1094,8 @@ public static class SnakeSceneBuilder
         {
             mat.SetFloat("_Surface", 1f);
             mat.SetFloat("_Blend", 0f);
+            // Как Fade в Standard: блик гаснет вместе с альфой (иначе вода и полупрозрачные кроны светлеют).
+            if (mat.HasProperty("_BlendModePreserveSpecular")) mat.SetFloat("_BlendModePreserveSpecular", 0f);
             mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
         }
         else

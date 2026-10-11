@@ -82,6 +82,8 @@ namespace Snake3D
         [SerializeField] private Vector2 _shadowAlpha = new Vector2(0.25f, 0.6f);
 
         private static readonly int ColorId = Shader.PropertyToID("_Color");
+        // В URP Lit цвет — _BaseColor; задаём оба, лишнее свойство шейдер просто не читает.
+        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
 
         /// <summary>Орёл появился и закричал.</summary>
         public event Action Screeched;
@@ -313,7 +315,9 @@ namespace Snake3D
             Transform shadow = _shadow.transform;
             shadow.SetPositionAndRotation(new Vector3(_pos.x, ground + 0.03f, _pos.z), Quaternion.Euler(90f, yaw, 0f));
             shadow.localScale = new Vector3(size, size * 0.55f, 1f);
-            _block.SetColor(ColorId, new Color(0f, 0f, 0f, Mathf.Lerp(_shadowAlpha.y, _shadowAlpha.x, k)));
+            var shade = new Color(0f, 0f, 0f, Mathf.Lerp(_shadowAlpha.y, _shadowAlpha.x, k));
+            _block.SetColor(ColorId, shade);
+            _block.SetColor(BaseColorId, shade);
             _shadow.SetPropertyBlock(_block);
         }
 

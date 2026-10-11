@@ -238,7 +238,7 @@ namespace Snake3D.Tests
 
         private static SnakeController FindPlayer()
         {
-            foreach (SnakeController s in Object.FindObjectsByType<SnakeController>(FindObjectsSortMode.None))
+            foreach (SnakeController s in Object.FindObjectsByType<SnakeController>())
                 if (s.IsPlayer) return s;
             Assert.Fail("Нет змеи игрока");
             return null;

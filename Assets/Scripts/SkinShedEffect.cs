@@ -10,6 +10,8 @@ namespace Snake3D
     public class SkinShedEffect : MonoBehaviour
     {
         private static readonly int ColorId = Shader.PropertyToID("_Color");
+        // В URP Lit цвет — _BaseColor; задаём оба, лишнее свойство шейдер просто не читает.
+        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
 
         [Header("Ссылки")]
         [Tooltip("Тело змеи, с которого снимается кожа")]
@@ -75,7 +77,9 @@ namespace Snake3D
         private void ApplyAlpha()
         {
             float k = Mathf.Clamp01(_timer / (_duration * 0.5f));
-            _block.SetColor(ColorId, new Color(_color.r, _color.g, _color.b, _color.a * k));
+            var c = new Color(_color.r, _color.g, _color.b, _color.a * k);
+            _block.SetColor(ColorId, c);
+            _block.SetColor(BaseColorId, c);
             _renderer.SetPropertyBlock(_block);
         }
     }

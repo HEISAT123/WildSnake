@@ -106,6 +106,8 @@ public static class EnvironmentBuilder
         pondNormal.name = "PondWater_N";
         SetNormalMap(m.PondWater, Save(pondNormal), 0.5f);
         m.PondWater.SetTextureScale("_BumpMap", new Vector2(2f, 2f));
+        // В URP все карты Lit берут тайлинг основной текстуры (_BaseMap).
+        m.PondWater.mainTextureScale = new Vector2(2f, 2f);
         SnakeSceneBuilder.MakeTransparent(m.PondWater);
         m.PondBed = SnakeSceneBuilder.CreateLitMaterial("PondBed", new Color(0.24f, 0.27f, 0.17f), 0.35f);
         m.SunStone = Textured("SunStone", new Color(0.95f, 0.86f, 0.7f), 0.25f, rock, rockN, 0.9f);
