@@ -6,6 +6,8 @@ namespace WildSnake
     /// <summary>
     /// Правила выживания: голод и здоровье, охота, удары, орёл, смена дня и ночи, линька с улучшениями,
     /// соперница, статистика и рекорды. Остальные системы ничего не знают друг о друге — их связывает этот класс.
+    /// Соперничество: дневное состязание (кто больше добыл до заката), трофей дня, кража душимой добычи,
+    /// обида и уступка соперницы; умения змеи — шипение (Q) и «мёртвая змея» (X).
     /// Меню — живой фон: змеи ездят на автопилоте и охотятся, но урон, голод и рекорды не считаются.
     /// </summary>
     public class GameManager : MonoBehaviour
@@ -29,6 +31,9 @@ namespace WildSnake
 
         [Tooltip("Змея-соперница под управлением ИИ (может отсутствовать)")]
         [SerializeField] private SnakeController _rival;
+
+        [Tooltip("ИИ соперницы: её характер (обида, уступка, кража добычи)")]
+        [SerializeField] private SnakeAI _rivalAI;
 
         [Tooltip("ИИ-автопилот змеи игрока: ведёт её на живом фоне главного меню")]
         [SerializeField] private SnakeAI _playerAutopilot;
@@ -195,6 +200,9 @@ namespace WildSnake
         /// <summary>Змея закатила свёрнутого ежа в воду.</summary>
         public event Action HedgehogSplashed;
 
+        /// <summary>Соперничество, трофей дня, шипение и «мёртвая змея» — для баннеров.</summary>
+        public event Action<GameNews> News;
+
         public GameState State { get; private set; } = GameState.Menu;
         public RunStats Stats => _stats;
         public SurvivalStats Survival => _survival;
@@ -204,6 +212,15 @@ namespace WildSnake
 
         /// <summary>Цели текущих суток.</summary>
         public DailyGoals Goals => _goals;
+
+        /// <summary>Идёт дневное состязание с соперницей (день, соперница на поле).</summary>
+        public bool ContestActive => RivalActive && !_dayNight.IsNight;
+
+        /// <summary>Добыча игрока за сегодняшний день (состязание).</summary>
+        public int ContestPlayer => _contestPlayer;
+
+        /// <summary>Добыча соперницы за сегодняшний день (состязание).</summary>
+        public int ContestRival => _contestRival;
 
         /// <summary>Длина змеи игрока, клеток.</summary>
         public float SnakeLength => _snake.BodyLengthCells;
@@ -276,6 +293,12 @@ namespace WildSnake
         private float _rivalRespawnTimer = -1f;
         private float _menuRespawnTimer = -1f;
         private float _thornTimer;
+        private float _rivalReturnLength;
+        private bool _rivalHitByPlayer;
+        private int _contestPlayer;
+        private int _contestRival;
+        private bool _trophyDone;
+        private float _trophyRetry;
 
         private bool RivalActive => _rival != null && _rival.gameObject.activeSelf;
 
@@ -303,6 +326,7 @@ namespace WildSnake
             _snake.Jumped += OnJumped;
             _snake.Landed += OnLanded;
             _snake.StrikeStarted += OnStrikeStarted;
+            _snake.Hissed += OnHissed;
             if (_rival != null)
             {
                 _rival.Hurt += OnRivalHurt;
@@ -314,6 +338,8 @@ namespace WildSnake
             _wildlife.Pushed += OnHedgehogPushed;
             _wildlife.HedgehogSplashed += OnHedgehogSplashed;
             _wildlife.MouseHid += OnMouseHid;
+            _wildlife.TrophyCaught += OnTrophyCaught;
+            _wildlife.TrophyLost += OnTrophyLost;
             _wasps.SwarmStarted += OnWaspsSwarmed;
             _wasps.Stung += OnWaspStung;
             _wasps.FoxStung += OnFoxStung;
@@ -326,6 +352,7 @@ namespace WildSnake
             _fox.Appeared += OnFoxAppeared;
             _fox.Bit += OnFoxBit;
             _fox.Raided += OnFoxRaided;
+            _fox.LostInterest += OnFoxLostInterest;
             _birdNests.EggEaten += OnEggEaten;
             _birdNests.Pecked += OnBirdPecked;
             _birdNests.ParentScared += OnBirdScared;
@@ -341,6 +368,7 @@ namespace WildSnake
             _snake.Jumped -= OnJumped;
             _snake.Landed -= OnLanded;
             _snake.StrikeStarted -= OnStrikeStarted;
+            _snake.Hissed -= OnHissed;
             if (_rival != null)
             {
                 _rival.Hurt -= OnRivalHurt;
@@ -352,6 +380,8 @@ namespace WildSnake
             _wildlife.Pushed -= OnHedgehogPushed;
             _wildlife.HedgehogSplashed -= OnHedgehogSplashed;
             _wildlife.MouseHid -= OnMouseHid;
+            _wildlife.TrophyCaught -= OnTrophyCaught;
+            _wildlife.TrophyLost -= OnTrophyLost;
             _wasps.SwarmStarted -= OnWaspsSwarmed;
             _wasps.Stung -= OnWaspStung;
             _wasps.FoxStung -= OnFoxStung;
@@ -364,6 +394,7 @@ namespace WildSnake
             _fox.Appeared -= OnFoxAppeared;
             _fox.Bit -= OnFoxBit;
             _fox.Raided -= OnFoxRaided;
+            _fox.LostInterest -= OnFoxLostInterest;
             _birdNests.EggEaten -= OnEggEaten;
             _birdNests.Pecked -= OnBirdPecked;
             _birdNests.ParentScared -= OnBirdScared;
@@ -432,7 +463,7 @@ namespace WildSnake
             _fox.ResetHunter(_config.FoxFirstDelay);
             _weather.ResetWeather(_config.FirstRainDelay);
             PrepareRound(!fromMenu);
-            _goals.Roll(_dayNight.Day, _rng);
+            _goals.Roll(_dayNight.Day, _rng, RivalActive);
             _nightOutside = false;
             GoalsRolled?.Invoke();
             if (save != null) ApplySave(save);
@@ -503,12 +534,18 @@ namespace WildSnake
             _wasps.ResetAll();
             _thornTimer = 0f;
             _hatchlings.Clear();
+            _contestPlayer = 0;
+            _contestRival = 0;
+            _trophyDone = false;
+            _trophyRetry = 0f;
 
             if (_rival != null)
             {
                 bool rivalOn = _settings.RivalEnabled;
                 _rival.gameObject.SetActive(rivalOn);
                 _rivalRespawnTimer = -1f;
+                _rivalReturnLength = 0f;
+                if (_rivalAI != null) _rivalAI.ResetMood();
                 if (rivalOn) SpawnRival();
             }
 
@@ -593,9 +630,15 @@ namespace WildSnake
 
             if (RivalActive)
             {
-                if (_rival.IsAlive) CheckSnakeCollisions();
+                if (_rival.IsAlive)
+                {
+                    CheckSnakeCollisions();
+                    // Длинная соперница смелее нападает, короткая осторожничает.
+                    if (_rivalAI != null) _rivalAI.Boldness = Mathf.Clamp(_rival.BodyLengthCells / Mathf.Max(1f, _snake.BodyLengthCells), 0.5f, 1.8f);
+                }
                 else TickRivalRespawn(dt);
             }
+            TickTrophy(dt);
 
             // Линька начинается на земле, не посреди атаки орла и не во время борьбы с добычей.
             if (_moltPending && _snake.IsAlive && _snake.IsGrounded && !_eagle.IsDiving && !_constriction.IsActive) BeginMolt();
@@ -699,10 +742,31 @@ namespace WildSnake
             {
                 attacker.NotifyStrikeHit();
                 attacker.CancelStrike();
-                victim.TakeHit(_config.BodyDamage, DamageSource.Rival, -away);
+                bool hit = victim.TakeHit(_config.BodyDamage, DamageSource.Rival, -away);
+                if (hit && attacker == _snake && State == GameState.Playing) OnRivalBitten();
             }
             attacker.PushAway(away, 0.12f * _grid.CellSize);
         }
+
+        /// <summary>Игрок укусил соперницу: цель дня; соперница злится (или, если она куда меньше, уступает).</summary>
+        private void OnRivalBitten()
+        {
+            ReportGoal(GoalType.BiteRival);
+            if (_rivalAI == null || !_rival.IsAlive) return;
+            if (_rival.BodyLengthCells < _snake.BodyLengthCells * 0.7f)
+            {
+                _rivalAI.Yield(_config.RivalYieldTime);
+                News?.Invoke(GameNews.RivalYielded);
+                return;
+            }
+            bool wasAngry = _rivalAI.IsGrudging;
+            _rivalAI.SetGrudge(_config.RivalGrudgeTime);
+            if (!wasAngry) News?.Invoke(GameNews.RivalAngered);
+        }
+
+        /// <summary>Здоровье соперницы растёт с её длиной: выросшая — крепче.</summary>
+        private float RivalMaxHealthNow => _config.RivalMaxHealth
+                                           + _config.RivalHealthPerCell * Mathf.Max(0f, _rival.BodyLengthCells - _config.StartLength);
 
         private void SpawnRival()
         {
@@ -726,9 +790,15 @@ namespace WildSnake
             Vector3 toCenter = _grid.Center - best;
             float yaw = toCenter.sqrMagnitude > 0.01f ? Mathf.Atan2(toCenter.x, toCenter.z) * Mathf.Rad2Deg : 0f;
             _rival.ResetSnake(best, yaw);
+            // После поражения соперница возвращается почти прежней — соперничество не обнуляется.
+            bool returning = _rivalReturnLength > _config.StartLength && State == GameState.Playing;
+            if (returning) _rival.SetLength(_rivalReturnLength);
             _rival.IsRunning = State == GameState.Playing || State == GameState.Menu;
-            _rivalHealth = _config.RivalMaxHealth;
+            _rivalHealth = RivalMaxHealthNow;
+            _rivalHitByPlayer = false;
             _rivalRespawnTimer = -1f;
+            if (_rivalAI != null) _rivalAI.ResetMood();
+            if (returning) News?.Invoke(GameNews.RivalReturned);
         }
 
         // ---------------- Урон и смерть ----------------
@@ -765,6 +835,7 @@ namespace WildSnake
         {
             if (State != GameState.Playing) return;
             Emit(_deathParticles, position, _deathParticleCount / 6);
+            _rivalHitByPlayer = source == DamageSource.Rival;
             _rivalHealth -= damage;
             if (_rivalHealth <= 0f) _rival.Kill();
         }
@@ -789,6 +860,19 @@ namespace WildSnake
             Emit(_deathParticles, position, _deathParticleCount / 2);
             if (State != GameState.Menu) _audio.Play(SoundId.Land);
             _rivalRespawnTimer = _config.RivalRespawnDelay;
+            if (State != GameState.Playing) return;
+            _rivalReturnLength = Mathf.Max(_config.StartLength, _rival.BodyLengthCells * _config.RivalLengthKeep);
+            if (_rivalAI != null) _rivalAI.ResetMood();
+            // Победа в схватке — шаг к линьке.
+            if (_rivalHitByPlayer) AddMoltProgress(_config.RivalDefeatMoltReward);
+            _audio.Play(SoundId.Goal);
+            News?.Invoke(GameNews.RivalDefeated);
+        }
+
+        private void AddMoltProgress(float share)
+        {
+            _moltProgress += _config.MoltGrowth * share;
+            if (_moltProgress >= _config.MoltGrowth) _moltPending = true;
         }
 
         private void EndGame()
@@ -815,6 +899,7 @@ namespace WildSnake
 
             if (hunter != _snake)
             {
+                if (State == GameState.Playing && hunter == _rival && kind != PreyKind.Beetle && !_dayNight.IsNight) _contestRival++;
                 bool capped = State == GameState.Menu && hunter.BodyLengthCells >= _menuMaxLength;
                 if (!capped) hunter.Grow(prey.Growth);
                 Emit(_eatParticles, position, _eatParticleCount / 2);
@@ -839,11 +924,145 @@ namespace WildSnake
             if (kind == PreyKind.Rabbit) ReportGoal(GoalType.ConstrictRabbit);
             if (kind == PreyKind.Bird && _snake.LastStrikeFromAmbush) ReportGoal(GoalType.AmbushBird);
             if (kind == PreyKind.Fish) ReportGoal(GoalType.CatchFish);
+            if (kind != PreyKind.Beetle && !_dayNight.IsNight) _contestPlayer++;
+            CheckStolenFromRival(position);
 
             Emit(_eatParticles, position, big ? _eatParticleCount : _eatParticleCount / 2);
             _audio.Play(big ? SoundId.Feast : SoundId.Catch);
             if (big) _cameraRig.Shake(0.08f, 0.2f);
             PreyCaught?.Invoke(kind);
+        }
+
+        /// <summary>Игрок поймал добычу, за которой рядом охотилась соперница: цель дня, а соперница обижена.</summary>
+        private void CheckStolenFromRival(Vector3 position)
+        {
+            if (!RivalActive || !_rival.IsAlive || _rivalAI == null) return;
+            if (_rivalAI.CurrentPrey == null || _rivalAI.CurrentPrey != _wildlife.LastCaught) return;
+            Vector3 d = _rival.HeadPosition - position;
+            d.y = 0f;
+            if (d.magnitude > _config.StealGoalRange * _grid.CellSize) return;
+            ReportGoal(GoalType.StealFromRival);
+            News?.Invoke(GameNews.PreyStolen);
+            if (!_rivalAI.IsYielding) _rivalAI.SetGrudge(_config.RivalGrudgeTime);
+        }
+
+        // ---------------- Трофей дня и состязание ----------------
+
+        /// <summary>Днём, в заданную долю светлого времени, одна добыча становится трофеем — за ней охотятся обе змеи.</summary>
+        private void TickTrophy(float dt)
+        {
+            if (_trophyDone || _dayNight.IsNight || _dayNight.PeriodProgress01 < _config.TrophyDayPoint) return;
+            if (_trophyRetry > 0f)
+            {
+                _trophyRetry -= dt;
+                return;
+            }
+            if (!_wildlife.TryMakeTrophy())
+            {
+                _trophyRetry = 5f;
+                return;
+            }
+            _trophyDone = true;
+            _audio.Play(SoundId.Goal);
+            News?.Invoke(GameNews.TrophyAppeared);
+        }
+
+        private void OnTrophyCaught(SnakeController hunter)
+        {
+            if (State != GameState.Playing) return;
+            if (hunter == _snake)
+            {
+                _survival.Feed(_config.MaxSatiety);
+                AddMoltProgress(_config.TrophyMoltReward);
+                News?.Invoke(GameNews.TrophyPlayer);
+                return;
+            }
+            if (hunter == _rival)
+            {
+                _rival.Grow(_config.RivalWinGrowth);
+                _rivalHealth = RivalMaxHealthNow;
+                News?.Invoke(GameNews.TrophyRival);
+            }
+        }
+
+        private void OnTrophyLost()
+        {
+            if (State == GameState.Playing) News?.Invoke(GameNews.TrophyLost);
+        }
+
+        /// <summary>Закат: итог дневного состязания с соперницей.</summary>
+        private void JudgeContest()
+        {
+            if (!RivalActive || _contestPlayer + _contestRival == 0) return;
+            if (_contestPlayer > _contestRival)
+            {
+                AddMoltProgress(_config.ContestMoltReward);
+                _audio.Play(SoundId.Goal);
+                News?.Invoke(GameNews.ContestWon);
+            }
+            else if (_contestRival > _contestPlayer)
+            {
+                // Соперница окрепла: выросла и залечилась.
+                if (_rival.IsAlive)
+                {
+                    _rival.Grow(_config.RivalWinGrowth);
+                    _rivalHealth = RivalMaxHealthNow;
+                }
+                News?.Invoke(GameNews.ContestLost);
+            }
+            else News?.Invoke(GameNews.ContestTie);
+        }
+
+        // ---------------- Шипение и «мёртвая змея» ----------------
+
+        /// <summary>
+        /// Шипение: лиса отступает; соперница поменьше (или любая, если змея защищает душимую добычу) уступает,
+        /// а та, что крупнее, злится. Ближняя мелочь пугается — шипеть на охоте нельзя.
+        /// </summary>
+        private void OnHissed(Vector3 head)
+        {
+            if (State != GameState.Playing) return;
+            _audio.Play(SoundId.Hiss);
+            float radius = _config.HissRadius * _grid.CellSize;
+            if (_fox.Flinch(head, radius, _config.FoxHissFlinch)) News?.Invoke(GameNews.FoxHissed);
+
+            if (RivalActive && _rival.IsAlive && _rivalAI != null)
+            {
+                Vector3 d = _rival.HeadPosition - head;
+                d.y = 0f;
+                if (d.magnitude <= radius * 1.2f)
+                {
+                    bool defending = _constriction.IsActive;
+                    if (defending || _rival.BodyLengthCells <= _snake.BodyLengthCells * 1.15f)
+                    {
+                        _rivalAI.Yield(_config.RivalYieldTime);
+                        News?.Invoke(GameNews.RivalYielded);
+                    }
+                    else
+                    {
+                        bool wasAngry = _rivalAI.IsGrudging;
+                        _rivalAI.SetGrudge(_config.RivalGrudgeTime);
+                        if (!wasAngry) News?.Invoke(GameNews.RivalAngered);
+                    }
+                }
+            }
+
+            float rSqr = radius * radius;
+            for (int i = 0; i < _wildlife.AnimalCount; i++)
+            {
+                PreyAnimal a = _wildlife.GetAnimal(i);
+                if (!a.IsActive || a.IsHeld) continue;
+                Vector3 d = a.Position - head;
+                d.y = 0f;
+                if (d.sqrMagnitude <= rSqr) a.Startle(head);
+            }
+        }
+
+        private void OnFoxLostInterest()
+        {
+            if (State != GameState.Playing) return;
+            ReportGoal(GoalType.PlayDead);
+            News?.Invoke(GameNews.PredatorFooled);
         }
 
         // ---------------- Нора, нюх и сохранение ----------------
@@ -1112,6 +1331,8 @@ namespace WildSnake
                 return;
             }
 
+            if (TickRivalSteal()) return;
+
             bool squeezing = GameInput.ConstrictHeld;
             if (squeezing)
             {
@@ -1127,6 +1348,37 @@ namespace WildSnake
             else if (result == ConstrictResult.Escaped) EndConstriction(false, true);
         }
 
+        /// <summary>
+        /// Пока змея душит добычу, соперница поблизости идёт её отбить. Дотянулась — добыча её.
+        /// Отогнать можно шипением (Q). Возвращает true, если добычу отбили.
+        /// </summary>
+        private bool TickRivalSteal()
+        {
+            if (!RivalActive || !_rival.IsAlive || _rivalAI == null || _rivalAI.IsYielding) return false;
+            Vector3 d = _rival.HeadPosition - _heldPrey.Position;
+            d.y = 0f;
+            float dist = d.magnitude;
+            float cs = _grid.CellSize;
+            if (_rivalAI.StealTarget != _heldPrey)
+            {
+                if (dist > 14f * cs) return false;
+                _rivalAI.StealTarget = _heldPrey;
+                News?.Invoke(GameNews.StealStarted);
+            }
+            if (dist > _config.RivalStealRange * cs) return false;
+
+            PreyAnimal prey = _heldPrey;
+            _heldPrey = null;
+            _constriction.Cancel();
+            _playerInput.MovementLocked = false;
+            _snake.IsConstricting = false;
+            _rivalAI.StealTarget = null;
+            _wildlife.CompleteCatch(prey, _rival);
+            _audio.Play(SoundId.Hurt);
+            News?.Invoke(GameNews.RivalStole);
+            return true;
+        }
+
         /// <summary>Конец борьбы: задушила — поимка как обычно, иначе добыча вырывается и убегает.</summary>
         private void EndConstriction(bool won, bool notify)
         {
@@ -1136,6 +1388,7 @@ namespace WildSnake
             _constriction.Cancel();
             _playerInput.MovementLocked = false;
             _snake.IsConstricting = false;
+            if (_rivalAI != null) _rivalAI.StealTarget = null;
             if (!wasActive) return;
 
             if (won) _wildlife.CompleteCatch(prey, _snake);
@@ -1169,6 +1422,11 @@ namespace WildSnake
             if (State != GameState.Playing) return;
             _stats.EaglesEvaded++;
             ReportGoal(GoalType.EvadeEagle);
+            if (_snake.IsPlayingDead)
+            {
+                ReportGoal(GoalType.PlayDead);
+                News?.Invoke(GameNews.PredatorFooled);
+            }
         }
 
         // ---------------- Погода и ёж ----------------
@@ -1282,11 +1540,7 @@ namespace WildSnake
             if (State != GameState.Playing) return;
             int index = _goals.Report(type);
             if (index < 0) return;
-            if (_goals.Get(index).MoltReward)
-            {
-                _moltProgress += _config.MoltGrowth * _config.GoalMoltReward;
-                if (_moltProgress >= _config.MoltGrowth) _moltPending = true;
-            }
+            if (_goals.Get(index).MoltReward) AddMoltProgress(_config.GoalMoltReward);
             else
             {
                 _survival.HealFull();
@@ -1305,15 +1559,30 @@ namespace WildSnake
                 _audio.Play(SoundId.Dawn);
                 // Сначала засчитываем пережитую ночь, потом выдаём цели нового дня.
                 if (_nightOutside) ReportGoal(GoalType.NightOutside);
-                _goals.Roll(day, _rng);
+                _goals.Roll(day, _rng, RivalActive);
                 GoalsRolled?.Invoke();
             }
+            // Новый день — новое состязание и новый трофей.
+            _contestPlayer = 0;
+            _contestRival = 0;
+            _trophyDone = false;
+            _trophyRetry = 0f;
             _audio.SetMusicPitch(1f);
         }
 
         private void OnNightStarted()
         {
-            if (State == GameState.Playing) _audio.Play(SoundId.Dusk);
+            if (State == GameState.Playing)
+            {
+                _audio.Play(SoundId.Dusk);
+                JudgeContest();
+                // Трофей — дневная добыча: ночью его роль пропадает.
+                if (_wildlife.Trophy != null)
+                {
+                    _wildlife.ClearTrophy();
+                    News?.Invoke(GameNews.TrophyLost);
+                }
+            }
             _nightOutside = !_snake.InBurrow;
             // Ночью музыка чуть ниже и тягучее.
             _audio.SetMusicPitch(0.94f);

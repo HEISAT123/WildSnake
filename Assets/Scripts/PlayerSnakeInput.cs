@@ -4,7 +4,8 @@ namespace WildSnake
 {
     /// <summary>
     /// Ввод игрока → намерение змеи: WASD задаёт направление относительно камеры, Ctrl/Shift — темп,
-    /// ПКМ — замах с прицелом по взгляду камеры, ЛКМ — бросок, Space — прыжок.
+    /// ПКМ — замах с прицелом по взгляду камеры, ЛКМ — бросок, Space — прыжок,
+    /// Q — шипение, X (держать) — притвориться мёртвой.
     /// Включается только во время партии (GameManager); в меню змею ведёт SnakeAI через тот же интерфейс.
     /// Выполняется раньше SnakeController, чтобы намерение применилось в том же кадре.
     /// </summary>
@@ -30,6 +31,7 @@ namespace WildSnake
             if (_snake == null) return;
             _snake.SetMoveIntent(Vector3.zero, SnakePace.Walk);
             _snake.SetCoil(false, Vector3.zero);
+            _snake.SetPlayDead(false);
         }
 
         private void Update()
@@ -45,6 +47,9 @@ namespace WildSnake
             _snake.SetMoveIntent(right * move.x + forward * move.y, pace);
 
             _snake.SetCoil(GameInput.CoilHeld && !MovementLocked, forward);
+            _snake.SetPlayDead(GameInput.PlayDeadHeld && !MovementLocked);
+            // Шипеть можно и душа добычу — отгонять соперницу, которая пришла её отбить.
+            if (GameInput.Hiss) _snake.TryHiss();
             if (MovementLocked) return;
             if (GameInput.Strike) _snake.TryStrike(forward);
             if (GameInput.Jump) _snake.RequestJump();

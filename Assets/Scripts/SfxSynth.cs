@@ -10,7 +10,7 @@ namespace WildSnake
     /// </summary>
     public static class SfxSynth
     {
-        public const int SOUND_COUNT = 18;
+        public const int SOUND_COUNT = 19;
         private const int SR = SynthDsp.SAMPLE_RATE;
 
         /// <summary>Все звуки по индексу SoundId; каждый — чередующиеся стерео-сэмплы.</summary>
@@ -180,6 +180,13 @@ namespace WildSnake
                     t.Sine(0.02, 0.16, 720, 260, 0.004, 0.3f, 0f, 0.3f);
                     t.Sine(0.12, 0.1, 900, 500, 0.004, 0.12f, 0.2f, 0.4f);
                     return t.Finish(0.35f, 0.6f);
+
+                case SoundId.Hiss:
+                    // Шипение змеи: долгий сухой выдох шума, фильтр сверху вниз, и короткий «тс» в начале.
+                    t = new Track(1.1f, 29);
+                    t.Noise(0.0, 0.05, 11000, 9000, 4000, 0f, 0f, 0.002, 0.3f, 0.1f);
+                    t.Noise(0.03, 0.7, 9000, 4500, 2500, -0.25f, 0.25f, 0.05, 0.55f, 0.25f);
+                    return t.Finish(0.4f, 0.5f);
 
                 default:
                     return new float[2];

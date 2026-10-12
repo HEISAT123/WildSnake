@@ -282,7 +282,7 @@ public static class SnakeSceneBuilder
         var game = new GameObject("GameManager").AddComponent<GameManager>();
         Wire(game,
             ("_config", config), ("_grid", grid),
-            ("_snake", player.Controller), ("_headAnimator", player.Animator), ("_rival", rival.Controller), ("_playerAutopilot", playerAi), ("_playerInput", playerInput),
+            ("_snake", player.Controller), ("_headAnimator", player.Animator), ("_rival", rival.Controller), ("_rivalAI", ai), ("_playerAutopilot", playerAi), ("_playerInput", playerInput),
             ("_wildlife", wildlife), ("_eagle", eagle), ("_fox", fox), ("_dayNight", dayNight), ("_weather", weather), ("_scent", scent), ("_skinShed", shed),
             ("_nestEggs", board.NestEggs), ("_nestBeacon", board.NestBeacon), ("_birdNests", birdNests), ("_hatchlings", hatchlings), ("_wasps", wasps),
             ("_leaderboard", leaderboard), ("_settings", settings), ("_audio", audio), ("_cameraRig", rig),

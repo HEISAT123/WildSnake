@@ -62,6 +62,25 @@ namespace WildSnake.Tests
             Assert.AreEqual(System.Enum.GetValues(typeof(GoalType)).Length, DailyGoals.TYPE_COUNT);
         }
 
+        [Test]
+        public void Roll_WithoutRival_NeverGivesRivalGoals()
+        {
+            var goals = new DailyGoals();
+            for (int seed = 0; seed < 300; seed++)
+            {
+                goals.Roll(5, new System.Random(seed), false);
+                for (int i = 0; i < goals.Count; i++)
+                    Assert.IsFalse(DailyGoals.NeedsRival(goals.Get(i).Type), "Без соперницы выпала " + goals.Get(i).Type);
+            }
+        }
+
+        [Test]
+        public void Roll_WithRival_CanGiveRivalGoals()
+        {
+            Assert.IsTrue(RollUntil(new DailyGoals(), GoalType.BiteRival).MoltReward, "Укус соперницы — шаг к линьке");
+            Assert.IsFalse(RollUntil(new DailyGoals(), GoalType.PlayDead).MoltReward, "«Мёртвая змея» — восстановление");
+        }
+
         private static DailyGoal RollUntil(DailyGoals goals, GoalType type)
         {
             for (int seed = 0; seed < 500; seed++)

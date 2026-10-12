@@ -27,6 +27,8 @@ namespace WildSnake
         public static bool ConstrictHeld => Input.GetKey(KeyCode.F) || Input.GetKey(KeyCode.JoystickButton2);
         public static bool Jump => Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.JoystickButton0);
         public static bool Interact => Input.GetKeyDown(KeyCode.E) || Input.GetKeyDown(KeyCode.JoystickButton3);
+        public static bool Hiss => Input.GetKeyDown(KeyCode.Q) || Input.GetKeyDown(KeyCode.JoystickButton1);
+        public static bool PlayDeadHeld => Input.GetKey(KeyCode.X) || Input.GetKey(KeyCode.JoystickButton9);
         public static bool MapHeld => Input.GetKey(KeyCode.Tab) || Input.GetKey(KeyCode.JoystickButton6);
         public static bool ToggleHud => Input.GetKeyDown(KeyCode.H);
         private static bool PausePressed => Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.JoystickButton7);
@@ -78,6 +80,8 @@ namespace WildSnake
         public static bool ConstrictHeld => (K != null && K.fKey.isPressed) || (G != null && G.buttonWest.isPressed);
         public static bool Jump => (K != null && K.spaceKey.wasPressedThisFrame) || (G != null && G.buttonSouth.wasPressedThisFrame);
         public static bool Interact => (K != null && K.eKey.wasPressedThisFrame) || (G != null && G.buttonNorth.wasPressedThisFrame);
+        public static bool Hiss => (K != null && K.qKey.wasPressedThisFrame) || (G != null && G.buttonEast.wasPressedThisFrame);
+        public static bool PlayDeadHeld => (K != null && K.xKey.isPressed) || (G != null && G.rightStickButton.isPressed);
         public static bool MapHeld => (K != null && K.tabKey.isPressed) || (G != null && G.selectButton.isPressed);
         public static bool ToggleHud => K != null && K.hKey.wasPressedThisFrame;
         private static bool PausePressed => (K != null && K.escapeKey.wasPressedThisFrame) || (G != null && G.startButton.wasPressedThisFrame);
@@ -99,6 +103,8 @@ namespace WildSnake
         public static bool ConstrictHeld => false;
         public static bool Jump => false;
         public static bool Interact => false;
+        public static bool Hiss => false;
+        public static bool PlayDeadHeld => false;
         public static bool MapHeld => false;
         public static bool ToggleHud => false;
         private static bool PausePressed => false;

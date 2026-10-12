@@ -174,8 +174,8 @@ internal static class UIBuilder
             ("_group", hp.HintGroup), ("_keycap", hp.HintKeycap), ("_keyText", hp.HintKey), ("_label", hp.HintLabel));
 
         var threat = hud.AddComponent<ThreatIndicator>();
-        SnakeSceneBuilder.Wire(threat, ("_game", r.Game), ("_snake", r.Player), ("_eagle", r.Eagle), ("_fox", r.Fox),
-            ("_camera", r.CameraTransform), ("_eagleMarker", hp.EagleMarker), ("_foxMarker", hp.FoxMarker),
+        SnakeSceneBuilder.Wire(threat, ("_game", r.Game), ("_snake", r.Player), ("_eagle", r.Eagle),
+            ("_camera", r.CameraTransform), ("_eagleMarker", hp.EagleMarker),
             ("_alertGroup", hp.AlertGroup), ("_alertText", hp.AlertText));
 
         var reticle = hud.AddComponent<CenterReticle>();
@@ -597,8 +597,8 @@ internal static class UIBuilder
         {
             "WASD — ползти, мышь — камера. CTRL — красться, SHIFT — быстрее.\n\nЖука хватит коснуться. Мышь, лягушку, птицу и рыбу ловят броском: ЛКМ — укус, ПКМ — замах.\n\nКролика бросок только хватает — держите F, чтобы задушить.\n\nВ птичьих гнёздах — яйца. Птица будет клевать; бросок её отгонит.",
             "Замрите на пару секунд — змея сольётся с местностью, а в траве и камыше её почти не видно. Затаившаяся змея подманивает добычу кончиком хвоста.\n\nВ мышиных городках мыши ныряют в норки — ждите в засаде.\n\nЁж свернулся — толкните шар носом в воду или ждите, пока выглянет.\n\nХолодно — солнечный камень, ночью — тёплый ключ.",
-            "Днём — орёл: спасают трава, кроны, полое бревно или бросок в последний миг.\n\nНочью — лиса: идёт по следу, в воду и ежевику не лезет. Бросок в морду отпугнёт её.\n\nЕжевика колет на бегу. Осы гонят шумную змею до воды, норы или бревна — и жалят лису.",
-            "Повзрослейте, затем ночью, сытой, отложите яйца в гнезде (E) и охраняйте кладку — лиса придёт за яйцами. Вылупятся змеёныши — играете следующим поколением.\n\nE у норы — сохраниться. TAB — карта и цели. H — скрыть интерфейс."
+            "Днём — орёл: спасают трава, кроны, полое бревно или бросок в последний миг.\n\nНочью — лиса: идёт по следу, в воду и ежевику не лезет. Бросок в морду отпугнёт её.\n\nЕжевика колет на бегу. Осы гонят шумную змею до воды, норы или бревна — и жалят лису.\n\nQ — шипение: лиса отпрянет. X (держать) — притвориться мёртвой: орёл и лиса теряют интерес, но силы тают.",
+            "Повзрослейте, затем ночью, сытой, отложите яйца в гнезде (E) и охраняйте кладку — лиса придёт за яйцами. Вылупятся змеёныши — играете следующим поколением.\n\nСоперница — враг: днём идёт счёт охоты, трофей дня (золотая метка) ищете оба, а душимую добычу она попробует отбить — шипите (Q).\n\nE у норы — сохраниться. TAB — карта и цели. H — скрыть интерфейс."
         };
         for (int i = 0; i < titles.Length; i++)
         {
@@ -777,7 +777,7 @@ internal static class UIBuilder
         public Text HintKey, HintLabel;
         public CanvasGroup AimGroup, StruggleGroup;
         public Image ChargeFill, StruggleFill;
-        public RectTransform EagleMarker, FoxMarker;
+        public RectTransform EagleMarker;
         public MapIconParts Minimap;
         public CanvasGroup MinimapGroup;
         public RectTransform MinimapRotator, MinimapNorth;
@@ -996,9 +996,8 @@ internal static class UIBuilder
         Text hold = Label(struggle, "Hold", Spaced("ДЕРЖИТЕ"), 15, HudCaption, TextAnchor.MiddleCenter, true);
         Anchor(hold.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0f, -26f), new Vector2(160f, 20f));
 
-        // ---------- Угрозы: метки у краёв и одно крупное предупреждение о пике ----------
+        // ---------- Угроза: метка орла (только когда он рядом) и одно крупное предупреждение о пике ----------
         p.EagleMarker = ThreatMarker(hud, "EagleMarker", UISpriteFactory.MapEagle, Ember);
-        p.FoxMarker = ThreatMarker(hud, "FoxMarker", UISpriteFactory.MapFox, MapFox);
         RectTransform alert = Rect("Alert", hud);
         Anchor(alert, new Vector2(0.5f, 0.72f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1400f, 90f));
         p.AlertGroup = Group(alert);

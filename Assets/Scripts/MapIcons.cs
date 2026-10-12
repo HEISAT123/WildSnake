@@ -6,7 +6,8 @@ namespace WildSnake
     /// <summary>
     /// Карта: подложка, нарисованная по данным поля (MapPainter), и значки поверх неё —
     /// стрелки змей по направлению головы, следы добычи, рыбы и жуки, орёл и лиса, норы, гнёзда, солнечные камни,
-    /// тёплые ключи, мышиные городки и осиные гнёзда. На карте журнала добыча видна только вокруг змеи (_knownRadius).
+    /// тёплые ключи, мышиные городки и осиные гнёзда. На карте журнала добыча видна только вокруг змеи (_knownRadius),
+    /// кроме трофея дня — он золотой и виден издалека.
     /// Два режима одного компонента:
     /// • карта журнала (Tab) — всё поле целиком, север вверху;
     /// • мини-карта HUD (_follow) — круглое окно вокруг змеи, повёрнутое по камере (вверху — куда смотрит камера),
@@ -90,6 +91,9 @@ namespace WildSnake
         [SerializeField] private Color _hedgehogColor = new Color(0.72f, 0.68f, 0.62f);
         [SerializeField] private float _preySize = 18f;
         [SerializeField] private float _beetleSize = 12f;
+        [Tooltip("Трофей дня: золотой и крупнее")]
+        [SerializeField] private Color _trophyColor = new Color(1f, 0.78f, 0.15f);
+        [SerializeField] private float _trophySize = 30f;
 
         [Tooltip("Карта журнала показывает добычу только в этом радиусе от змеи, м (0 — всю): дальнее — ищите нюхом и глазами")]
         [SerializeField, Min(0f)] private float _knownRadius = 40f;
@@ -102,6 +106,7 @@ namespace WildSnake
         private Vector2 _worldSize;
         private Vector2 _mapSize;
         private Quaternion _upright = Quaternion.identity;
+        private int _trophyIcon = -1;
 
         /// <summary>Подложка карты (рисуется при первом обращении).</summary>
         public Texture2D Texture
@@ -170,13 +175,20 @@ namespace WildSnake
                     icon.gameObject.SetActive(false);
                     continue;
                 }
-                PreyKind kind = _wildlife.GetAnimal(i).Kind;
-                bool fish = kind == PreyKind.Fish, beetle = kind == PreyKind.Beetle;
-                icon.sprite = fish ? _fishSprite : beetle ? _beetleSprite : _pawSprite;
-                icon.color = fish ? _fishColor : kind == PreyKind.Hedgehog ? _hedgehogColor : _preyColor;
-                float size = beetle ? _beetleSize : _preySize;
-                icon.rectTransform.sizeDelta = new Vector2(size, size);
+                StylePreyIcon(i, false);
             }
+        }
+
+        /// <summary>Вид значка добычи: по виду животного или золотой — у трофея дня.</summary>
+        private void StylePreyIcon(int i, bool trophy)
+        {
+            Image icon = _preyIcons[i];
+            PreyKind kind = _wildlife.GetAnimal(i).Kind;
+            bool fish = kind == PreyKind.Fish, beetle = kind == PreyKind.Beetle;
+            icon.sprite = fish ? _fishSprite : beetle ? _beetleSprite : _pawSprite;
+            icon.color = trophy ? _trophyColor : fish ? _fishColor : kind == PreyKind.Hedgehog ? _hedgehogColor : _preyColor;
+            float size = trophy ? _trophySize : beetle ? _beetleSize : _preySize;
+            icon.rectTransform.sizeDelta = new Vector2(size, size);
         }
 
         private void Update()
@@ -202,18 +214,32 @@ namespace WildSnake
             float range = _follow ? _viewRadius * 1.15f : _knownRadius > 0f ? _knownRadius : float.MaxValue;
             float rangeSqr = range * range;
             int count = Mathf.Min(_preyIcons.Length, _wildlife.AnimalCount);
+            int trophyIcon = -1;
             for (int i = 0; i < count; i++)
             {
                 PreyAnimal animal = _wildlife.GetAnimal(i);
                 RectTransform icon = _preyIcons[i].rectTransform;
                 Vector3 p = animal.Position;
-                // На мини-карте дальнюю добычу не двигаем — она всё равно за краем круга.
+                bool trophy = animal.IsActive && animal.IsTrophy;
+                if (trophy) trophyIcon = i;
+                // На мини-карте дальнюю добычу не двигаем — она всё равно за краем круга; трофей на карте журнала виден всегда.
                 float dx = p.x - head.x, dz = p.z - head.z;
-                bool show = animal.IsActive && dx * dx + dz * dz < rangeSqr;
+                bool show = animal.IsActive && (dx * dx + dz * dz < rangeSqr || (trophy && !_follow));
                 if (icon.gameObject.activeSelf != show) icon.gameObject.SetActive(show);
                 if (!show) continue;
                 icon.anchoredPosition = ToMap(p);
                 if (_follow) icon.localRotation = _upright;
+                if (trophy) icon.localScale = new Vector3(pulse, pulse, 1f);
+            }
+            if (trophyIcon != _trophyIcon)
+            {
+                if (_trophyIcon >= 0)
+                {
+                    StylePreyIcon(_trophyIcon, false);
+                    _preyIcons[_trophyIcon].rectTransform.localScale = Vector3.one;
+                }
+                if (trophyIcon >= 0) StylePreyIcon(trophyIcon, true);
+                _trophyIcon = trophyIcon;
             }
 
             // Гнездо появляется на карте, когда змея повзрослела, и подсвечено кольцом, пока кладку не охраняют.

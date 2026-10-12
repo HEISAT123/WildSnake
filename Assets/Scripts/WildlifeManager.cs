@@ -10,6 +10,7 @@ namespace WildSnake
     /// Кролика бросок только хватает (событие Grabbed) — душит его змея игрока обвиванием, и поимку
     /// завершает GameManager через CompleteCatch.
     /// Все животные заранее созданы в пуле (SnakeSceneBuilder), в игре нет Instantiate/Destroy.
+    /// Раз в день одна добыча становится трофеем (TryMakeTrophy): за ней охотятся обе змеи.
     /// </summary>
     public class WildlifeManager : MonoBehaviour
     {
@@ -65,6 +66,18 @@ namespace WildSnake
         /// <summary>Свёрнутый ёж скатился в воду и поплыл (где).</summary>
         public event Action<Vector3> HedgehogSplashed;
 
+        /// <summary>Трофей дня пойман (кем) — приходит перед Caught.</summary>
+        public event Action<SnakeController> TrophyCaught;
+
+        /// <summary>Трофей дня ушёл: спрятался в норку, улетел или скрылся от дождя.</summary>
+        public event Action TrophyLost;
+
+        /// <summary>Трофей дня (null — сейчас нет).</summary>
+        public PreyAnimal Trophy { get; private set; }
+
+        /// <summary>Последняя пойманная добыча (уже убрана с поля) — чтобы понять, чью цель перехватили.</summary>
+        public PreyAnimal LastCaught { get; private set; }
+
         /// <summary>Сила дождя 0..1: птицы, мыши и жуки прячутся, лягушек больше, шум дождя скрывает змею.</summary>
         public float Rain01 { get; set; }
 
@@ -109,6 +122,8 @@ namespace WildSnake
         {
             Initialize();
             for (int i = 0; i < _animals.Length; i++) _animals[i].Despawn();
+            Trophy = null;
+            LastCaught = null;
             for (int k = 0; k < KIND_COUNT; k++)
             {
                 _spawnTimers[k] = 0f;
@@ -121,10 +136,54 @@ namespace WildSnake
         public void CompleteCatch(PreyAnimal animal, SnakeController snake)
         {
             if (animal == null || !animal.IsActive) return;
+            Consume(animal, snake);
+        }
+
+        /// <summary>
+        /// Выбрать трофей дня: мышь, лягушку или птицу подальше от обеих змей. Возвращает true, если нашёлся.
+        /// </summary>
+        public bool TryMakeTrophy()
+        {
+            ClearTrophy();
+            PreyAnimal best = null;
+            float bestScore = 0f;
+            for (int i = 0; i < _animals.Length; i++)
+            {
+                PreyAnimal a = _animals[i];
+                if (!a.IsActive || a.IsHeld || a.IsFlying) continue;
+                if (a.Kind != PreyKind.Mouse && a.Kind != PreyKind.Frog && a.Kind != PreyKind.Bird) continue;
+                // Не у самого носа и не на краю света: 15–45 м от игрока, подальше от соперницы.
+                float toPlayer = DistanceToSnake(_player, a.Position);
+                if (toPlayer < 15f * _grid.CellSize || toPlayer > 45f * _grid.CellSize) continue;
+                float score = Mathf.Min(toPlayer, DistanceToSnake(_rival, a.Position)) + UnityEngine.Random.value * 5f;
+                if (score <= bestScore) continue;
+                bestScore = score;
+                best = a;
+            }
+            if (best == null) return false;
+            best.SetTrophy(true);
+            Trophy = best;
+            return true;
+        }
+
+        /// <summary>Снять роль трофея (новая партия, ночь).</summary>
+        public void ClearTrophy()
+        {
+            if (Trophy != null && Trophy.IsActive) Trophy.SetTrophy(false);
+            Trophy = null;
+        }
+
+        /// <summary>Добыча съедена: убрать, назначить замену и сообщить (трофей — отдельным событием раньше).</summary>
+        private void Consume(PreyAnimal animal, SnakeController snake)
+        {
             Vector3 pos = animal.Position;
             PreyKind kind = animal.Kind;
+            bool trophy = animal == Trophy;
+            if (trophy) Trophy = null;
+            LastCaught = animal;
             animal.Despawn();
             ScheduleRespawn(kind);
+            if (trophy) TrophyCaught?.Invoke(snake);
             Caught?.Invoke(snake, kind, pos);
         }
 
@@ -202,6 +261,8 @@ namespace WildSnake
                 float dist = d.magnitude / cs;
                 float score = _config.GetPrey(a.Kind).Satiety / (dist + 4f);
                 if (a.IsFleeing) score *= 0.5f;
+                // Трофей дня соперница не упустит.
+                if (a.IsTrophy) score *= 6f;
                 if (otherActive)
                 {
                     Vector3 o = a.Position - otherHead;
@@ -237,6 +298,11 @@ namespace WildSnake
 
             CheckCatches(_player);
             CheckCatches(_rival);
+            if (Trophy != null && !Trophy.IsActive)
+            {
+                Trophy = null;
+                TrophyLost?.Invoke();
+            }
             MaintainPopulation(dt);
         }
 
@@ -330,10 +396,7 @@ namespace WildSnake
                     continue;
                 }
 
-                Vector3 pos = a.Position;
-                a.Despawn();
-                ScheduleRespawn(a.Kind);
-                Caught?.Invoke(snake, a.Kind, pos);
+                Consume(a, snake);
             }
         }
 
@@ -405,7 +468,7 @@ namespace WildSnake
             for (int i = 0; i < _animals.Length; i++)
             {
                 PreyAnimal a = _animals[i];
-                if (!a.IsActive || a.Kind != kind || a.IsHeld) continue;
+                if (!a.IsActive || a.Kind != kind || a.IsHeld || a.IsTrophy) continue;
                 if (DistanceToSnake(_player, a.Position) < minDist) continue;
                 a.Despawn();
                 return true;

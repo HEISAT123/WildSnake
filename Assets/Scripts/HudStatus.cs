@@ -21,11 +21,12 @@ namespace WildSnake
         private const int RAIN = 1 << 9;
         private const int BRAMBLE = 1 << 10;
         private const int SPRING = 1 << 11;
+        private const int DEAD = 1 << 12;
 
-        private static readonly int[] Flags = { EXPOSED, TIRED, COLD, RAIN, AMBUSH, BRAMBLE, GRASS, CANOPY, WATER, SPRING, DIGEST, WARM };
+        private static readonly int[] Flags = { DEAD, EXPOSED, TIRED, COLD, RAIN, AMBUSH, BRAMBLE, GRASS, CANOPY, WATER, SPRING, DIGEST, WARM };
         private static readonly string[] Words =
         {
-            "ВЫДАЛА СЕБЯ", "НЕТ СИЛ", "ХОЛОДНО — МЕДЛЕННЕЕ", "ДОЖДЬ — ЗЯБНЕТ", "ЗАСАДА", "В ЕЖЕВИКЕ — ЛИСА НЕ ДОСТАНЕТ",
+            "ПРИТВОРИЛАСЬ МЁРТВОЙ — ХИЩНИКИ ТЕРЯЮТ ИНТЕРЕС", "ВЫДАЛА СЕБЯ", "НЕТ СИЛ", "ХОЛОДНО — МЕДЛЕННЕЕ", "ДОЖДЬ — ЗЯБНЕТ", "ЗАСАДА", "В ЕЖЕВИКЕ — ЛИСА НЕ ДОСТАНЕТ",
             "В ТРАВЕ — НЕ ВИДНО", "ПОД КРОНАМИ — ОРЁЛ НЕ ВИДИТ", "В ВОДЕ", "ТЁПЛЫЙ КЛЮЧ — ГРЕЕТ", "ПЕРЕВАРИВАЕТ — ТЯЖЕЛЕЕ", "ПРОГРЕЛАСЬ"
         };
 
@@ -67,6 +68,7 @@ namespace WildSnake
                 if (_snake.Digestion.IsDigesting) state |= DIGEST;
                 if (_snake.Stamina.IsExhausted) state |= TIRED;
                 if (_snake.IsExposed) state |= EXPOSED;
+                if (_snake.IsPlayingDead) state |= DEAD;
                 if (_weather.Rain01 > 0.5f && !_snake.UnderCanopy) state |= RAIN;
             }
             if (state == _shown) return;
@@ -89,7 +91,7 @@ namespace WildSnake
         {
             if (flag == EXPOSED || flag == TIRED) return _badColor;
             if (flag == COLD || flag == WATER || flag == RAIN) return _coldColor;
-            if (flag == AMBUSH || flag == GRASS || flag == CANOPY || flag == WARM || flag == BRAMBLE || flag == SPRING) return _goodColor;
+            if (flag == DEAD || flag == AMBUSH || flag == GRASS || flag == CANOPY || flag == WARM || flag == BRAMBLE || flag == SPRING) return _goodColor;
             return _infoColor;
         }
     }

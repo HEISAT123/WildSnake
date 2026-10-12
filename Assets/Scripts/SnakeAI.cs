@@ -9,6 +9,8 @@ namespace WildSnake
     /// 2) рефлексы — «щупальца» впереди: уворот от стен и камней, прыжок через брёвна и тела;
     /// 3) охота — выбирает самую выгодную добычу (сытность / расстояние), подкрадывается к ней,
     ///    целится с упреждением и делает бросок вблизи; иногда выходит наперерез игроку.
+    /// Характер соперницы (задаёт GameManager): обида — гонится за игроком и кусает; уступка — держится подальше;
+    /// кража — идёт отбивать добычу, которую душит игрок; смелость растёт, когда она длиннее игрока.
     /// 4) страховка от застревания — если змея почти не сдвинулась или долго не приближается к цели,
     ///    она отползает в самую свободную сторону, а недостижимую добычу на время бросает.
     /// Управляет змеёй тем же «намерением», что и игрок: желаемое направление + темп, бросок, прыжок.
@@ -177,6 +179,51 @@ namespace WildSnake
         private float _ignoreTimer;
         private Vector3 _wanderGoal;
         private bool _hasWanderGoal;
+        private float _grudgeTimer;
+        private float _yieldTimer;
+
+        /// <summary>Добыча, за которой ИИ сейчас охотится (может быть уже съедена — сравнивать по ссылке).</summary>
+        public PreyAnimal CurrentPrey => _prey;
+
+        /// <summary>Добыча, которую надо отбить (игрок её душит); null — не отбивать.</summary>
+        public PreyAnimal StealTarget { get; set; }
+
+        /// <summary>Множитель склонности нападать на игрока: длинная соперница смелее.</summary>
+        public float Boldness { get; set; } = 1f;
+
+        /// <summary>Обижена на игрока: охотится на него.</summary>
+        public bool IsGrudging => _grudgeTimer > 0f;
+
+        /// <summary>Отогнана: держится подальше от игрока.</summary>
+        public bool IsYielding => _yieldTimer > 0f;
+
+        /// <summary>Затаить обиду на seconds секунд: сразу переходит в охоту на игрока.</summary>
+        public void SetGrudge(float seconds)
+        {
+            _grudgeTimer = Mathf.Max(_grudgeTimer, seconds);
+            _yieldTimer = 0f;
+            _hunting = OtherAlive;
+            _decisionTimer = _decisionInterval;
+        }
+
+        /// <summary>Уступить: seconds секунд уходить от игрока, ни на кого не нападая и ничего не отбивая.</summary>
+        public void Yield(float seconds)
+        {
+            _yieldTimer = seconds;
+            _grudgeTimer = 0f;
+            _hunting = false;
+            StealTarget = null;
+            _replanTimer = 0f;
+        }
+
+        /// <summary>Сбросить характер (новая партия, возвращение после поражения).</summary>
+        public void ResetMood()
+        {
+            _grudgeTimer = 0f;
+            _yieldTimer = 0f;
+            _hunting = false;
+            StealTarget = null;
+        }
 
         /// <summary>Другая змея на поле: выключенный объект (соперник отключён в настройках) не считается.</summary>
         private bool OtherAlive => _player != null && _player.isActiveAndEnabled && _player.IsAlive;
@@ -214,6 +261,8 @@ namespace WildSnake
 
             float dt = Time.deltaTime;
             if (_ignoreTimer > 0f && (_ignoreTimer -= dt) <= 0f) _ignoredPrey = null;
+            if (_grudgeTimer > 0f) _grudgeTimer -= dt;
+            if (_yieldTimer > 0f) _yieldTimer -= dt;
             if (_escapeTimer > 0f)
             {
                 // Отползаем, не думая о цели: иначе план тут же развернёт змею обратно в тупик.
@@ -232,7 +281,15 @@ namespace WildSnake
             }
 
             _retargetTimer -= dt;
-            if (_retargetTimer <= 0f || _prey == null || !_prey.IsActive || _prey.IsFlying)
+            if (StealTarget != null && (!StealTarget.IsActive || IsYielding)) StealTarget = null;
+            if (StealTarget != null)
+            {
+                // Отбивать добычу важнее всего остального.
+                if (_prey != StealTarget) ResetProgress();
+                _prey = StealTarget;
+                _hunting = false;
+            }
+            else if (_retargetTimer <= 0f || _prey == null || !_prey.IsActive || _prey.IsFlying)
             {
                 _retargetTimer = _retargetInterval;
                 PreyAnimal previous = _prey;
@@ -254,15 +311,32 @@ namespace WildSnake
 
         private void DecideMood()
         {
-            _hunting = OtherAlive && DistanceCells(_player.HeadPosition) < _huntRange && Random.value < _aggression;
+            if (IsYielding || StealTarget != null)
+            {
+                _hunting = false;
+                return;
+            }
+            // Обиженная гонится издалека и не передумывает; смелая (длиннее игрока) нападает чаще.
+            float range = IsGrudging ? _huntRange * 2f : _huntRange;
+            float chance = IsGrudging ? 1f : Mathf.Clamp01(_aggression * Boldness);
+            _hunting = OtherAlive && DistanceCells(_player.HeadPosition) < range && Random.value < chance;
         }
 
         private Vector3 CurrentGoal()
         {
+            if (IsYielding && OtherAlive)
+            {
+                // Отогнали — уходим от игрока туда, где посвободнее.
+                Vector3 away = _snake.HeadPosition - _player.HeadPosition;
+                away.y = 0f;
+                if (away.sqrMagnitude < 1e-4f) away = -_snake.Forward;
+                return _snake.HeadPosition + away.normalized * (8f * _grid.CellSize);
+            }
             if (_hunting && OtherAlive)
             {
                 // Выходим наперерез: точка перед головой игрока, чтобы он врезался в наше тело.
-                if (DistanceCells(_player.HeadPosition) > _huntRange * 1.5f) _hunting = false;
+                float giveUp = IsGrudging ? _huntRange * 3f : _huntRange * 1.5f;
+                if (DistanceCells(_player.HeadPosition) > giveUp) _hunting = false;
                 else return _player.HeadPosition + _player.Forward * (_interceptLead * _grid.CellSize);
             }
 
@@ -436,7 +510,7 @@ namespace WildSnake
         /// <summary>К спокойной добыче — крадётся, за убегающей и на перехват — спешит, иначе обычный шаг.</summary>
         private SnakePace ChoosePace(Vector3 goal)
         {
-            if (_hunting) return SnakePace.Sprint;
+            if (_hunting || IsYielding || StealTarget != null) return SnakePace.Sprint;
             if (!HasPrey) return SnakePace.Walk;
             if (_prey.IsFleeing) return SnakePace.Sprint;
             float dist = DistanceCells(goal);
@@ -451,6 +525,7 @@ namespace WildSnake
             if (_snake.StrikeReady01 < 1f || near != Blocked.Free || center != Blocked.Free) return;
             if (Mathf.Abs(angle) > _dashAngle) return;
 
+            if (IsYielding) return;
             float myDist = DistanceCells(goal);
             if (_hunting)
             {

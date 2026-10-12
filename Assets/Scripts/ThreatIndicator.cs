@@ -4,7 +4,8 @@ using UnityEngine.UI;
 namespace WildSnake
 {
     /// <summary>
-    /// Где опасность — видно сразу. Метка орла или лисы — значок зверя, стрелка и расстояние:
+    /// Где опасность — видно сразу, но только когда она рядом. Метка орла — значок, стрелка и расстояние;
+    /// появляется, лишь когда орёл охотится ближе _eagleShowDistance (лису метка не выдаёт — её ищут глазами и ушами):
     /// • зверь в кадре — метка висит прямо над ним, стрелка смотрит на него сверху;
     /// • за кадром или позади — метка прижата к краю экрана в той стороне, где зверь, стрелка указывает туда.
     /// Крупное «ОРЁЛ ПИКИРУЕТ» вспыхивает один раз за атаку и быстро гаснет.
@@ -17,7 +18,6 @@ namespace WildSnake
         [SerializeField] private GameManager _game;
         [SerializeField] private SnakeController _snake;
         [SerializeField] private EagleHunter _eagle;
-        [SerializeField] private FoxHunter _fox;
 
         [Tooltip("Камера: по ней метки проецируются на экран")]
         [SerializeField] private Transform _camera;
@@ -26,8 +26,8 @@ namespace WildSnake
         [Tooltip("Метка орла: дочерние узлы — Arrow (стрелка), Icon (значок), Label (подпись с расстоянием)")]
         [SerializeField] private RectTransform _eagleMarker;
 
-        [Tooltip("Метка лисы")]
-        [SerializeField] private RectTransform _foxMarker;
+        [Tooltip("Метка видна, только если орёл ближе, м (по горизонтали); в пике — всегда")]
+        [SerializeField, Min(1f)] private float _eagleShowDistance = 25f;
 
         [Tooltip("Отступ меток от края экрана, пикселей интерфейса (по X, по Y)")]
         [SerializeField] private Vector2 _edgeMargin = new Vector2(110f, 90f);
@@ -59,7 +59,6 @@ namespace WildSnake
         private Camera _view;
         private RectTransform _area;
         private Marker _eagleUi;
-        private Marker _foxUi;
         private float _alertTimer;
 
         private void Awake()
@@ -67,11 +66,10 @@ namespace WildSnake
             _view = _camera.GetComponent<Camera>();
             _area = (RectTransform)_eagleMarker.parent;
             _eagleUi = CreateMarker(_eagleMarker, "ОРЁЛ");
-            _foxUi = CreateMarker(_foxMarker, "ЛИСА");
             _alertGroup.alpha = 0f;
         }
 
-        /// <summary>Подписи «ЛИСА · 24 м» готовим заранее — в кадре строки не собираются.</summary>
+        /// <summary>Подписи «ОРЁЛ · 24 м» готовим заранее — в кадре строки не собираются.</summary>
         private static Marker CreateMarker(RectTransform root, string name)
         {
             var m = new Marker
@@ -113,15 +111,19 @@ namespace WildSnake
             bool playing = _game.State == GameState.Playing;
             float pulse = 0.7f + 0.3f * Mathf.Abs(Mathf.Sin(Time.unscaledTime * (_eagle.IsDiving ? 9f : 4f)));
 
-            bool eagle = playing && _eagle.IsThreatening;
+            bool eagle = playing && _eagle.IsThreatening && (_eagle.IsDiving || EagleNear());
             UpdateMarker(ref _eagleUi, eagle, _eagle.Position, pulse, dt);
-            bool fox = playing && _fox.IsActive && _fox.CurrentPhase != FoxHunter.Phase.Retreat;
-            // Лиса — точка на земле; метку целим чуть выше, в её голову.
-            UpdateMarker(ref _foxUi, fox, _fox.Position + Vector3.up * 0.6f, _fox.IsChasing ? pulse : 0.8f, dt);
 
             if (_alertTimer > 0f) _alertTimer -= dt;
             float target = playing && _alertTimer > 0f ? Mathf.Clamp01(_alertTimer / 0.3f) : 0f;
             _alertGroup.alpha = Mathf.MoveTowards(_alertGroup.alpha, target, dt * 8f);
+        }
+
+        private bool EagleNear()
+        {
+            Vector3 d = _eagle.Position - _snake.HeadPosition;
+            d.y = 0f;
+            return d.sqrMagnitude <= _eagleShowDistance * _eagleShowDistance;
         }
 
         private void UpdateMarker(ref Marker m, bool active, Vector3 world, float alpha, float dt)

@@ -106,6 +106,9 @@ namespace WildSnake
         public event Action OutOfStamina;
         public event Action Respawned;
 
+        /// <summary>Змея зашипела (где голова) — кого отпугнуть, решает GameManager.</summary>
+        public event Action<Vector3> Hissed;
+
         public bool IsRunning
         {
             get => _isRunning;
@@ -183,6 +186,18 @@ namespace WildSnake
 
         /// <summary>Змея лежит в высокой траве: добыча и орёл её почти не видят. В прыжке укрытия нет.</summary>
         public bool IsHidden => _hidden || InBurrow;
+
+        /// <summary>Змея притворяется мёртвой: лежит кверху брюхом, не двигается, тратит силы.</summary>
+        public bool IsPlayingDead => _playDead;
+
+        /// <summary>Сколько секунд змея уже лежит «мёртвой».</summary>
+        public float PlayDeadTime => _playDead ? _playDeadTime : 0f;
+
+        /// <summary>Змея шипит, приподнявшись.</summary>
+        public bool IsHissing => _hissTimer > 0f;
+
+        /// <summary>Готовность шипения: 1 — можно шипеть.</summary>
+        public float HissReady01 => _hissCooldownTimer > 0f ? 1f - Mathf.Clamp01(_hissCooldownTimer / Mathf.Max(0.01f, _config.HissCooldown)) : 1f;
 
         /// <summary>Тело уже минимальной длины — худеть от голода некуда.</summary>
         public bool IsAtMinLength => _targetLengthCells <= _config.StartLength + 0.01f;
@@ -291,6 +306,15 @@ namespace WildSnake
         private float _invulnerableTimer;
         private bool _hidden;
 
+        // Шипение и «мёртвая змея».
+        private bool _playDeadWanted;
+        private bool _playDead;
+        private float _playDeadTime;
+        private float _deadBlend;
+        private float _hissTimer;
+        private float _hissCooldownTimer;
+        private float _hissBlend;
+
         private float _squashTimer;
         private Vector3 _headBaseScale;
 
@@ -351,6 +375,13 @@ namespace WildSnake
             _strikeCooldownTimer = 0f;
             _invulnerableTimer = 0f;
             _hidden = false;
+            _playDeadWanted = false;
+            _playDead = false;
+            _playDeadTime = 0f;
+            _deadBlend = 0f;
+            _hissTimer = 0f;
+            _hissCooldownTimer = 0f;
+            _hissBlend = 0f;
             _squashTimer = _squashDuration;
             _moveDir = Vector3.zero;
             _moveAmount = 0f;
@@ -479,7 +510,7 @@ namespace WildSnake
         /// </summary>
         public bool TryStrike(Vector3 aim)
         {
-            if (!IsAlive || !IsRunning || IsStriking || _strikeCooldownTimer > 0f || !_grounded) return false;
+            if (!IsAlive || !IsRunning || IsStriking || _strikeCooldownTimer > 0f || !_grounded || _playDead) return false;
             if (Time.frameCount - _runStartFrame < 2) return false;
 
             float charge = Coil01;
@@ -516,6 +547,29 @@ namespace WildSnake
         public void NotifyStrikeHit()
         {
             if (IsStriking) _strikeHit = true;
+        }
+
+        /// <summary>Притвориться мёртвой (держать) — на земле, не в воде и не во время броска.</summary>
+        public void SetPlayDead(bool want)
+        {
+            _playDeadWanted = want;
+        }
+
+        /// <summary>Шипение: змея привстаёт и шипит. Возвращает false, если сейчас нельзя (пауза, силы, нора).</summary>
+        public bool TryHiss()
+        {
+            if (!IsAlive || !IsRunning || InBurrow || _playDead || _hissCooldownTimer > 0f || !_grounded) return false;
+            if (!_stamina.TrySpend(_config.HissStaminaCost))
+            {
+                OutOfStamina?.Invoke();
+                return false;
+            }
+            _hissTimer = _config.HissDuration;
+            _hissCooldownTimer = _config.HissCooldown;
+            _ambush.Break();
+            _squashTimer = 0f;
+            Hissed?.Invoke(_headPos);
+            return true;
         }
 
         public void RequestJump()
@@ -676,16 +730,22 @@ namespace WildSnake
             if (_strikeCooldownTimer > 0f) _strikeCooldownTimer -= dt;
             if (_invulnerableTimer > 0f) _invulnerableTimer -= dt;
             if (_exposedTimer > 0f) _exposedTimer -= dt;
+            if (_hissCooldownTimer > 0f) _hissCooldownTimer -= dt;
+            if (_hissTimer > 0f) _hissTimer -= dt;
             _digestion.Tick(dt);
+            UpdatePlayDead(dt);
             UpdateJump(dt);
 
             float previousYaw = _yaw;
             if (IsStriking) UpdateStrike(dt);
             else if (_coiled) UpdateCoil(dt);
+            else if (_playDead || IsHissing) UpdateStill(dt);
             else UpdateCrawl(dt);
             _turn01 = Mathf.Clamp(Mathf.DeltaAngle(previousYaw, _yaw) / (dt * _config.TurnRate), -1f, 1f);
             UpdateStaminaAndAmbush(dt);
             _coilBlend = Mathf.MoveTowards(_coilBlend, _coiled ? 1f : 0f, dt * 5f);
+            _hissBlend = Mathf.MoveTowards(_hissBlend, IsHissing ? 1f : 0f, dt * 8f);
+            _deadBlend = Mathf.MoveTowards(_deadBlend, _playDead ? 1f : 0f, dt * 3f);
 
             float step = _speed * _cellSize * dt;
             _headPos += Forward * step;
@@ -752,6 +812,32 @@ namespace WildSnake
             _speed = Mathf.MoveTowards(_speed, target, rate * dt);
         }
 
+        /// <summary>
+        /// «Мёртвая змея» держится, пока зажата клавиша и есть силы: на земле, не в воде, не в броске и не душа добычу.
+        /// Силы тратятся — вечно так не пролежать.
+        /// </summary>
+        private void UpdatePlayDead(float dt)
+        {
+            bool can = _playDeadWanted && _grounded && !IsStriking && !_inWater && !IsConstricting && !_stamina.IsExhausted;
+            if (can && !_playDead)
+            {
+                _playDead = true;
+                _playDeadTime = 0f;
+                _coiled = false;
+                _ambush.Break();
+            }
+            else if (!can) _playDead = false;
+            if (!_playDead) return;
+            _playDeadTime += dt;
+            _stamina.Drain(_config.PlayDeadStaminaDrain * dt);
+        }
+
+        /// <summary>Шипит или лежит «мёртвой» — змея быстро останавливается.</summary>
+        private void UpdateStill(float dt)
+        {
+            _speed = Mathf.MoveTowards(_speed, 0f, _config.Deceleration * 2f * dt);
+        }
+
         /// <summary>Наклон головы по склону: голова смотрит вверх на подъёме и вниз на спуске.</summary>
         private void UpdateSlope(float dt)
         {
@@ -789,7 +875,7 @@ namespace WildSnake
                              && _speed > _config.WalkSpeed * 0.9f;
             if (sprinting) _stamina.Drain(_config.SprintStaminaDrain * dt);
             _stamina.Tick(dt, !IsMoving);
-            _ambush.Tick(dt, !IsMoving && _grounded && !IsStriking);
+            _ambush.Tick(dt, !IsMoving && _grounded && !IsStriking && !_playDead && !IsHissing);
         }
 
         /// <summary>Замах: змея быстро гасит ход, приподнимает голову и поворачивает её к прицелу в пределах угла.</summary>
@@ -818,7 +904,7 @@ namespace WildSnake
             bool wantJump = _jumpRequested;
             _jumpRequested = false;
 
-            if (_grounded && wantJump && !_coiled)
+            if (_grounded && wantJump && !_coiled && !_playDead)
             {
                 // Сытая змея с бугром прыгает ниже.
                 _verticalSpeed = Mathf.Sqrt(2f * _config.Gravity * _config.JumpHeight * _digestion.JumpMultiplier) * _cellSize;
@@ -969,11 +1055,12 @@ namespace WildSnake
 
         private void ApplyHeadVisual(float dt)
         {
-            float lift = _coilBlend * _coilLift * _cellSize;
+            // Шипит — привстаёт выше, чем при замахе; «мёртвая» — голова прижата к земле и перевёрнута.
+            float lift = (_coilBlend * _coilLift + _hissBlend * _coilLift * 1.8f - _deadBlend * 0.12f) * _cellSize;
             _head.position = _headPos + Vector3.up * lift;
             float pitch = Mathf.Clamp(-_verticalSpeed / _cellSize * _pitchPerSpeed, -35f, 35f) - _coilBlend * _coilPitch
-                          + (_grounded ? _slopePitch : 0f);
-            float roll = -_turn01 * _bankAngle;
+                          - _hissBlend * _coilPitch * 1.6f + (_grounded ? _slopePitch : 0f);
+            float roll = -_turn01 * _bankAngle + _deadBlend * 160f;
             _head.rotation = Quaternion.Euler(pitch, _yaw, roll);
 
             if (_squashTimer < _squashDuration)

@@ -6,6 +6,7 @@ namespace WildSnake
     /// <summary>
     /// Строка текущей главной цели слева сверху: что делать дальше и сколько осталось («Повзрослеть: длина 6,4 из 11…»,
     /// «Охраняйте кладку: яиц 5 · вылупление через 2:10»). Со второго поколения — с номером поколения.
+    /// Днём, пока на поле соперница, в конце — счёт дневного состязания («Охота: вы 3 : 2 она»).
     /// Текст меняется, только когда меняется показываемое значение.
     /// </summary>
     public class HudObjective : MonoBehaviour
@@ -28,11 +29,13 @@ namespace WildSnake
 
         private int _shownKey = -1;
         private int _shownMolt = -1;
+        private int _shownContest = -2;
 
         private void OnEnable()
         {
             _shownKey = -1;
             _shownMolt = -1;
+            _shownContest = -2;
         }
 
         private void LateUpdate()
@@ -60,33 +63,29 @@ namespace WildSnake
                 : quest.Stage == QuestStage.Guard ? 200000 + quest.Eggs * 10000 + secondsLeft
                 : 100000 + (int)_game.NestStatus;
             stateKey += quest.Generation * 1000000;
-            if (stateKey == _shownKey) return;
+            int contestKey = _game.ContestActive ? Mathf.Min(_game.ContestPlayer, 999) * 1000 + Mathf.Min(_game.ContestRival, 999) : -1;
+            if (stateKey == _shownKey && contestKey == _shownContest) return;
             _shownKey = stateKey;
+            _shownContest = contestKey;
 
+            string contest = contestKey >= 0 ? "      Охота:  вы " + _game.ContestPlayer + " : " + _game.ContestRival + " она" : "";
+            _text.text = QuestText(quest, length, molts, secondsLeft) + contest;
+        }
+
+        private string QuestText(MainQuest quest, float length, int molts, int secondsLeft)
+        {
             string generation = quest.Generation > 1 ? "Поколение " + quest.Generation + "  ·  " : "";
             if (quest.Stage == QuestStage.Grow)
-            {
-                _text.text = generation + "Повзрослеть:  длина " + Mathf.Min(length, quest.TargetLength).ToString("0.0") + " из " + quest.TargetLength.ToString("0.#")
-                             + "  ·  линьки " + Mathf.Min(molts, quest.TargetMolts) + " из " + quest.TargetMolts;
-                return;
-            }
+                return generation + "Повзрослеть:  длина " + Mathf.Min(length, quest.TargetLength).ToString("0.0") + " из " + quest.TargetLength.ToString("0.#")
+                       + "  ·  линьки " + Mathf.Min(molts, quest.TargetMolts) + " из " + quest.TargetMolts;
             if (quest.Stage == QuestStage.Guard)
-            {
-                _text.text = generation + "Охраняйте кладку:  яиц " + quest.Eggs + "  ·  вылупление через " + TimeFormat.Clock(secondsLeft);
-                return;
-            }
+                return generation + "Охраняйте кладку:  яиц " + quest.Eggs + "  ·  вылупление через " + TimeFormat.Clock(secondsLeft);
 
             switch (_game.NestStatus)
             {
-                case NestCheck.NeedNight:
-                    _text.text = "Отложить яйца в гнезде (светлый столб) — дождитесь ночи";
-                    break;
-                case NestCheck.NeedFood:
-                    _text.text = "Отложить яйца в гнезде — сначала наешьтесь";
-                    break;
-                default:
-                    _text.text = "Ползите к гнезду (светлый столб) и отложите яйца — E";
-                    break;
+                case NestCheck.NeedNight: return "Отложить яйца в гнезде (светлый столб) — дождитесь ночи";
+                case NestCheck.NeedFood: return "Отложить яйца в гнезде — сначала наешьтесь";
+                default: return "Ползите к гнезду (светлый столб) и отложите яйца — E";
             }
         }
     }

@@ -6,7 +6,8 @@ namespace WildSnake
     /// <summary>
     /// Орёл — дневной хищник. Прилетает с криком, кружит над змеёй (по земле скользит его тень),
     /// затем пикирует. Спасают высокая трава (орёл теряет змею из виду и уходит) и бросок в последний
-    /// момент: точка удара догоняет змею, но не успевает за броском. В меню орёл лишь кружит для красоты.
+    /// момент: точка удара догоняет змею, но не успевает за броском. «Мёртвая» змея орлу не нужна — он улетает,
+    /// если змея замерла кверху брюхом до последней четверти пике. В меню орёл лишь кружит для красоты.
     /// </summary>
     public class EagleHunter : MonoBehaviour
     {
@@ -213,7 +214,7 @@ namespace WildSnake
                 return;
             }
 
-            if (_target.IsHidden || _target.UnderCanopy)
+            if (_target.IsHidden || _target.UnderCanopy || _target.IsPlayingDead)
             {
                 // Змея в траве или под кронами: орёл покружит ещё немного и улетит ни с чем.
                 _searchLeft -= dt;
@@ -239,7 +240,7 @@ namespace WildSnake
 
             // Пока орёл высоко, трава ещё спасает — он теряет цель и выходит из пике.
             float t = Mathf.Clamp01(_phaseTime / _diveTime);
-            if ((_target.IsHidden || _target.UnderCanopy) && t < 0.75f)
+            if ((_target.IsHidden || _target.UnderCanopy || _target.IsPlayingDead) && t < 0.75f)
             {
                 Missed?.Invoke();
                 SetPhase(Phase.Climbing);

@@ -395,6 +395,62 @@ namespace WildSnake
         [Tooltip("Здоровье змеи-соперницы")]
         [SerializeField, Min(1f)] private float _rivalMaxHealth = 60f;
 
+        [Tooltip("Прибавка к здоровью соперницы за каждую клетку длины сверх стартовой: длинная — крепче")]
+        [SerializeField, Min(0f)] private float _rivalHealthPerCell = 5f;
+
+        [Tooltip("Какую долю длины соперница сохраняет, вернувшись после поражения")]
+        [SerializeField, Range(0f, 1f)] private float _rivalLengthKeep = 0.75f;
+
+        [Tooltip("Сколько секунд соперница держит обиду (укус, украденная добыча) и охотится на игрока")]
+        [SerializeField, Min(0f)] private float _rivalGrudgeTime = 30f;
+
+        [Tooltip("Сколько секунд соперница держится подальше, если её отогнали шипением")]
+        [SerializeField, Min(0f)] private float _rivalYieldTime = 8f;
+
+        [Tooltip("С какого расстояния соперница отбивает душимую добычу броском, клеток")]
+        [SerializeField, Min(0.3f)] private float _rivalStealRange = 1.4f;
+
+        [Tooltip("Добыча считается «отбитой у соперницы», если та охотилась на неё и была не дальше, клеток")]
+        [SerializeField, Min(1f)] private float _stealGoalRange = 7f;
+
+        [Tooltip("Доля линьки за победу над соперницей")]
+        [SerializeField, Range(0f, 1f)] private float _rivalDefeatMoltReward = 0.5f;
+
+        [Header("Состязание и трофей дня")]
+        [Tooltip("Доля линьки за победу в дневном состязании с соперницей")]
+        [SerializeField, Range(0f, 1f)] private float _contestMoltReward = 0.5f;
+
+        [Tooltip("На сколько клеток вырастает соперница, выиграв состязание или трофей")]
+        [SerializeField, Min(0f)] private float _rivalWinGrowth = 1.5f;
+
+        [Tooltip("В какую долю дня появляется трофей дня")]
+        [SerializeField, Range(0f, 1f)] private float _trophyDayPoint = 0.2f;
+
+        [Tooltip("Доля линьки за трофей дня (плюс полная сытость)")]
+        [SerializeField, Range(0f, 1f)] private float _trophyMoltReward = 0.75f;
+
+        [Header("Шипение и «мёртвая змея»")]
+        [Tooltip("Цена шипения в выносливости")]
+        [SerializeField, Min(0f)] private float _hissStaminaCost = 18f;
+
+        [Tooltip("Пауза между шипениями, сек")]
+        [SerializeField, Min(0.1f)] private float _hissCooldown = 5f;
+
+        [Tooltip("Сколько длится шипение (змея привстаёт), сек")]
+        [SerializeField, Min(0.1f)] private float _hissDuration = 0.8f;
+
+        [Tooltip("Радиус шипения, клеток")]
+        [SerializeField, Min(1f)] private float _hissRadius = 5f;
+
+        [Tooltip("На сколько секунд шипение заставляет лису отступить")]
+        [SerializeField, Min(0f)] private float _foxHissFlinch = 3f;
+
+        [Tooltip("Расход выносливости, пока змея притворяется мёртвой, в секунду")]
+        [SerializeField, Min(0f)] private float _playDeadStaminaDrain = 9f;
+
+        [Tooltip("Сколько секунд нужно пролежать «мёртвой», чтобы лиса потеряла интерес")]
+        [SerializeField, Min(0f)] private float _playDeadFoxTime = 1.5f;
+
         public float SneakSpeed => _sneakSpeed;
         public float WalkSpeed => _walkSpeed;
         public float SprintSpeed => _sprintSpeed;
@@ -538,6 +594,24 @@ namespace WildSnake
 
         public float RivalRespawnDelay => _rivalRespawnDelay;
         public float RivalMaxHealth => _rivalMaxHealth;
+        public float RivalHealthPerCell => _rivalHealthPerCell;
+        public float RivalLengthKeep => _rivalLengthKeep;
+        public float RivalGrudgeTime => _rivalGrudgeTime;
+        public float RivalYieldTime => _rivalYieldTime;
+        public float RivalStealRange => _rivalStealRange;
+        public float StealGoalRange => _stealGoalRange;
+        public float RivalDefeatMoltReward => _rivalDefeatMoltReward;
+        public float ContestMoltReward => _contestMoltReward;
+        public float RivalWinGrowth => _rivalWinGrowth;
+        public float TrophyDayPoint => _trophyDayPoint;
+        public float TrophyMoltReward => _trophyMoltReward;
+        public float HissStaminaCost => _hissStaminaCost;
+        public float HissCooldown => _hissCooldown;
+        public float HissDuration => _hissDuration;
+        public float HissRadius => _hissRadius;
+        public float FoxHissFlinch => _foxHissFlinch;
+        public float PlayDeadStaminaDrain => _playDeadStaminaDrain;
+        public float PlayDeadFoxTime => _playDeadFoxTime;
 
         /// <summary>Скорость темпа, клеток в секунду.</summary>
         public float PaceSpeed(SnakePace pace)

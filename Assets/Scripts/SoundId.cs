@@ -20,6 +20,7 @@ namespace WildSnake
         FoxYip = 14,
         Goal = 15,
         Buzz = 16,
-        Splash = 17
+        Splash = 17,
+        Hiss = 18
     }
 }

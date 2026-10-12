@@ -134,6 +134,7 @@ namespace WildSnake
             _game.WaspsSwarmed += OnWaspsSwarmed;
             _game.FoxStungByWasps += OnFoxStungByWasps;
             _game.HedgehogSplashed += OnHedgehogSplashed;
+            _game.News += OnNews;
             _eagle.Missed += OnEagleMissed;
             _dayNight.DayStarted += OnDayStarted;
             _dayNight.NightStarted += OnNightStarted;
@@ -175,6 +176,7 @@ namespace WildSnake
             _game.WaspsSwarmed -= OnWaspsSwarmed;
             _game.FoxStungByWasps -= OnFoxStungByWasps;
             _game.HedgehogSplashed -= OnHedgehogSplashed;
+            _game.News -= OnNews;
             _game.BirdScared -= OnBirdScared;
             _eagle.Missed -= OnEagleMissed;
             _dayNight.DayStarted -= OnDayStarted;
@@ -332,6 +334,33 @@ namespace WildSnake
         }
 
         private bool _clutchJustLost;
+
+        private void OnNews(GameNews news)
+        {
+            switch (news)
+            {
+                case GameNews.RivalDefeated: ShowBanner("СОПЕРНИЦА ПОВЕРЖЕНА · ОНА ЕЩЁ ВЕРНЁТСЯ"); break;
+                case GameNews.RivalReturned: ShowBanner("СОПЕРНИЦА ВЕРНУЛАСЬ"); break;
+                case GameNews.StealStarted: ShowBanner("СОПЕРНИЦА ИДЁТ ОТБИВАТЬ ДОБЫЧУ · Q — ШИПЕТЬ"); break;
+                case GameNews.RivalStole: ShowBanner("СОПЕРНИЦА ОТБИЛА ДОБЫЧУ"); break;
+                case GameNews.RivalYielded: ShowBanner("СОПЕРНИЦА ОТСТУПИЛА"); break;
+                case GameNews.RivalAngered: ShowBanner("СОПЕРНИЦА РАЗОЗЛИЛАСЬ И ОХОТИТСЯ НА ВАС"); break;
+                case GameNews.PreyStolen: ShowBanner("ДОБЫЧА ОТБИТА У СОПЕРНИЦЫ"); break;
+                case GameNews.TrophyAppeared: ShowBanner("ТРОФЕЙ ДНЯ · ЗОЛОТАЯ МЕТКА НА КАРТЕ · СОПЕРНИЦА ТОЖЕ ЕГО ИЩЕТ"); break;
+                case GameNews.TrophyPlayer: ShowBanner("ТРОФЕЙ ДНЯ ВАШ · СЫТОСТЬ И ШАГ К ЛИНЬКЕ"); break;
+                case GameNews.TrophyRival: ShowBanner("СОПЕРНИЦА ПЕРЕХВАТИЛА ТРОФЕЙ"); break;
+                case GameNews.TrophyLost: ShowBanner("ТРОФЕЙ ДНЯ УШЁЛ"); break;
+                case GameNews.ContestWon:
+                    ShowBanner("ВЫ ПЕРЕОХОТИЛИ СОПЕРНИЦУ " + _game.ContestPlayer + " : " + _game.ContestRival + " · ШАГ К ЛИНЬКЕ");
+                    break;
+                case GameNews.ContestLost:
+                    ShowBanner("СОПЕРНИЦА ОХОТИЛАСЬ ЛУЧШЕ " + _game.ContestRival + " : " + _game.ContestPlayer + " · ОНА ОКРЕПЛА");
+                    break;
+                case GameNews.ContestTie: ShowBanner("НИЧЬЯ В ОХОТЕ С СОПЕРНИЦЕЙ"); break;
+                case GameNews.PredatorFooled: ShowBanner("ХИЩНИК ПОВЕРИЛ — ВЫ «МЕРТВЫ»"); break;
+                case GameNews.FoxHissed: ShowBanner("ЛИСА ОТПРЯНУЛА"); break;
+            }
+        }
 
         private void OnClutchRaided(int left)
         {

@@ -20,6 +20,12 @@ namespace WildSnake
         /// <summary>Поймать рыбу броском.</summary>
         CatchFish = 7,
         /// <summary>Съесть яйца из птичьих гнёзд.</summary>
-        EatEggs = 8
+        EatEggs = 8,
+        /// <summary>Укусить соперницу броском.</summary>
+        BiteRival = 9,
+        /// <summary>Поймать добычу, за которой охотилась соперница, у неё под носом.</summary>
+        StealFromRival = 10,
+        /// <summary>Обмануть орла или лису, притворившись мёртвой.</summary>
+        PlayDead = 11
     }
 }

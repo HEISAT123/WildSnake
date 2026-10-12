@@ -10,6 +10,7 @@ namespace WildSnake
     /// Бросок змеи в морду отпугивает лису, если змея ещё полна сил (решает GameManager через TryScare).
     /// Пока змея охраняет кладку (Raiding), лиса приходит чаще и идёт прямо к гнезду таскать яйца.
     /// В полом бревне змеи лиса не видит и не достаёт, в ежевику не лезет; ужаленная осами — убегает.
+    /// Шипение заставляет её на несколько секунд отступить; «мёртвую» змею лиса обнюхивает и теряет к ней интерес.
     /// Логика в данных, Transform только показывает результат.
     /// </summary>
     public class FoxHunter : MonoBehaviour
@@ -87,6 +88,9 @@ namespace WildSnake
         /// <summary>Лиса утащила яйцо из кладки змеи.</summary>
         public event Action Raided;
 
+        /// <summary>Лиса обнюхала «мёртвую» змею и потеряла к ней интерес.</summary>
+        public event Action LostInterest;
+
         /// <summary>Лиса идёт за яйцами к RaidPoint (змея охраняет кладку).</summary>
         public bool Raiding { get; set; }
 
@@ -124,6 +128,7 @@ namespace WildSnake
         private float _speed;
         private float _animTime;
         private float _raidTimer;
+        private float _flinchTimer;
 
         private void Awake()
         {
@@ -159,6 +164,21 @@ namespace WildSnake
             }
             BeginRetreat();
             Scared?.Invoke();
+            return true;
+        }
+
+        /// <summary>
+        /// Змея зашипела рядом: лиса отпрыгивает и несколько секунд держится поодаль (и от кладки тоже).
+        /// Возвращает true, если лиса была в радиусе.
+        /// </summary>
+        public bool Flinch(Vector3 from, float radius, float seconds)
+        {
+            if (!IsActive || _phase == Phase.Retreat) return false;
+            Vector3 d = _pos - from;
+            d.y = 0f;
+            if (d.sqrMagnitude > radius * radius) return false;
+            _flinchTimer = seconds;
+            _biteTimer = Mathf.Max(_biteTimer, seconds);
             return true;
         }
 
@@ -213,6 +233,7 @@ namespace WildSnake
             _stayLeft = _stayTime;
             _biteTimer = 0f;
             _raidTimer = _config.FoxRaidInterval;
+            _flinchTimer = 0f;
             _trailCursor = Mathf.Max(0, _trailCount - TRAIL_SIZE);
             _phase = Phase.Prowl;
             SetVisible(true);
@@ -229,6 +250,7 @@ namespace WildSnake
                 BeginRetreat();
                 return;
             }
+            if (TickFlinch(dt)) return;
             if (CanSeeTarget())
             {
                 _phase = Phase.Chase;
@@ -272,6 +294,15 @@ namespace WildSnake
                 return;
             }
 
+            if (TickFlinch(dt)) return;
+            // Обнюхала «мёртвую» змею — падаль ей не нужна: уходит (или возвращается к кладке).
+            if (TargetPlaysDead())
+            {
+                LostInterest?.Invoke();
+                if (Raiding) _phase = Phase.Prowl;
+                else BeginRetreat();
+                return;
+            }
             if (CanSeeTarget()) _lostTimer = 0f;
             else
             {
@@ -294,7 +325,7 @@ namespace WildSnake
 
             // В колючую ежевику лиса морду не суёт.
             bool reachable = !_grid.IsWaterAt(head) && !_grid.IsHollowAt(head) && !_grid.IsBrambleAt(head);
-            if (reachable && _biteTimer <= 0f && d.magnitude <= _biteRange * cs && _target.HeightAboveGround < 0.6f * cs)
+            if (reachable && !_target.IsPlayingDead && _biteTimer <= 0f && d.magnitude <= _biteRange * cs && _target.HeightAboveGround < 0.6f * cs)
             {
                 _biteTimer = _biteCooldown;
                 Bit?.Invoke(head);
@@ -310,6 +341,24 @@ namespace WildSnake
             _phase = Phase.Away;
             _timer = UnityEngine.Random.Range(_config.FoxIntervalMin, _config.FoxIntervalMax);
             SetVisible(false);
+        }
+
+        /// <summary>Отступает от змеи после шипения. Возвращает true, пока отступает.</summary>
+        private bool TickFlinch(float dt)
+        {
+            if (_flinchTimer <= 0f) return false;
+            _flinchTimer -= dt;
+            if (!TargetPresent()) return false;
+            Vector3 away = _pos - _target.HeadPosition;
+            away.y = 0f;
+            if (away.sqrMagnitude < 1e-4f) away = Vector3.forward;
+            MoveTowards(_pos + away.normalized * _grid.CellSize, _prowlSpeed * 1.4f, dt);
+            return true;
+        }
+
+        private bool TargetPlaysDead()
+        {
+            return TargetPresent() && _target.IsPlayingDead && _target.PlayDeadTime >= _config.PlayDeadFoxTime;
         }
 
         private void BeginRetreat()
@@ -328,7 +377,7 @@ namespace WildSnake
         /// <summary>Видит ли змею: трава и засада прячут, в воде змея видна, но недосягаема.</summary>
         private bool CanSeeTarget()
         {
-            if (!TargetPresent() || _grid.IsHollowAt(_target.HeadPosition)) return false;
+            if (!TargetPresent() || _grid.IsHollowAt(_target.HeadPosition) || TargetPlaysDead()) return false;
             float r = _sightRadius * _grid.CellSize;
             if (_target.IsHidden) r *= 0.45f;
             r *= _target.Ambush.AwarenessMultiplier(_target.IsHidden);

@@ -10,7 +10,7 @@ namespace WildSnake
     public class DailyGoals
     {
         public const int MAX_GOALS = 2;
-        public const int TYPE_COUNT = 9;
+        public const int TYPE_COUNT = 12;
 
         private readonly DailyGoal[] _goals = new DailyGoal[MAX_GOALS];
         private readonly int[] _pool = new int[TYPE_COUNT];
@@ -37,15 +37,20 @@ namespace WildSnake
             Count = 0;
         }
 
-        /// <summary>Новые цели на сутки day: в первый день одна (чтобы освоиться), дальше две разные.</summary>
-        public void Roll(int day, Random rng)
+        /// <summary>
+        /// Новые цели на сутки day: в первый день одна (чтобы освоиться), дальше две разные.
+        /// Без соперницы цели про неё не выпадают.
+        /// </summary>
+        public void Roll(int day, Random rng, bool rivalOn = true)
         {
             Day = day;
-            for (int i = 0; i < TYPE_COUNT; i++) _pool[i] = i;
+            int size = 0;
+            for (int i = 0; i < TYPE_COUNT; i++)
+                if (rivalOn || !NeedsRival((GoalType)i)) _pool[size++] = i;
             Count = day <= 1 ? 1 : MAX_GOALS;
             for (int i = 0; i < Count; i++)
             {
-                int j = i + rng.Next(TYPE_COUNT - i);
+                int j = i + rng.Next(size - i);
                 int tmp = _pool[i];
                 _pool[i] = _pool[j];
                 _pool[j] = tmp;
@@ -96,11 +101,17 @@ namespace WildSnake
             }
         }
 
-        /// <summary>Охотничьи цели дают очко линьки, остальные — полное восстановление.</summary>
+        /// <summary>Цель про соперницу: без неё невыполнима.</summary>
+        public static bool NeedsRival(GoalType type)
+        {
+            return type == GoalType.BiteRival || type == GoalType.StealFromRival;
+        }
+
+        /// <summary>Охотничьи цели и стычки с соперницей дают очко линьки, остальные — полное восстановление.</summary>
         public static bool GivesMolt(GoalType type)
         {
             return type == GoalType.AmbushBird || type == GoalType.ConstrictRabbit || type == GoalType.CatchMice
-                   || type == GoalType.CatchFish;
+                   || type == GoalType.CatchFish || type == GoalType.BiteRival || type == GoalType.StealFromRival;
         }
     }
 }

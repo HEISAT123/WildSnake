@@ -90,6 +90,9 @@ namespace WildSnake
         public PreyKind Kind => _kind;
         public bool IsActive { get; private set; }
 
+        /// <summary>Трофей дня: над ним горит метка, за ним охотится и соперница.</summary>
+        public bool IsTrophy { get; private set; }
+
         /// <summary>Центр животного в мире (с учётом прыжка и полёта).</summary>
         public Vector3 Position => _pos + Vector3.up * _height;
         public float HeightAboveGround => _height;
@@ -188,6 +191,7 @@ namespace WildSnake
             _rollAngle = 0f;
             _animTime = Random.value * 10f;
             SetMode(Mode.Idle, Random.Range(0.4f, 2f));
+            IsTrophy = false;
             SetScent(false);
             gameObject.SetActive(true);
             ApplyVisual();
@@ -196,13 +200,23 @@ namespace WildSnake
         public void Despawn()
         {
             IsActive = false;
+            IsTrophy = false;
             SetScent(false);
             gameObject.SetActive(false);
         }
 
+        /// <summary>Метка над добычей: подсвечена нюхом или горит постоянно у трофея.</summary>
         public void SetScent(bool on)
         {
+            on |= IsTrophy;
             if (_scentMark != null && _scentMark.activeSelf != on) _scentMark.SetActive(on);
+        }
+
+        /// <summary>Сделать добычу трофеем дня (или снять с неё эту роль).</summary>
+        public void SetTrophy(bool on)
+        {
+            IsTrophy = on;
+            SetScent(false);
         }
 
         /// <summary>Схватить: животное перестаёт бегать, его положение задаёт змея (HoldAt).</summary>
