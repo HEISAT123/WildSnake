@@ -11,10 +11,11 @@ namespace WildSnake
     {
         public static readonly string[] Titles =
         {
-            "ДВИЖЕНИЕ", "ОХОТА", "ЗАСАДА", "КРУПНАЯ ДОБЫЧА", "ЁЖ", "ХИЩНИКИ", "ОСИНОЕ ГНЕЗДО", "ТЕПЛО И НОРЫ", "ПРОДОЛЖИТЬ РОД"
+            "ДВИЖЕНИЕ", "ОХОТА", "ЗАСАДА", "КРУПНАЯ ДОБЫЧА", "ЁЖ", "ХИЩНИКИ", "ОСИНОЕ ГНЕЗДО", "ТЕПЛО И НОРЫ", "СОПЕРНИЦА",
+            "ПРОДОЛЖИТЬ РОД"
         };
 
-        public static readonly float[] Durations = { 10f, 12f, 11f, 10f, 15f, 13f, 13f, 12f, 13f };
+        public static readonly float[] Durations = { 10f, 12f, 11f, 10f, 15f, 20f, 13f, 12f, 14f, 13f };
 
         private static readonly float[][] CueTimes =
         {
@@ -23,9 +24,10 @@ namespace WildSnake
             new[] { 0f, 2.5f, 4.5f, 8.1f },
             new[] { 0f, 3.2f, 7.6f },
             new[] { 0f, 3.5f, 9f, 11.5f },
-            new[] { 0f, 3f, 6.5f, 9.2f },
+            new[] { 0f, 3f, 6.5f, 9.2f, 13f, 16.4f },
             new[] { 0f, 2.4f, 6.5f, 10.5f },
             new[] { 0f, 2.2f, 4.5f, 8.5f },
+            new[] { 0f, 2.3f, 4.5f, 10f },
             new[] { 0f, 4f, 9f, 11.8f }
         };
 
@@ -65,10 +67,12 @@ namespace WildSnake
             },
             new[]
             {
-                "Днём кружит орёл: метка у края экрана и тень на земле.",
+                "Днём кружит орёл: по земле скользит тень, а когда он рядом — метка на экране.",
                 "Уходите в траву, под кроны или в полое бревно — орёл промахнётся.",
                 "Ночью приходит лиса и идёт по вашему следу.",
-                "В ежевику и воду лиса не полезет, а бросок в морду отпугнёт её, пока вы здоровы."
+                "В ежевику и воду лиса не полезет, а бросок в морду отпугнёт её, пока вы здоровы.",
+                "Q — шипение: лиса отпрянет и на время отступит — и от вас, и от кладки.",
+                "X (держать) — притвориться мёртвой: лиса и орёл теряют интерес. Но силы тают."
             },
             new[]
             {
@@ -83,6 +87,13 @@ namespace WildSnake
                 "Грейтесь на солнечных камнях — днём это быстрее всего.",
                 "Ночью греет тёплый ключ — пятно парящей земли.",
                 "E у норы — переждать ночь и сохраниться. Ночь в норе идёт быстрее."
+            },
+            new[]
+            {
+                "Соперница — живой враг: днём идёт счёт, кто больше добыл. Итог — на закате.",
+                "Трофей дня — золотая метка. Его ищете вы обе: успейте первой.",
+                "Пока вы душите добычу, соперница попробует её отбить — шипите (Q).",
+                "Укусите её — разозлится и начнёт охоту на вас. Победите — шаг к линьке."
             },
             new[]
             {
@@ -133,6 +144,10 @@ namespace WildSnake
         private static readonly Color Bone = new Color(0.95f, 0.93f, 0.88f);
         private static readonly Color Frost = new Color(0.55f, 0.8f, 1f, 0.55f);
         private static readonly Color WarmthC = new Color(1f, 0.6f, 0.2f, 0.45f);
+        private static readonly Color RivalC = new Color(0.86f, 0.52f, 0.2f);
+        private static readonly Color RivalDark = new Color(0.5f, 0.27f, 0.1f);
+        private static readonly Color BellyC = new Color(0.93f, 0.9f, 0.7f);
+        private static readonly Color GoldC = new Color(1f, 0.78f, 0.15f);
 
         // ---------------- Маршруты змеи ----------------
         private static readonly Vector2[] PathAcross = { new Vector2(-6f, 4.5f), new Vector2(22f, 4.5f) };
@@ -142,6 +157,12 @@ namespace WildSnake
         private static readonly Vector2[] PathFox = { new Vector2(-4f, 6f), new Vector2(3f, 6f), new Vector2(6f, 4.5f), new Vector2(10f, 4f) };
         private static readonly Vector2[] PathWasp = { new Vector2(-4f, 5f), new Vector2(5f, 5f), new Vector2(9f, 4.3f), new Vector2(12.4f, 2.6f), new Vector2(16f, 2f) };
         private static readonly Vector2[] PathLure = { new Vector2(-4f, 6.5f), new Vector2(4f, 6.5f), new Vector2(7.5f, 5.2f), new Vector2(10f, 3.2f), new Vector2(12.6f, 2.4f), new Vector2(16f, 2f) };
+        private static readonly Vector2[] PathTrophyPlayer = { new Vector2(-6f, 4.3f), new Vector2(22f, 4.3f) };
+        private static readonly Vector2[] PathTrophyRival = { new Vector2(24f, 4.9f), new Vector2(-4f, 4.9f) };
+        private static readonly Vector2[] PathThief = { new Vector2(22f, 5.4f), new Vector2(-4f, 5.4f) };
+        private static readonly Vector2[] PathThiefAway = { new Vector2(10.6f, 5.4f), new Vector2(24f, 6.8f) };
+        private static readonly Vector2[] PathRivalCross = { new Vector2(-2f, 5.5f), new Vector2(24f, 5.5f) };
+        private static readonly Vector2[] PathBiteUp = { new Vector2(8f, -2f), new Vector2(8f, 10f) };
         private static readonly Vector2[] PathNest = { new Vector2(-4f, 3f), new Vector2(4f, 3.5f), new Vector2(7f, 5.6f), new Vector2(8.2f, 6f), new Vector2(12f, 6.4f) };
 
         private const int MAX_SEGMENTS = 32;
@@ -170,6 +191,7 @@ namespace WildSnake
                 case 5: Predators(c, t); break;
                 case 6: Wasps(c, t); break;
                 case 7: Warmth(c, t); break;
+                case 8: Rival(c, t); break;
                 default: Lineage(c, t); break;
             }
         }
@@ -369,6 +391,11 @@ namespace WildSnake
 
         private static void Predators(TutorialCanvas c, float t)
         {
+            if (t >= 13f)
+            {
+                Defence(c, t);
+                return;
+            }
             if (t < 6.5f)
             {
                 Background(c, 0f);
@@ -412,6 +439,131 @@ namespace WildSnake
             if (t > 9.4f && t < 11f) c.Label(fox + new Vector2(0f, 0.9f), "?", Bone);
             if (t > 8.8f) c.Label(bramble + new Vector2(0f, 2.7f), "ежевика", Venom);
             Cut(c, t, 6.5f);
+            Cut(c, t, 13f);
+        }
+
+        /// <summary>Защита: шипение отгоняет лису, а «мёртвую» змею она обнюхивает и бросает.</summary>
+        private static void Defence(TutorialCanvas c, float t)
+        {
+            float u = t - 13f;
+            Background(c, 1f);
+            FillPath(PathAcross, 12f, 20, 0.2f);
+            Vector2 head = Pts[0];
+            bool hiss = u >= 1.5f && u < 2.6f;
+            bool dead = u >= 3.4f;
+            // Лиса подходит, отпрыгивает от шипения, возвращается, обнюхивает «мёртвую» змею и уходит.
+            float x = 15f - 5.4f * Smooth(Seg(u, 0f, 1.5f)) + 3.2f * EaseOut(Seg(u, 1.7f, 2.4f))
+                      - 3.6f * Smooth(Seg(u, 3f, 4.2f)) + 9f * Smooth(Seg(u, 5.4f, 7f));
+            Vector2 fox = new Vector2(x, 4.6f + Mathf.Sin(u * 7f) * 0.06f * Seg(u, 4.2f, 5.4f));
+            float facing = u < 1.7f || (u >= 2.4f && u < 5.4f) ? 180f : 0f;
+            Snake(c, 20, 1f, t, false, !dead);
+            if (dead)
+            {
+                // Кверху брюхом: светлое брюхо вдоль тела и глаза-крестики.
+                for (int i = 1; i < 20; i += 2) c.Circle(Pts[i], Mathf.Lerp(0.12f, 0.04f, i / 19f), BellyC);
+                c.Ellipse(head, 0.32f, 0.22f, 0f, BellyC);
+                for (int k = -1; k <= 1; k += 2)
+                {
+                    Vector2 eye = head + new Vector2(0.1f, 0.12f * k);
+                    c.Line(eye + new Vector2(-0.06f, -0.06f), eye + new Vector2(0.06f, 0.06f), 0.03f, DarkC);
+                    c.Line(eye + new Vector2(-0.06f, 0.06f), eye + new Vector2(0.06f, -0.06f), 0.03f, DarkC);
+                }
+            }
+            if (hiss) HissRings(c, head, Seg(u, 1.5f, 2.6f));
+            Fox(c, fox, facing, t);
+            Night(c, 0.85f);
+            float stamina = 1f - 0.55f * Seg(u, 3.4f, 7f) - 0.15f * Seg(u, 1.5f, 1.7f);
+            Bar(c, 0.6f, 8.2f, 3f, stamina, Bone);
+            c.Label(new Vector2(2.1f, 8.62f), "выносливость", Bone);
+            c.Key(new Vector2(1.4f, 0.75f), "Q", hiss);
+            c.Key(new Vector2(2.5f, 0.75f), "X", dead && u < 5.6f);
+            if (hiss) c.Label(head + new Vector2(0.2f, 1f), "ш-ш-ш!", Venom);
+            if (u > 2f && u < 3f) c.Label(fox + new Vector2(0f, 1f), "отпрянула", Venom);
+            if (u > 4.2f && u < 5.4f) c.Label(fox + new Vector2(0f, 1f), "?", Bone);
+            if (u > 5.4f && u < 6.8f) c.Label(fox + new Vector2(0f, 1f), "потеряла интерес", Venom);
+            Cut(c, t, 13f);
+        }
+
+        /// <summary>Расходящиеся кольца шипения вокруг головы.</summary>
+        private static void HissRings(TutorialCanvas c, Vector2 head, float k)
+        {
+            for (int i = 0; i < 3; i++)
+            {
+                float r = 0.4f + (k * 1.6f + i * 0.45f) % 1.6f;
+                c.Ring(head, r, 0.05f, 1f, 0f, new Color(0.78f, 0.96f, 0.2f, 0.8f * (1f - r / 2f)));
+            }
+        }
+
+        private static void Rival(TutorialCanvas c, float t)
+        {
+            if (t < 4.5f)
+            {
+                // Гонка за трофеем: обе змеи ползут к золотой мыши, игрок успевает первой.
+                Background(c, 0f);
+                Vector2 trophy = new Vector2(9.3f, 4.6f);
+                bool caught = t >= 3.85f;
+                FillPath(PathTrophyRival, 9f + 0.95f * Mathf.Min(t, 3.85f), 20, 0.25f);
+                Snake(c, 20, 1f, t, false, true, RivalC, RivalDark);
+                float s = 11f + 0.9f * Mathf.Min(t, 3.6f) + Smooth(Seg(t, 3.6f, 3.85f)) * 1.1f;
+                FillPath(PathTrophyPlayer, s, 20, t >= 3.6f ? 0.1f : 0.25f);
+                if (!caught)
+                {
+                    c.Ring(trophy, 0.55f + Mathf.Sin(t * 5f) * 0.06f, 0.07f, 1f, 0f, GoldC);
+                    Mouse(c, trophy, 0f, t);
+                    c.Label(trophy + new Vector2(0f, 0.95f), "трофей дня", GoldC);
+                }
+                Snake(c, 20, 1f, t, false);
+                c.Label(new Vector2(8f, 8.4f), caught ? "охота:  вы 3 : 1 она" : "охота:  вы 2 : 1 она", Bone);
+                c.Key(new Vector2(1.6f, 0.75f), "ЛКМ", t >= 3.6f && t < 3.95f);
+                if (caught) c.Label(trophy + new Vector2(0f, 0.95f), "+ трофей", Venom);
+                Cut(c, t, 4.5f);
+                return;
+            }
+            if (t < 10f)
+            {
+                // Кража: игрок душит кролика, соперница ползёт отбить, шипение её прогоняет.
+                float u = t - 4.5f;
+                Background(c, 0f);
+                Vector2 rabbit = new Vector2(7f, 4.4f);
+                bool away = u >= 3f;
+                if (!away) FillPath(PathThief, 6f + 2f * Mathf.Min(u, 2.7f), 20, 0.25f);
+                else FillPath(PathThiefAway, 1f + 3.2f * (u - 3f), 20, 0.25f);
+                Vector2 rivalHead = Pts[0];
+                Snake(c, 20, 1f, t, false, true, RivalC, RivalDark);
+                FillAround(rabbit, 0.75f, 90f + u * 12f, 24);
+                Rabbit(c, rabbit + new Vector2(Mathf.Sin(t * 40f) * 0.06f, 0f), 180f);
+                Snake(c, 24, 1f, t, false);
+                c.Ring(rabbit, 1.35f, 0.08f, 1f, 90f, new Color(1f, 1f, 1f, 0.12f));
+                c.Ring(rabbit, 1.35f, 0.08f, Seg(u, 0f, 5.5f), 90f, Venom);
+                bool hiss = u >= 2.5f && u < 3.4f;
+                if (hiss) HissRings(c, Pts[0], Seg(u, 2.5f, 3.4f));
+                c.Key(new Vector2(1.4f, 0.75f), "F", true);
+                c.Key(new Vector2(2.5f, 0.75f), "Q", hiss);
+                if (u > 0.8f && u < 2.6f) c.Label(rivalHead + new Vector2(0f, 1f), "отбивает!", Ember);
+                if (u > 3.2f && u < 5f) c.Label(rivalHead + new Vector2(0f, 1f), "отступила", Venom);
+                Cut(c, t, 4.5f);
+                Cut(c, t, 10f);
+                return;
+            }
+            // Укус соперницы: она злится и разворачивается за вами.
+            float w = t - 10f;
+            Background(c, 0f);
+            FillPath(PathRivalCross, 8f + 1.5f * Mathf.Min(w, 1.45f), 20, 0.25f);
+            bool bitten = w >= 1.45f;
+            Vector2 rival = Pts[0];
+            Snake(c, 20, 1f, t, false, true, RivalC, RivalDark);
+            if (bitten) c.Ring(rival, 0.5f + Mathf.Sin(t * 9f) * 0.08f, 0.06f, 1f, 0f, Ember);
+            float sp = 4.6f + 1.2f * Mathf.Min(w, 1.2f) + Smooth(Seg(w, 1.2f, 1.45f)) * 1.2f - 1.4f * Seg(w, 1.6f, 3.5f);
+            FillPath(PathBiteUp, sp, 20, w >= 1.2f && w < 1.6f ? 0.1f : 0.2f);
+            Snake(c, 20, 1f, t, false);
+            c.Key(new Vector2(1.6f, 0.75f), "ЛКМ", w >= 1.2f && w < 1.6f);
+            if (bitten && w < 2.4f)
+            {
+                c.Label(rival + new Vector2(0f, 1f), "укус!", Venom);
+                Flash(c, Ember, 0.18f * (1f - Seg(w, 1.45f, 2f)));
+            }
+            if (w >= 2.4f) c.Label(rival + new Vector2(0f, 1f), "злится — охотится на вас", Ember);
+            Cut(c, t, 10f);
         }
 
         private static void Wasps(TutorialCanvas c, float t)
@@ -676,8 +828,14 @@ namespace WildSnake
 
         private static void Snake(TutorialCanvas c, int count, float alpha, float t, bool tongue, bool drawHead = true)
         {
+            Snake(c, count, alpha, t, tongue, drawHead, SnakeC, SnakeDark);
+        }
+
+        /// <summary>Змея своего цвета (соперница — рыжая).</summary>
+        private static void Snake(TutorialCanvas c, int count, float alpha, float t, bool tongue, bool drawHead, Color bodyColor, Color darkColor)
+        {
             if (alpha <= 0.01f || count < 2) return;
-            Color body = A(SnakeC, alpha), dark = A(SnakeDark, alpha);
+            Color body = A(bodyColor, alpha), dark = A(darkColor, alpha);
             for (int i = count - 1; i >= 1; i--)
             {
                 float k = (float)i / (count - 1);

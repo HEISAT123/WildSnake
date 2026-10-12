@@ -222,6 +222,9 @@ namespace WildSnake
         /// <summary>Добыча соперницы за сегодняшний день (состязание).</summary>
         public int ContestRival => _contestRival;
 
+        /// <summary>Соперница идёт отбивать добычу, которую душит игрок.</summary>
+        public bool RivalStealing => _constriction.IsActive && _rivalAI != null && _rivalAI.StealTarget != null;
+
         /// <summary>Длина змеи игрока, клеток.</summary>
         public float SnakeLength => _snake.BodyLengthCells;
 

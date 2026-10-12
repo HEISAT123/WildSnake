@@ -713,7 +713,7 @@ internal static class UIBuilder
         }
 
         float infoY = videoTop - videoH - 32f;
-        p.Index = Label(screen, "ChapterIndex", "01 / 09", 20, Venom, TextAnchor.MiddleLeft, true);
+        p.Index = Label(screen, "ChapterIndex", "01 / 10", 20, Venom, TextAnchor.MiddleLeft, true);
         TopLeft(p.Index, LEFT, infoY, 110f, 34f);
         p.Title = Label(screen, "ChapterTitle", "ДВИЖЕНИЕ", 28, Bone, TextAnchor.MiddleLeft, true);
         TopLeft(p.Title, LEFT + 110f, infoY, 600f, 34f);
@@ -730,7 +730,7 @@ internal static class UIBuilder
         for (int i = 0; i < chapters; i++)
         {
             RectTransform row = Rect("Chapter_" + i, screen);
-            TopLeft(row, right, videoTop - 36f - i * 56f, 520f, 52f);
+            TopLeft(row, right, videoTop - 36f - i * 50f, 520f, 48f);
             Img(row, new Color(0f, 0f, 0f, 0f), null).raycastTarget = true;
             var button = row.gameObject.AddComponent<Button>();
             button.transition = Selectable.Transition.None;
@@ -738,12 +738,12 @@ internal static class UIBuilder
             Text label = Label(row, "Label", "<color=#757A7A>" + (i + 1).ToString("00") + "</color>    " + TutorialFilm.Titles[i], 26, Ash,
                 TextAnchor.MiddleLeft, true);
             Stretch(label.rectTransform);
-            TopLeft(Line(row, Hair), 0f, -51f, 520f, 1f);
+            TopLeft(Line(row, Hair), 0f, -47f, 520f, 1f);
             p.ChapterButtons[i] = button;
             p.ChapterLabels[i] = label;
         }
 
-        float controlsY = videoTop - 36f - chapters * 56f - 24f;
+        float controlsY = videoTop - 36f - chapters * 50f - 24f;
         p.Prev = LinkButton(screen, "Prev", "‹  НАЗАД", 22, out _);
         TopLeft(p.Prev, right, controlsY, 130f, 56f);
         p.Play = PrimaryButton(screen, "Play", "ПАУЗА");

@@ -43,6 +43,10 @@ namespace WildSnake
             Bramble,
             HotSpring,
             MouseColony,
+            Hiss,
+            PlayDead,
+            DefendPrey,
+            Trophy,
             Count
         }
 
@@ -51,7 +55,7 @@ namespace WildSnake
         private static readonly string[] Keys =
         {
             "F", "E", "ЛКМ", "ЛКМ", "ПКМ", "ЛКМ", "E", "", "SPACE", "CTRL", "WASD", "", "E", "", "E", "", "", "", "", "ЛКМ", "", "",
-            "ЛКМ", "", "", "CTRL", "", "", ""
+            "ЛКМ", "", "", "CTRL", "", "", "", "Q", "X", "Q", "TAB"
         };
 
         private static readonly string[] Texts =
@@ -84,11 +88,15 @@ namespace WildSnake
             "осиное гнездо — крадитесь мимо",
             "ежевика — не спешите, колючки",
             "тёплый ключ — греет и ночью",
-            "мышиный городок — мыши ныряют в норки, ждите в засаде"
+            "мышиный городок — мыши ныряют в норки, ждите в засаде",
+            "шипение — лиса отпрянет",
+            "держать — притвориться мёртвой, орёл бросит охоту",
+            "соперница отбивает добычу — шипите!",
+            "трофей дня — золотая метка на карте, успейте раньше соперницы"
         };
 
         // Сколько раз показывать каждую подсказку.
-        private static readonly int[] Limits = { 6, 4, 4, 4, 4, 3, 4, 3, 3, 3, 3, 3, 3, 3, 99, 99, 99, 4, 3, 4, 3, 99, 4, 4, 4, 4, 3, 3, 3 };
+        private static readonly int[] Limits = { 6, 4, 4, 4, 4, 3, 4, 3, 3, 3, 3, 3, 3, 3, 99, 99, 99, 4, 3, 4, 3, 99, 4, 4, 4, 4, 3, 3, 3, 4, 4, 4, 2 };
 
         [Header("Источники")]
         [SerializeField] private GameManager _game;
@@ -185,7 +193,12 @@ namespace WildSnake
         private Hint Choose()
         {
             if (!_snake.IsAlive) return Hint.None;
-            if (_game.Constriction.IsActive) return Allow(Hint.Constrict);
+            if (_game.Constriction.IsActive)
+            {
+                // Соперница пришла за добычей — важнее, чем напоминание держать F.
+                if (_game.RivalStealing && Allow(Hint.DefendPrey) != Hint.None) return Hint.DefendPrey;
+                return Allow(Hint.Constrict);
+            }
             if (_snake.InBurrow) return Allow(Hint.BurrowExit);
             if (_game.NearNest && _game.Quest.Stage == QuestStage.Nest)
             {
@@ -245,8 +258,17 @@ namespace WildSnake
                 d.y = 0f;
                 if (d.magnitude < 4f * cs && Allow(Hint.ScareFox) != Hint.None) return Hint.ScareFox;
             }
+            if (_fox.IsChasing && _snake.HissReady01 >= 1f)
+            {
+                Vector3 d = _fox.Position - head;
+                d.y = 0f;
+                if (d.magnitude < _config.HissRadius * cs && Allow(Hint.Hiss) != Hint.None) return Hint.Hiss;
+            }
 
             if (_game.NearbyBurrow >= 0 && Allow(Hint.BurrowEnter) != Hint.None) return Hint.BurrowEnter;
+            // Пикирует, а спрятаться негде — последний шанс: замереть «мёртвой».
+            if (_eagle.IsDiving && !_snake.IsHidden && !_snake.UnderCanopy && !_snake.IsPlayingDead
+                && Allow(Hint.PlayDead) != Hint.None) return Hint.PlayDead;
             if (_eagle.IsThreatening && !_snake.IsHidden && Allow(Hint.Eagle) != Hint.None) return Hint.Eagle;
             if (_grid.IsHollowAt(head) && Allow(Hint.Hollow) != Hint.None) return Hint.Hollow;
             if (!_wasps.IsSwarming && _wasps.NearestAnger(head, out float waspDist) >= 0f && waspDist < _config.WaspAlertRadius * cs
@@ -261,6 +283,7 @@ namespace WildSnake
                 && preyDist <= _config.GetPrey(prey.Kind).AwareRadius * 1.6f && Allow(Hint.Sneak) != Hint.None) return Hint.Sneak;
 
             if (!_movedThisRun && Allow(Hint.Move) != Hint.None) return Hint.Move;
+            if (_wildlife.Trophy != null && Allow(Hint.Trophy) != Hint.None) return Hint.Trophy;
             if (_snake.Temperature.IsCold && !_wildlife.IsNight && Allow(Hint.Cold) != Hint.None) return Hint.Cold;
             if (_game.Survival.Satiety01 < 0.5f && !hasPrey && _scent.Charge01 >= 1f && Allow(Hint.Smell) != Hint.None) return Hint.Smell;
             if (_snake.IsHidden && !_snake.IsMoving && hasPrey && preyDist < 7f && !_snake.Ambush.IsLuring
