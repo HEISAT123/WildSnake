@@ -23,7 +23,7 @@
 
 ## Мир
 - `GridManager` (180x180, клетка 1 м): рельеф `TerrainShape` (холмы, кольцо гор), препятствия по сиду, рощи (`IsForest`/`IsCanopy`/`IsBirch`),
-  укрытия (`IsCover`, `IsReed`), вода (`IsPondWater`, `IsRiver`, мосты `IsBridge`), болото `IsSwamp`, гряда `IsRidge`, полые брёвна `IsHollow`,
+  укрытия (`IsCover`, `IsReed`), вода (`IsPondWater`, `IsRiver`, мосты `IsBridge`), болото `IsSwamp`, гряда `IsRidge`, полые брёвна `IsHollow` (вход только с торцов: `CollideHollowLogWalls`, для A* — `CrossesHollowWall`; лисе не пролезть),
   птичьи гнёзда, солнечные камни 2x2, норы, гнездо; ежевика `IsBramble` (укрытие, замедляет, колет на бегу, лиса не кусает),
   тёплые ключи `IsHotSpring` (`TemperatureSpot.HotSpring` — греет и ночью), мышиные городки (норки: `NearestColonyHole`,
   `TryGetColonyCell`), осиные гнёзда на пнях. Генерируется в `Awake` (и из редактора).
@@ -58,7 +58,7 @@
   `MapIcons` с `_follow` — мини-карта HUD (окно вокруг змеи, повёрнуто по камере, подложку берёт у карты журнала).
 - Меню: `MenuList` (списки), `SettingsPanel`/`LeaderboardPanel`/`GuidePanel` закрываются «Готово» и Esc (`GameInput.ConsumePause`,
   `DefaultExecutionOrder(-100)`), `ToggleSwitch`, `UIFontApplier`, `TimeFormat`.
-- Видео-обучение («Показать обучение» в настройках, «Смотреть» в справочнике): `TutorialPlayer` (таймлайн глав, пауза, ← →,
+- Видео-обучение («Смотреть» в справочнике): `TutorialPlayer` (таймлайн глав, пауза, ← →,
   `DefaultExecutionOrder(-110)` — Esc закрывает только его), `TutorialFilm` (главы — чистые функции времени, субтитры по таймкодам),
   `TutorialCanvas` (MaskableGraphic: фигуры в меш UI + пулы надписей/клавиш, без аллокаций). Новую механику — новой главой в `TutorialFilm`.
 - Attract-режим меню: змея на автопилоте, без урона/голода/звуков, орёл только кружит, лисы нет, золотой час.

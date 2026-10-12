@@ -632,6 +632,7 @@ namespace WildSnake
                     if (_closedStamp[next] == _stamp) continue;
                     int cost = CellCost(next);
                     if (cost == BLOCKED) continue;
+                    if (_grid.CrossesHollowWall(new Vector2Int(cx, cy), new Vector2Int(nx, ny))) continue;
 
                     bool diagonal = d >= 4;
                     // По диагонали нельзя срезать угол твёрдого препятствия.

@@ -210,10 +210,10 @@ internal static class UIBuilder
         SnakeSceneBuilder.SetFloat(minimap, "_beetleSize", 10f);
 
         var settingsComp = settings.AddComponent<SettingsPanel>();
-        SnakeSceneBuilder.Wire(settingsComp, ("_settings", r.Settings), ("_audio", r.Audio), ("_hints", hints), ("_tutorialPanel", tutorial),
+        SnakeSceneBuilder.Wire(settingsComp, ("_settings", r.Settings), ("_audio", r.Audio),
             ("_masterSlider", sp.Master), ("_musicSlider", sp.Music), ("_sfxSlider", sp.Sfx), ("_mouseSlider", sp.Mouse), ("_invertYToggle", sp.InvertY),
             ("_fullscreenToggle", sp.Fullscreen), ("_hudToggle", sp.Hud), ("_rivalToggle", sp.Rival), ("_minimapToggle", sp.Minimap),
-            ("_qualityButton", sp.Quality), ("_qualityLabel", sp.QualityLabel), ("_tutorialButton", sp.Tutorial), ("_backButton", sp.Back));
+            ("_qualityButton", sp.Quality), ("_qualityLabel", sp.QualityLabel), ("_backButton", sp.Back));
 
         var boardComp = board.AddComponent<LeaderboardPanel>();
         SnakeSceneBuilder.Wire(boardComp, ("_leaderboard", r.Leaderboard), ("_audio", r.Audio), ("_config", r.Config),
@@ -422,7 +422,7 @@ internal static class UIBuilder
     {
         public Slider Master, Music, Sfx, Mouse;
         public Toggle Fullscreen, Hud, Rival, InvertY, Minimap;
-        public Button Quality, Tutorial, Back;
+        public Button Quality, Back;
         public Text QualityLabel;
     }
 
@@ -455,9 +455,6 @@ internal static class UIBuilder
 
         p.Back = PrimaryButton(screen, "Done", "ГОТОВО");
         TopLeft(p.Back, LEFT, -970f, 220f, 60f);
-        p.Tutorial = LinkButton(screen, "Tutorial", "ПОКАЗАТЬ ОБУЧЕНИЕ", 22, out Text tutorialLabel);
-        TopLeft(p.Tutorial, LEFT + 252f, -970f, 360f, 60f);
-        tutorialLabel.alignment = TextAnchor.MiddleLeft;
         return screen.gameObject;
     }
 

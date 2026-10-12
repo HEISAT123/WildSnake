@@ -11,10 +11,6 @@ namespace WildSnake
         [Header("Ссылки")]
         [SerializeField] private SettingsService _settings;
         [SerializeField] private AudioService _audio;
-        [Tooltip("Контекстные подсказки: «Показать обучение» сбрасывает их счётчики")]
-        [SerializeField] private ContextHints _hints;
-        [Tooltip("Видео-обучение: «Показать обучение» открывает его")]
-        [SerializeField] private GameObject _tutorialPanel;
 
         [Header("Элементы")]
         [SerializeField] private Slider _masterSlider;
@@ -28,7 +24,6 @@ namespace WildSnake
         [SerializeField] private Toggle _minimapToggle;
         [SerializeField] private Button _qualityButton;
         [SerializeField] private Text _qualityLabel;
-        [SerializeField] private Button _tutorialButton;
         [SerializeField] private Button _backButton;
 
         private void OnEnable()
@@ -44,7 +39,6 @@ namespace WildSnake
             _rivalToggle.onValueChanged.AddListener(OnRivalChanged);
             _minimapToggle.onValueChanged.AddListener(OnMinimapChanged);
             _qualityButton.onClick.AddListener(OnQualityClicked);
-            _tutorialButton.onClick.AddListener(OnTutorialClicked);
             _backButton.onClick.AddListener(OnBackClicked);
         }
 
@@ -60,7 +54,6 @@ namespace WildSnake
             _rivalToggle.onValueChanged.RemoveListener(OnRivalChanged);
             _minimapToggle.onValueChanged.RemoveListener(OnMinimapChanged);
             _qualityButton.onClick.RemoveListener(OnQualityClicked);
-            _tutorialButton.onClick.RemoveListener(OnTutorialClicked);
             _backButton.onClick.RemoveListener(OnBackClicked);
         }
 
@@ -103,14 +96,6 @@ namespace WildSnake
             _audio.Play(SoundId.Click);
             _settings.CycleQuality();
             _qualityLabel.text = QualityText();
-        }
-
-        private void OnTutorialClicked()
-        {
-            _audio.Play(SoundId.Click);
-            // Подсказки в игре тоже покажутся заново — обучение и в ролике, и в деле.
-            _hints.ResetCounters();
-            _tutorialPanel.SetActive(true);
         }
 
         private void OnBackClicked()

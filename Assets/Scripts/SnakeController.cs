@@ -919,6 +919,10 @@ namespace WildSnake
             float radiusSqr = radius * radius;
             float forgiveness = _obstacleForgiveness * _cellSize;
 
+            // Полое бревно пускает только через дыры на торцах; поверху — прыжком.
+            if (_height + forgiveness < _grid.HollowLogHeight && _grid.CollideHollowLogWalls(ref _headPos, radius, out normal))
+                return true;
+
             for (int dy = -1; dy <= 1; dy++)
             {
                 for (int dx = -1; dx <= 1; dx++)

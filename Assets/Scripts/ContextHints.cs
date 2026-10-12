@@ -137,17 +137,6 @@ namespace WildSnake
             _game.StateChanged -= OnStateChanged;
         }
 
-        /// <summary>Показать все подсказки заново (кнопка «Показать обучение» в настройках).</summary>
-        public void ResetCounters()
-        {
-            for (int i = 0; i < _shown.Length; i++)
-            {
-                _shown[i] = 0;
-                PlayerPrefs.DeleteKey(KEY_PREFIX + i);
-            }
-            PlayerPrefs.Save();
-        }
-
         private void OnStateChanged(GameState state)
         {
             if (state == GameState.Menu || state == GameState.GameOver) _movedThisRun = false;

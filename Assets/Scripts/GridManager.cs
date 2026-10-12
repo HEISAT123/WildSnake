@@ -633,6 +633,59 @@ namespace WildSnake
             b = CellToWorld(e);
         }
 
+        /// <summary>Высота полого бревна (диаметр ствола) — выше неё змея перелетает бревно прыжком.</summary>
+        public float HollowLogHeight => 1.04f * _cellSize;
+
+        /// <summary>
+        /// Стенки полого бревна — две длинные боковины по краям клеток: войти можно только с торца, через дыру.
+        /// Круг (pos, radius) выталкивается из боковины; возвращает true и нормаль, если упёрся.
+        /// </summary>
+        public bool CollideHollowLogWalls(ref Vector3 pos, float radius, out Vector3 normal)
+        {
+            normal = Vector3.zero;
+            float half = 0.5f * _cellSize;
+            for (int i = 0; i < _hollowLogs; i++)
+            {
+                GetHollowLog(i, out Vector3 a, out Vector3 b);
+                bool alongX = _hollowAlongX[i];
+                float u = alongX ? pos.x : pos.z;
+                float v = alongX ? pos.z : pos.x;
+                float u0 = (alongX ? Mathf.Min(a.x, b.x) : Mathf.Min(a.z, b.z)) - half;
+                float u1 = (alongX ? Mathf.Max(a.x, b.x) : Mathf.Max(a.z, b.z)) + half;
+                float axis = alongX ? a.z : a.x;
+                if (u < u0 - radius || u > u1 + radius || Mathf.Abs(v - axis) > half + radius) continue;
+
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    float du = u - Mathf.Clamp(u, u0, u1);
+                    float dv = v - (axis + side * half);
+                    float distSqr = du * du + dv * dv;
+                    if (distSqr >= radius * radius) continue;
+                    // Ровно на стенке — выталкиваем наружу.
+                    if (distSqr < 1e-8f) { du = 0f; dv = side * 1e-4f; distSqr = dv * dv; }
+                    float dist = Mathf.Sqrt(distSqr);
+                    float nu = du / dist, nv = dv / dist;
+                    u += nu * (radius - dist);
+                    v += nv * (radius - dist);
+                    if (alongX) { pos.x = u; pos.z = v; normal = new Vector3(nu, 0f, nv); }
+                    else { pos.z = u; pos.x = v; normal = new Vector3(nv, 0f, nu); }
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>Шаг между соседними клетками пересекает боковину полого бревна (в бревно — только вдоль него).</summary>
+        public bool CrossesHollowWall(Vector2Int from, Vector2Int to)
+        {
+            bool fromHollow = IsHollow(from), toHollow = IsHollow(to);
+            if (!fromHollow && !toHollow) return false;
+            Vector2Int log = toHollow ? to : from;
+            bool alongX = IsHollow(new Vector2Int(log.x - 1, log.y)) || IsHollow(new Vector2Int(log.x + 1, log.y));
+            int dx = to.x - from.x, dy = to.y - from.y;
+            return alongX ? dy != 0 : dx != 0;
+        }
+
         public int BirdNestCount => _placedBirdNests;
 
         public int MouseColonyCount => _colonies;

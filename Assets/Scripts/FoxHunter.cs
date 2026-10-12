@@ -461,7 +461,8 @@ namespace WildSnake
             Vector2Int cell = _grid.WorldToCell(point);
             if (!_grid.IsInside(cell)) return true;
             if (!ignoreWater && _grid.IsWater(cell)) return true;
-            return _grid.GetObstacleHeight(cell) > 0f;
+            // В полое бревно лиса не пролезает — для неё оно сплошное.
+            return _grid.GetObstacleHeight(cell) > 0f || _grid.IsHollow(cell);
         }
 
         private void ApplyVisual()
