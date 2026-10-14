@@ -494,7 +494,7 @@ namespace WildSnake
                 StartSwim();
                 return true;
             }
-            if (IsRollBlocked(next))
+            if (IsRollBlocked(next) || _grid.CrossesHollowWall(_pos, next))
             {
                 _rollVelocity *= -0.35f;
                 return true;
@@ -586,13 +586,13 @@ namespace WildSnake
             if (speed <= 0f) return false;
             float cs = _grid.CellSize;
             Vector3 probe = dir * (0.5f * cs);
-            if (IsBlocked(_pos + probe))
+            if (IsStepBlocked(_pos + probe))
             {
                 bool found = false;
                 for (int i = 0; i < AvoidAngles.Length && !found; i++)
                 {
                     Vector3 alt = Quaternion.Euler(0f, AvoidAngles[i], 0f) * dir;
-                    if (IsBlocked(_pos + alt * (0.6f * cs))) continue;
+                    if (IsStepBlocked(_pos + alt * (0.6f * cs))) continue;
                     dir = alt;
                     found = true;
                 }
@@ -625,6 +625,12 @@ namespace WildSnake
             {
                 _height = 0f;
             }
+        }
+
+        /// <summary>Шаг из текущей точки: кроме камней и воды, полое бревно пускает только через торцы.</summary>
+        private bool IsStepBlocked(Vector3 point)
+        {
+            return IsBlocked(point) || (!IsFish && _grid.CrossesHollowWall(_pos, point));
         }
 
         private bool IsBlocked(Vector3 point)

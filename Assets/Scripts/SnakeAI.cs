@@ -8,7 +8,10 @@ namespace WildSnake
     ///    тела обеих змей и зону перед головой другой змеи;
     /// 2) рефлексы — «щупальца» впереди: уворот от стен и камней, прыжок через брёвна и тела;
     /// 3) охота — выбирает самую выгодную добычу (сытность / расстояние), подкрадывается к ней,
-    ///    целится с упреждением и делает бросок вблизи; иногда выходит наперерез игроку.
+    ///    целится с упреждением и делает бросок вблизи;
+    ///    схватка — издалека выходит игроку наперерез, вблизи целит в ближайшую точку его тела (не в голову),
+    ///    бережёт выносливость на укус, кусает быстрым броском или из замаха, если игрок медлит, и сразу
+    ///    отскакивает; на игрока, свернувшегося для броска в её сторону, не лезет — уходит вбок.
     /// Характер соперницы (задаёт GameManager): обида — гонится за игроком и кусает; уступка — держится подальше;
     /// кража — идёт отбивать добычу, которую душит игрок; смелость растёт, когда она длиннее игрока.
     /// 4) страховка от застревания — если змея почти не сдвинулась или долго не приближается к цели,
@@ -119,6 +122,25 @@ namespace WildSnake
         [Tooltip("Как часто выбирать новую добычу, сек")]
         [SerializeField, Min(0.1f)] private float _retargetInterval = 1f;
 
+        [Header("Схватка")]
+        [Tooltip("Выносливость, которую ИИ бережёт на укус: ниже неё не ползёт быстро")]
+        [SerializeField, Min(0f)] private float _staminaReserve = 35f;
+
+        [Tooltip("Ближе этого к телу соперника ИИ перестаёт спешить и подбирается для укуса, клеток")]
+        [SerializeField, Min(0f)] private float _closeInDistance = 5f;
+
+        [Tooltip("Упреждение по ходу соперника, когда целимся ему в тело, сек")]
+        [SerializeField, Min(0f)] private float _bodyLead = 0.15f;
+
+        [Tooltip("Сколько отползать после укуса (считая сам бросок), прежде чем нападать снова, сек")]
+        [SerializeField, Min(0f)] private float _retreatTime = 0.9f;
+
+        [Tooltip("Сколько можно держать замах, ожидая, пока соперник подставится, сек")]
+        [SerializeField, Min(0.2f)] private float _maxCoilTime = 1.6f;
+
+        [Tooltip("Насколько медленнее шага должен ползти соперник, чтобы бить по нему из замаха (доля шага)")]
+        [SerializeField, Range(0f, 1f)] private float _slowTargetSpeed = 0.6f;
+
         [Header("Застревание")]
         [Tooltip("За это время змея должна сдвинуться хотя бы на _stuckDistance, иначе — застряла, сек")]
         [SerializeField, Min(0.3f)] private float _stuckTime = 1.2f;
@@ -181,6 +203,13 @@ namespace WildSnake
         private bool _hasWanderGoal;
         private float _grudgeTimer;
         private float _yieldTimer;
+        private bool _snap;
+        private float _retreatTimer;
+        private bool _attackCoil;
+        private float _coilTimer;
+        private bool _hasAttackPoint;
+        private Vector3 _attackPoint;
+        private float _attackGap;
 
         /// <summary>Добыча, за которой ИИ сейчас охотится (может быть уже съедена — сравнивать по ссылке).</summary>
         public PreyAnimal CurrentPrey => _prey;
@@ -202,7 +231,7 @@ namespace WildSnake
         {
             _grudgeTimer = Mathf.Max(_grudgeTimer, seconds);
             _yieldTimer = 0f;
-            _hunting = OtherAlive;
+            _hunting = OtherReachable;
             _decisionTimer = _decisionInterval;
         }
 
@@ -212,7 +241,9 @@ namespace WildSnake
             _yieldTimer = seconds;
             _grudgeTimer = 0f;
             _hunting = false;
+            _snap = false;
             StealTarget = null;
+            ReleaseCoil();
             _replanTimer = 0f;
         }
 
@@ -222,11 +253,17 @@ namespace WildSnake
             _grudgeTimer = 0f;
             _yieldTimer = 0f;
             _hunting = false;
+            _snap = false;
+            _retreatTimer = 0f;
             StealTarget = null;
+            ReleaseCoil();
         }
 
         /// <summary>Другая змея на поле: выключенный объект (соперник отключён в настройках) не считается.</summary>
         private bool OtherAlive => _player != null && _player.isActiveAndEnabled && _player.IsAlive;
+
+        /// <summary>Другую змею можно достать: жива и не сидит в норе.</summary>
+        private bool OtherReachable => OtherAlive && !_player.InBurrow;
 
         private void Start()
         {
@@ -254,6 +291,7 @@ namespace WildSnake
                 _stuckAnchor = _snake.HeadPosition;
                 _stuckTimer = 0f;
                 _escapeTimer = 0f;
+                _attackCoil = false;
                 return;
             }
             _wantJump = false;
@@ -263,14 +301,20 @@ namespace WildSnake
             if (_ignoreTimer > 0f && (_ignoreTimer -= dt) <= 0f) _ignoredPrey = null;
             if (_grudgeTimer > 0f) _grudgeTimer -= dt;
             if (_yieldTimer > 0f) _yieldTimer -= dt;
+            if (_retreatTimer > 0f) _retreatTimer -= dt;
+            if (_hunting && !OtherReachable) _hunting = false;
+            UpdateAttackPoint();
             if (_escapeTimer > 0f)
             {
                 // Отползаем, не думая о цели: иначе план тут же развернёт змею обратно в тупик.
+                ReleaseCoil();
                 _escapeTimer -= dt;
                 _snake.SetMoveIntent(_escapeDir, SnakePace.Walk);
                 if (_escapeTimer <= 0f) _replanTimer = 0f;
                 return;
             }
+            // В замахе змея стоит и ждёт момента — план и рефлексы подождут.
+            if (TickAttackCoil(dt)) return;
             if (CheckStuck(dt)) return;
 
             _decisionTimer -= dt;
@@ -314,29 +358,34 @@ namespace WildSnake
             if (IsYielding || StealTarget != null)
             {
                 _hunting = false;
+                _snap = false;
                 return;
             }
             // Обиженная гонится издалека и не передумывает; смелая (длиннее игрока) нападает чаще.
             float range = IsGrudging ? _huntRange * 2f : _huntRange;
             float chance = IsGrudging ? 1f : Mathf.Clamp01(_aggression * Boldness);
-            _hunting = OtherAlive && DistanceCells(_player.HeadPosition) < range && Random.value < chance;
+            _hunting = OtherReachable && DistanceCells(_player.HeadPosition) < range && Random.value < chance;
+            // И не охотясь, она не упустит подставленный бок — если не робеет.
+            _snap = _hunting || Random.value < chance;
         }
 
         private Vector3 CurrentGoal()
         {
-            if (IsYielding && OtherAlive)
+            if ((IsYielding || _retreatTimer > 0f) && OtherAlive)
             {
-                // Отогнали — уходим от игрока туда, где посвободнее.
+                // Отогнали или только что укусила — уходим от игрока туда, где посвободнее.
                 Vector3 away = _snake.HeadPosition - _player.HeadPosition;
                 away.y = 0f;
                 if (away.sqrMagnitude < 1e-4f) away = -_snake.Forward;
                 return _snake.HeadPosition + away.normalized * (8f * _grid.CellSize);
             }
-            if (_hunting && OtherAlive)
+            if (_hunting && OtherReachable)
             {
-                // Выходим наперерез: точка перед головой игрока, чтобы он врезался в наше тело.
                 float giveUp = IsGrudging ? _huntRange * 3f : _huntRange * 1.5f;
                 if (DistanceCells(_player.HeadPosition) > giveUp) _hunting = false;
+                // Вблизи — в бок тела: туда и бросок достаёт, и ответный укус в лоб не прилетит.
+                else if (_hasAttackPoint && _attackGap < _closeInDistance * _grid.CellSize) return _attackPoint;
+                // Издалека — наперерез: точка перед головой игрока.
                 else return _player.HeadPosition + _player.Forward * (_interceptLead * _grid.CellSize);
             }
 
@@ -438,7 +487,7 @@ namespace WildSnake
                 int free = 0;
                 for (int step = 1; step <= 6; step++)
                 {
-                    if (Probe(head + dir * (step * 0.7f * cs)) == Blocked.Solid) break;
+                    if (Probe(head, dir * (step * 0.7f * cs), false) == Blocked.Solid) break;
                     free = step;
                 }
                 // При равной свободе — ближе к нынешнему курсу: разворот на месте змее даётся тяжело.
@@ -471,18 +520,23 @@ namespace WildSnake
 
             Vector3 toTarget = target - head;
             toTarget.y = 0f;
+            // Игрок свернулся и целит в нас — уходим с линии броска вбок, а не ползём ему в пасть.
+            Vector3 dodge = Vector3.zero;
+            bool dodging = !_hunting && Dodge(out dodge);
+            if (dodging) toTarget = dodge;
             float angle = Vector3.SignedAngle(forward, toTarget, Vector3.up);
             float steer = Mathf.Clamp(angle / _fullSteerAngle, -1f, 1f);
 
-            // Рефлексы поверх плана.
+            // Рефлексы поверх плана. Нападая, тело игрока не перепрыгиваем — в него кусаем.
+            bool ignoreOther = _hunting && _retreatTimer <= 0f && !_player.IsInvulnerable;
             Vector3 leftDir = Quaternion.Euler(0f, -_feelerAngle, 0f) * forward;
             Vector3 rightDir = Quaternion.Euler(0f, _feelerAngle, 0f) * forward;
-            Blocked near = Probe(head + forward * (_nearLook * cs));
+            Blocked near = Probe(head, forward * (_nearLook * cs), ignoreOther);
             // Прыжок без места для приземления (стенка вдоль курса, колонна сразу за ней) — это авария.
             if (near == Blocked.Jumpable && !CanLand(head, forward)) near = Blocked.Solid;
-            Blocked center = Probe(head + forward * (_lookAhead * cs));
-            Blocked left = Probe(head + leftDir * (_lookAhead * cs));
-            Blocked right = Probe(head + rightDir * (_lookAhead * cs));
+            Blocked center = Probe(head, forward * (_lookAhead * cs), ignoreOther);
+            Blocked left = Probe(head, leftDir * (_lookAhead * cs), ignoreOther);
+            Blocked right = Probe(head, rightDir * (_lookAhead * cs), ignoreOther);
 
             if (near == Blocked.Solid || center == Blocked.Solid)
             {
@@ -500,49 +554,206 @@ namespace WildSnake
                 if (right == Blocked.Solid) steer = Mathf.Min(steer, -0.6f);
             }
 
-            TryDash(goal, angle, near, center);
+            if (!dodging) TryDash(goal);
             Vector3 direction = Quaternion.Euler(0f, steer * _steerToDirection, 0f) * forward;
-            _snake.SetMoveIntent(direction, ChoosePace(goal));
-            if (_wantJump) _snake.RequestJump();
-            if (_wantStrike) _snake.TryStrike(forward);
+            _snake.SetMoveIntent(direction, dodging && Fresh ? SnakePace.Sprint : ChoosePace(goal));
+            if (_wantJump && !_wantStrike) _snake.RequestJump();
         }
 
-        /// <summary>К спокойной добыче — крадётся, за убегающей и на перехват — спешит, иначе обычный шаг.</summary>
+        /// <summary>
+        /// К спокойной добыче — крадётся, за убегающей и к игроку издалека — спешит, пока есть запас сил;
+        /// вблизи игрока подбирается шагом, чтобы на укус хватило выносливости.
+        /// </summary>
         private SnakePace ChoosePace(Vector3 goal)
         {
-            if (_hunting || IsYielding || StealTarget != null) return SnakePace.Sprint;
+            if (IsYielding) return SnakePace.Sprint;
+            if (_retreatTimer > 0f) return SnakePace.Walk;
+            if (StealTarget != null) return Fresh ? SnakePace.Sprint : SnakePace.Walk;
+            if (_hunting) return Fresh && DistanceCells(goal) > _closeInDistance ? SnakePace.Sprint : SnakePace.Walk;
             if (!HasPrey) return SnakePace.Walk;
-            if (_prey.IsFleeing) return SnakePace.Sprint;
+            if (_prey.IsFleeing) return Fresh ? SnakePace.Sprint : SnakePace.Walk;
             float dist = DistanceCells(goal);
             return dist < _stalkDistance && dist > _strikeDistance * 0.5f ? SnakePace.Sneak : SnakePace.Walk;
         }
 
+        /// <summary>Сил хватает на быстрый ход и ещё останется на укус.</summary>
+        private bool Fresh => !_snake.Stamina.IsExhausted && _snake.Stamina.Value >= _staminaReserve;
+
         private bool HasPrey => _prey != null && _prey.IsActive && !_prey.IsFlying;
 
-        /// <summary>Бросок: при перехвате игрока или когда добыча прямо впереди на расстоянии броска.</summary>
-        private void TryDash(Vector3 goal, float angle, Blocked near, Blocked center)
+        /// <summary>Бросок: в тело игрока (схватка) или в добычу на расстоянии броска — с доворотом головы к цели.</summary>
+        private void TryDash(Vector3 goal)
         {
-            if (_snake.StrikeReady01 < 1f || near != Blocked.Free || center != Blocked.Free) return;
-            if (Mathf.Abs(angle) > _dashAngle) return;
+            if (IsYielding || _retreatTimer > 0f || _snake.IsStriking || _snake.StrikeReady01 < 1f) return;
+            // Душимую игроком добычу отбирают, подползя вплотную, — бросок только спугнул бы её.
+            if (StealTarget != null) return;
+            if (TryBiteOther()) return;
+            if (_hunting && TryStartCoil()) return;
+            if (_hunting || !HasPrey) return;
 
-            if (IsYielding) return;
-            float myDist = DistanceCells(goal);
-            if (_hunting)
+            Vector3 head = _snake.HeadPosition;
+            Vector3 aim = goal - head;
+            aim.y = 0f;
+            // Бросок ловит добычу не только кончиком носа — бьём с дальности броска с небольшим запасом.
+            float reach = Mathf.Max(_strikeDistance * _grid.CellSize, _snake.StrikeReachWorld(0f) * 0.9f + 0.5f * _grid.CellSize);
+            if (aim.magnitude > reach) return;
+            if (Vector3.Angle(_snake.Forward, aim) > Mathf.Max(_dashAngle, _snake.BiteAimLimit * 0.6f)) return;
+            if (!_snake.Stamina.CanSpend(_snake.StrikeCost(0f)) || !ClearLine(head, aim, false)) return;
+            _wantStrike = _snake.TryStrike(aim);
+        }
+
+        /// <summary>
+        /// Быстрый укус в тело игрока: точка в пределах броска и доворота, путь чист, игрок не только что ранен
+        /// (неуязвимость — укус пропадёт впустую). После броска — отскок.
+        /// </summary>
+        private bool TryBiteOther()
+        {
+            if (!(_hunting || _snap) || !_hasAttackPoint || _player.IsInvulnerable) return false;
+            Vector3 head = _snake.HeadPosition;
+            Vector3 aim = _attackPoint - head;
+            aim.y = 0f;
+            if (_attackGap > _snake.StrikeReachWorld(0f) * 0.9f) return false;
+            if (Vector3.Angle(_snake.Forward, aim) > _snake.BiteAimLimit * 0.85f) return false;
+            if (!_snake.Stamina.CanSpend(_snake.StrikeCost(0f)) || !ClearLine(head, aim, true)) return false;
+            if (!_snake.TryStrike(aim)) return false;
+            _wantStrike = true;
+            StartRetreat();
+            return true;
+        }
+
+        /// <summary>Игрок медлит (стоит, душит, в замахе) дальше быстрого укуса — сворачиваемся для дальнего броска.</summary>
+        private bool TryStartCoil()
+        {
+            if (!_hasAttackPoint || _player.IsInvulnerable || !_snake.IsGrounded) return false;
+            bool slow = _player.Speed < _player.WalkSpeed * _slowTargetSpeed || _player.IsCoiled || _player.IsConstricting;
+            if (!slow) return false;
+            float need = ChargeFor(_attackGap);
+            if (need <= 0f || need > 1f) return false;
+            Vector3 head = _snake.HeadPosition;
+            Vector3 aim = _attackPoint - head;
+            aim.y = 0f;
+            if (Vector3.Angle(_snake.Forward, aim) > _snake.CoilAimLimit * 0.8f) return false;
+            if (!_snake.Stamina.CanSpend(_snake.StrikeCost(need)) || !ClearLine(head, aim, true)) return false;
+            _snake.SetCoil(true, aim);
+            if (!_snake.IsCoiled) return false;
+            _attackCoil = true;
+            _coilTimer = 0f;
+            return true;
+        }
+
+        /// <summary>Держим замах, пока сила не дорастёт до нужной дальности; цель ушла или пора — отпускаем.</summary>
+        private bool TickAttackCoil(float dt)
+        {
+            if (!_attackCoil) return false;
+            _coilTimer += dt;
+            // Стоять в замахе — не застревание.
+            _stuckAnchor = _snake.HeadPosition;
+            _stuckTimer = 0f;
+            float need = _hasAttackPoint ? ChargeFor(_attackGap) : 2f;
+            bool keep = _hunting && !IsYielding && _snake.IsCoiled && _hasAttackPoint && !_player.IsInvulnerable
+                        && _coilTimer < _maxCoilTime && need <= 1f;
+            if (!keep)
             {
-                if (myDist < 3f) _wantStrike = true;
-                return;
+                ReleaseCoil();
+                return false;
             }
+            Vector3 aim = _attackPoint - _snake.HeadPosition;
+            aim.y = 0f;
+            _snake.SetMoveIntent(Vector3.zero, SnakePace.Walk);
+            _snake.SetCoil(true, aim);
+            if (_snake.Coil01 < need) return true;
+            _attackCoil = false;
+            if (_snake.TryStrike(aim)) StartRetreat();
+            else _snake.SetCoil(false, aim);
+            return true;
+        }
 
-            if (HasPrey && myDist <= _strikeDistance) _wantStrike = true;
+        private void ReleaseCoil()
+        {
+            if (!_attackCoil) return;
+            _attackCoil = false;
+            if (_snake.IsCoiled) _snake.SetCoil(false, Vector3.zero);
+        }
+
+        /// <summary>Какая сила замаха (0..1) нужна, чтобы бросок покрыл просвет gap; больше 1 — не достать.</summary>
+        private float ChargeFor(float gap)
+        {
+            float quick = _snake.StrikeReachWorld(0f);
+            float full = _snake.StrikeReachWorld(1f);
+            if (full <= quick + 1e-4f) return gap <= quick ? 0f : 2f;
+            // С запасом: бросок всё равно обрывается, как только голова попала в тело.
+            return (gap * 1.1f - quick) / (full - quick);
+        }
+
+        private void StartRetreat()
+        {
+            _retreatTimer = _retreatTime;
+            _replanTimer = 0f;
+        }
+
+        /// <summary>
+        /// Ближайшая к голове точка тела игрока (без самой головы — там ответный укус) с упреждением по его ходу.
+        /// _attackGap — просвет между нашей головой и его телом.
+        /// </summary>
+        private void UpdateAttackPoint()
+        {
+            _hasAttackPoint = false;
+            if (!OtherReachable) return;
+            int count = _player.SpineCount;
+            if (count <= 0) return;
+            Vector3 head = _snake.HeadPosition;
+            Vector3 lead = _player.Forward * (_player.Speed * _grid.CellSize * _bodyLead);
+            float best = float.MaxValue;
+            for (int i = Mathf.Min(2, count - 1); i < count; i++)
+            {
+                Vector3 p = _player.GetSpinePoint(i) + lead;
+                Vector3 d = p - head;
+                d.y = 0f;
+                float sqr = d.sqrMagnitude;
+                if (sqr >= best) continue;
+                best = sqr;
+                _attackPoint = p;
+            }
+            _hasAttackPoint = true;
+            _attackGap = Mathf.Max(0f, Mathf.Sqrt(best) - _snake.HeadRadiusWorld - _player.BodyRadiusWorld);
+        }
+
+        /// <summary>
+        /// Игрок свернулся для броска, смотрит на нас и мы в пределах его дальнего броска — уходим поперёк его линии
+        /// (в ту сторону, где уже находимся).
+        /// </summary>
+        private bool Dodge(out Vector3 direction)
+        {
+            direction = Vector3.zero;
+            if (!OtherReachable || !_player.IsCoiled) return false;
+            Vector3 from = _player.HeadPosition;
+            Vector3 to = _snake.HeadPosition - from;
+            to.y = 0f;
+            float dist = to.magnitude;
+            if (dist > _player.StrikeReachWorld(1f) + _snake.BodyRadiusWorld || dist < 1e-3f) return false;
+            Vector3 aim = _player.Forward;
+            if (Vector3.Angle(aim, to) > 35f) return false;
+            Vector3 side = Vector3.Cross(Vector3.up, aim);
+            direction = Vector3.Dot(side, to) >= 0f ? side : -side;
+            return true;
         }
 
         private bool CanLand(Vector3 head, Vector3 forward)
         {
-            return _canJump && _snake.IsGrounded && Probe(head + forward * (_landingDistance * _grid.CellSize)) == Blocked.Free;
+            return _canJump && _snake.IsGrounded
+                   && Probe(head, forward * (_landingDistance * _grid.CellSize), false) == Blocked.Free;
         }
 
-        private Blocked Probe(Vector3 point)
+        /// <summary>Путь броска свободен от камней, стенок и боковин брёвен (тело игрока — не помеха, если в него и целимся).</summary>
+        private bool ClearLine(Vector3 head, Vector3 aim, bool ignoreOther)
         {
+            return Probe(head, aim * 0.5f, ignoreOther) == Blocked.Free && Probe(head, aim, ignoreOther) == Blocked.Free;
+        }
+
+        /// <summary>Что в точке head + offset: свободно, перепрыгиваемо (низкая стенка, тело) или сплошь.</summary>
+        private Blocked Probe(Vector3 head, Vector3 offset, bool ignoreOther)
+        {
+            Vector3 point = head + offset;
             float cs = _grid.CellSize;
             Vector2 half = _grid.ArenaHalfExtents;
             Vector3 local = point - _grid.Center;
@@ -555,12 +766,30 @@ namespace WildSnake
                 float h = _grid.GetObstacleHeight(cell);
                 if (h > 0f) return _canJump && h < _snake.JumpHeightWorld * 0.6f ? Blocked.Jumpable : Blocked.Solid;
             }
+            if (HollowWallOnLine(head, point)) return Blocked.Solid;
 
             float radius = _snake.HeadRadiusWorld;
             // Тела перепрыгиваемы, но лучше объехать: план их и так обходит, а рефлекс прыгает в крайнем случае.
-            if (OtherAlive && _player.BodyHits(point, radius, 0)) return Blocked.Jumpable;
+            if (!ignoreOther && OtherAlive && _player.BodyHits(point, radius, 0)) return Blocked.Jumpable;
             if (_snake.BodyHits(point, radius, 6)) return Blocked.Jumpable;
             return Blocked.Free;
+        }
+
+        /// <summary>Отрезок пересекает боковину полого бревна (войти можно только с торца) — шагаем по клеткам вдоль него.</summary>
+        private bool HollowWallOnLine(Vector3 from, Vector3 to)
+        {
+            Vector3 d = to - from;
+            d.y = 0f;
+            int steps = Mathf.Clamp(Mathf.CeilToInt(d.magnitude / (0.5f * _grid.CellSize)), 1, 16);
+            Vector2Int prev = _grid.WorldToCell(from);
+            for (int k = 1; k <= steps; k++)
+            {
+                Vector2Int cell = _grid.WorldToCell(from + d * ((float)k / steps));
+                if (cell == prev) continue;
+                if (_grid.CrossesHollowWall(prev, cell)) return true;
+                prev = cell;
+            }
+            return false;
         }
 
         // ---------------- A* ----------------

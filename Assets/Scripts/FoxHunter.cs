@@ -4,11 +4,11 @@ using UnityEngine;
 namespace WildSnake
 {
     /// <summary>
-    /// Лиса — наземный хищник, чаще приходит ночью. Появляется у края поля, рыщет по следу змеи
+    /// Лиса — наземный ночной хищник: приходит только ночью, на рассвете уходит. Появляется у края поля, рыщет по следу змеи
     /// (запоминает, где змея проползала, и идёт по этим точкам с отставанием), а заметив её — бросается
     /// в погоню и кусает. Трава и засада прячут змею, в пруд лиса не заходит, в нору не пролезает.
     /// Бросок змеи в морду отпугивает лису, если змея ещё полна сил (решает GameManager через TryScare).
-    /// Пока змея охраняет кладку (Raiding), лиса приходит чаще и идёт прямо к гнезду таскать яйца.
+    /// Пока змея охраняет кладку (Raiding), лиса приходит чаще (и днём) и идёт прямо к гнезду таскать яйца.
     /// В полом бревне змеи лиса не видит и не достаёт, в ежевику не лезет; ужаленная осами — убегает.
     /// Шипение заставляет её на несколько секунд отступить; «мёртвую» змею лиса обнюхивает и теряет к ней интерес.
     /// Логика в данных, Transform только показывает результат.
@@ -103,8 +103,11 @@ namespace WildSnake
         /// <summary>Можно приходить на охоту (идёт партия).</summary>
         public bool HuntingAllowed { get; set; }
 
-        /// <summary>Ночью лиса приходит чаще.</summary>
+        /// <summary>Ночь: только тогда лиса и охотится (кроме набегов на кладку).</summary>
         public bool IsNight { get; set; }
+
+        /// <summary>Время охоты: ночь, а за яйцами — в любое время.</summary>
+        private bool HerTime => IsNight || Raiding;
 
         public Phase CurrentPhase => _phase;
         public bool IsActive => _phase != Phase.Away;
@@ -222,7 +225,8 @@ namespace WildSnake
 
         private void TickAway(float dt)
         {
-            if (!HuntingAllowed || (!TargetPresent() && !Raiding)) return;
+            // Днём лиса спит — таймер визита стоит, пока не стемнеет.
+            if (!HuntingAllowed || !HerTime || (!TargetPresent() && !Raiding)) return;
             _timer -= dt * (IsNight ? 1.6f : 1f) * Mathf.Max(0.1f, Eagerness);
             if (_timer > 0f) return;
 
@@ -245,7 +249,8 @@ namespace WildSnake
         {
             // У кладки лиса не уходит сама — только пока не отгонят или не кончатся яйца.
             if (!Raiding) _stayLeft -= dt;
-            if (_stayLeft <= 0f || !HuntingAllowed)
+            // Рассвело — уходит к себе.
+            if (_stayLeft <= 0f || !HuntingAllowed || !HerTime)
             {
                 BeginRetreat();
                 return;
@@ -288,7 +293,7 @@ namespace WildSnake
         {
             _stayLeft -= dt;
             if (_biteTimer > 0f) _biteTimer -= dt;
-            if (!TargetPresent() || !HuntingAllowed)
+            if (!TargetPresent() || !HuntingAllowed || !HerTime)
             {
                 _phase = Phase.Prowl;
                 return;
@@ -408,7 +413,7 @@ namespace WildSnake
                 Vector3 p = _trail[(_trailHead - (_trailCount - 1 - _trailCursor) + TRAIL_SIZE * 4) % TRAIL_SIZE];
                 Vector3 d = p - _pos;
                 d.y = 0f;
-                if (d.magnitude > 0.8f * _grid.CellSize && !_grid.IsWaterAt(p)) return p;
+                if (d.magnitude > 0.8f * _grid.CellSize && !_grid.IsWaterAt(p) && !_grid.IsBrambleAt(p)) return p;
                 _trailCursor++;
             }
             return TargetPresent() ? _target.HeadPosition : _grid.Center;
@@ -459,13 +464,17 @@ namespace WildSnake
             float step = 0.5f * _grid.CellSize;
             int steps = Mathf.CeilToInt(d.magnitude / step);
             for (int k = 1; k < steps; k++)
-                if (_grid.IsWaterAt(from + d * ((float)k / steps))) return false;
+            {
+                // Сквозь ежевику лиса тоже не пойдёт.
+                Vector3 p = from + d * ((float)k / steps);
+                if (_grid.IsWaterAt(p) || _grid.IsBrambleAt(p)) return false;
+            }
             return true;
         }
 
         // ---------------- Движение и вид ----------------
 
-        /// <summary>Шаг к цели с обходом камней, пней и воды.</summary>
+        /// <summary>Шаг к цели с обходом камней, пней, воды и ежевики.</summary>
         private void MoveTowards(Vector3 goal, float speedCells, float dt, bool ignoreWater = false)
         {
             Vector3 dir = goal - _pos;
@@ -510,6 +519,8 @@ namespace WildSnake
             Vector2Int cell = _grid.WorldToCell(point);
             if (!_grid.IsInside(cell)) return true;
             if (!ignoreWater && _grid.IsWater(cell)) return true;
+            // В колючую ежевику не лезет (а если оказалась в ней — выбирается).
+            if (_grid.IsBramble(cell) && !_grid.IsBrambleAt(_pos)) return true;
             // В полое бревно лиса не пролезает — для неё оно сплошное.
             return _grid.GetObstacleHeight(cell) > 0f || _grid.IsHollow(cell);
         }

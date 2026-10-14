@@ -22,11 +22,13 @@
 - `SnakeController`: движение, темп, бросок/замах, прыжок, выносливость, засада, промах, переваривание, температура, вода, нора;
   траектория в кольцевом буфере. Граница мира — `ClampToMountains` по `TerrainShape.MountainFactor` (клетки `Mountain` — только для ИИ и добычи).
 - Визуал: `SnakeBodyMesh` (меш-трубка), `SnakeHeadAnimator`, `SnakeDeathEffect`, `DashTrail`, `SkinShedEffect`.
-- `SnakeAI`: соперница и автопилот меню — A* по сетке, рефлексы, охота; страховка от застревания.
+- `SnakeAI`: соперница и автопилот меню — A* по сетке, рефлексы, охота; схватка: вблизи целит в бок тела игрока, бережёт
+  выносливость на укус (`_staminaReserve`), кусает с доворота или из замаха, если игрок медлит, отскакивает; уходит с линии
+  его замаха; страховка от застревания.
 
 ## Мир
 - `GridManager` (180x180, клетка 1 м): рельеф `TerrainShape` (холмы, кольцо гор), препятствия по сиду, рощи (`IsForest`/`IsCanopy`/`IsBirch`),
-  укрытия (`IsCover`, `IsReed`), вода (`IsPondWater`, `IsRiver`, мосты `IsBridge`), болото `IsSwamp`, гряда `IsRidge`, полые брёвна `IsHollow` (вход только с торцов: `CollideHollowLogWalls`, для A* — `CrossesHollowWall`; лисе не пролезть),
+  укрытия (`IsCover`, `IsReed`), вода (`IsPondWater`, `IsRiver`, мосты `IsBridge`), болото `IsSwamp`, гряда `IsRidge`, полые брёвна `IsHollow` (вход только с торцов для всех: змее — `CollideHollowLogWalls`, A* и добыче — `CrossesHollowWall`; лисе не пролезть),
   птичьи гнёзда, солнечные камни 2x2, норы, гнездо; ежевика `IsBramble` (укрытие, замедляет, колет на бегу, лиса не кусает),
   тёплые ключи `IsHotSpring` (`TemperatureSpot.HotSpring` — греет и ночью), мышиные городки (норки: `NearestColonyHole`,
   `TryGetColonyCell`), осиные гнёзда на пнях. Генерируется в `Awake` (и из редактора).
@@ -38,7 +40,7 @@
 - `BoardView` — визуал поля; `CanopyFader` — полупрозрачность того, что реально заслоняет змею; `WaterFlow` — течение реки.
 - Природа: `WildlifeManager` + `PreyAnimal` (жук, мышь, лягушка, птица, кролик, ёж, рыба), `BirdNests`, `WaspNests` (злятся от шума,
   рой гонит змею до воды/норы/бревна, жалит и лису), `EagleHunter` (днём),
-  `FoxHunter` (ночью; `Raiding` — таскает яйца из кладки), `DayNightCycle`, `WeatherSystem`, `ScentTracker`, `Hatchlings`.
+  `FoxHunter` (только ночью, на рассвете уходит; `Raiding` — таскает яйца из кладки и днём; в ежевику не заходит), `DayNightCycle`, `WeatherSystem`, `ScentTracker`, `Hatchlings`.
 - Ёж: свёрнутый (`IsCurled`) колет укус, но катится от толчка носом (`Push`, без спешки); в воде (`IsSwimming`) и мокрым
   (`IsDefenseless`) берётся даже касанием; перед тем как развернуться, выглядывает (`IsPeeking`) — укус ловит.
 - Сохранение у норы: `RunSave` → `RunSaveStore` (PlayerPrefs JSON); смерть стирает.

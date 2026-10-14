@@ -186,7 +186,12 @@ namespace WildSnake.Tests
             _game.StartGame();
             var fox = Object.FindAnyObjectByType<FoxHunter>();
             Assert.IsNotNull(fox, "В сцене нет лисы");
+            // Лиса — ночной хищник: днём не приходит.
+            Object.FindAnyObjectByType<DayNightCycle>().SetPhase(0.5f);
             fox.ResetHunter(0.05f);
+            yield return new WaitForSeconds(0.5f);
+            Assert.IsFalse(fox.IsActive, "Лиса пришла днём");
+            Object.FindAnyObjectByType<DayNightCycle>().SetPhase(0.9f);
             yield return new WaitForSeconds(0.5f);
             Assert.IsTrue(fox.IsActive, "Лиса не пришла");
             yield return new WaitForSeconds(2.5f);
@@ -234,6 +239,40 @@ namespace WildSnake.Tests
             Assert.AreEqual(1, _game.Stats.Generations);
             Assert.Less(snake.BodyLengthCells, 4f, "Новое поколение начинает маленькой змейкой");
             Assert.IsFalse(fox.Raiding);
+        }
+
+        [UnityTest]
+        public IEnumerator Rival_Grudging_BitesStillPlayer()
+        {
+            _game.StartGame();
+            yield return null;
+            SnakeController player = FindPlayer();
+            SnakeController rival = null;
+            foreach (SnakeController s in Object.FindObjectsByType<SnakeController>())
+                if (!s.IsPlayer) rival = s;
+            if (rival == null) Assert.Ignore("Соперница выключена в настройках");
+
+            // Игрок стоит на месте, обиженная соперница — в нескольких клетках сбоку от его тела.
+            Object.FindAnyObjectByType<PlayerSnakeInput>().enabled = false;
+            var grid = Object.FindAnyObjectByType<GridManager>();
+            float cs = grid.CellSize;
+            player.ResetSnake(grid.Center, 0f);
+            rival.ResetSnake(grid.Center + new Vector3(6f * cs, 0f, -1.5f * cs), -90f);
+            player.IsRunning = true;
+            rival.IsRunning = true;
+            rival.GetComponent<SnakeAI>().SetGrudge(60f);
+
+            bool bitten = false;
+            System.Action<float, DamageSource> onDamage = (amount, source) => bitten |= source == DamageSource.Rival;
+            _game.PlayerDamaged += onDamage;
+            float waited = 0f;
+            while (!bitten && waited < 10f && _game.State == GameState.Playing)
+            {
+                waited += Time.unscaledDeltaTime;
+                yield return null;
+            }
+            _game.PlayerDamaged -= onDamage;
+            Assert.IsTrue(bitten, "Обиженная соперница так и не укусила игрока");
         }
 
         private static SnakeController FindPlayer()

@@ -101,6 +101,28 @@ namespace WildSnake.Tests
         }
 
         [Test]
+        public void HollowLog_WallsBlockSideSteps_EndsAndInsideAreOpen()
+        {
+            GridManager grid = CreateGrid();
+            Assert.Greater(grid.HollowLogCount, 0, "Нет полых брёвен");
+            float cs = grid.CellSize;
+            for (int i = 0; i < grid.HollowLogCount; i++)
+            {
+                grid.GetHollowLog(i, out Vector3 a, out Vector3 b);
+                Vector3 along = (b - a).normalized;
+                Vector3 side = Vector3.Cross(Vector3.up, along);
+                Vector3 mid = (a + b) * 0.5f;
+                // Сбоку в бревно и из бревна вбок — сквозь стенку.
+                Assert.IsTrue(grid.CrossesHollowWall(mid + side * cs, mid), $"Бревно {i}: вход сбоку");
+                Assert.IsTrue(grid.CrossesHollowWall(mid, mid - side * cs), $"Бревно {i}: выход вбок");
+                // С торца внутрь и вдоль бревна — свободно; рядом с бревном вдоль него — тоже.
+                Assert.IsFalse(grid.CrossesHollowWall(a - along * cs, a), $"Бревно {i}: вход с торца");
+                Assert.IsFalse(grid.CrossesHollowWall(a, mid), $"Бревно {i}: внутри вдоль");
+                Assert.IsFalse(grid.CrossesHollowWall(a + side * cs, mid + side * cs), $"Бревно {i}: вдоль снаружи");
+            }
+        }
+
+        [Test]
         public void Pond_SunStones_Burrows_DoNotOverlapObstacles()
         {
             GridManager grid = CreateGrid();

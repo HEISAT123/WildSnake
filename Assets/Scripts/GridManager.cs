@@ -686,6 +686,12 @@ namespace WildSnake
             return alongX ? dy != 0 : dx != 0;
         }
 
+        /// <summary>Короткий шаг (не дальше соседней клетки) из from в to проходит сквозь боковину полого бревна.</summary>
+        public bool CrossesHollowWall(Vector3 from, Vector3 to)
+        {
+            return CrossesHollowWall(WorldToCell(from), WorldToCell(to));
+        }
+
         public int BirdNestCount => _placedBirdNests;
 
         public int MouseColonyCount => _colonies;

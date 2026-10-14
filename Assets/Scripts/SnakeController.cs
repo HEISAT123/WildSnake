@@ -241,6 +241,19 @@ namespace WildSnake
         /// <summary>Множитель цены броска в выносливости от улучшений.</summary>
         public float StrikeCostScale { get; set; } = 1f;
 
+        /// <summary>Сколько пролетит голова броском при силе замаха charge01, мировых единиц (с улучшениями и холодом).</summary>
+        public float StrikeReachWorld(float charge01)
+        {
+            return _config.StrikeSpeed(charge01) * _config.StrikeDuration * StrikeDistanceScale * _temperature.StrikeMultiplier * _cellSize;
+        }
+
+        /// <summary>Цена броска при силе замаха charge01 в выносливости.</summary>
+        public float StrikeCost(float charge01) => _config.StrikeStaminaCost(charge01) * StrikeCostScale;
+
+        /// <summary>На сколько градусов от курса можно довернуть быстрый укус / бросок из замаха.</summary>
+        public float BiteAimLimit => _config.BiteAimLimit;
+        public float CoilAimLimit => _config.CoilAimLimit;
+
         /// <summary>Множитель скорости в воде (улучшение «Пловец»).</summary>
         public float SwimSpeedScale { get; set; } = 1f;
 
