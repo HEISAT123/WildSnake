@@ -430,8 +430,8 @@ namespace WildSnake
                     else TickPlaying(Time.deltaTime);
                     break;
                 case GameState.Paused:
+                    // «Заново» на паузе — только пунктом меню: случайное R не должно стирать жизнь.
                     if (GameInput.Pause) Resume();
-                    else if (GameInput.Restart) Restart();
                     break;
                 case GameState.GameOver:
                     // Enter/Space обрабатывает список на экране итогов («Ещё раз» выбран по умолчанию).

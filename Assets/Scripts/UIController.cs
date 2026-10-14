@@ -52,7 +52,6 @@ namespace WildSnake
         [SerializeField] private Button[] _moltButtons = new Button[GameManager.MOLT_CHOICES];
         [SerializeField] private Text[] _moltLabels = new Text[GameManager.MOLT_CHOICES];
         [SerializeField] private Text[] _moltDescriptions = new Text[GameManager.MOLT_CHOICES];
-        [SerializeField] private Text[] _moltLevels = new Text[GameManager.MOLT_CHOICES];
 
         [Header("Итоги")]
         [SerializeField] private Text _gameOverTitle;
@@ -452,11 +451,12 @@ namespace WildSnake
                 if (!has) continue;
                 UpgradeType type = _game.GetMoltChoice(i);
                 int level = _game.Upgrades.Level(type);
-                _moltLabels[i].text = UpgradeTexts.Name(type);
-                _moltDescriptions[i].text = UpgradeTexts.Offer(type, level);
                 int next = level + 1;
-                _moltLevels[i].text = level == 0 ? "НОВОЕ" : next == UpgradeSet.MAX_LEVEL ? "ПОСЛЕДНИЙ, " + next + " ИЗ " + next
+                string tier = level == 0 ? "НОВОЕ" : next == UpgradeSet.MAX_LEVEL ? "ПОСЛЕДНИЙ, " + next + " ИЗ " + next
                     : "УРОВЕНЬ " + next + " ИЗ " + UpgradeSet.MAX_LEVEL;
+                // Уровень — сразу за названием, мелко: справа он наезжал на длинные названия.
+                _moltLabels[i].text = UpgradeTexts.Name(type) + "   <size=18><color=#8A8F8C>" + tier + "</color></size>";
+                _moltDescriptions[i].text = UpgradeTexts.Offer(type, level);
             }
         }
 

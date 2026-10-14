@@ -265,18 +265,15 @@ internal static class UIBuilder
         var moltButtons = new Object[moltRows.Length];
         var moltLabels = new Object[moltRows.Length];
         var moltDescriptions = new Object[moltRows.Length];
-        var moltLevels = new Object[moltRows.Length];
         for (int i = 0; i < moltRows.Length; i++)
         {
             moltButtons[i] = moltRows[i].Button;
             moltLabels[i] = moltRows[i].Label;
             moltDescriptions[i] = moltRows[i].Description;
-            moltLevels[i] = moltRows[i].Record;
         }
         SnakeSceneBuilder.WireArray(ui, "_moltButtons", moltButtons);
         SnakeSceneBuilder.WireArray(ui, "_moltLabels", moltLabels);
         SnakeSceneBuilder.WireArray(ui, "_moltDescriptions", moltDescriptions);
-        SnakeSceneBuilder.WireArray(ui, "_moltLevels", moltLevels);
     }
 
     private static void WireList(GameObject screen, Row[] rows, CanvasGroup group, Refs r, Object[] overlays, int recordCount)
@@ -355,7 +352,7 @@ internal static class UIBuilder
             rows[i] = MakeRow(screen, i, items[i], null, LEFT, -420f - i * 88f, 620f, 76f, 44, Venom, false);
 
         HintRow(screen, new Vector2(0f, 0f), new Vector2(LEFT, 64f), new Vector2(0f, 0.5f),
-            ("ESC", "продолжить"), ("R", "заново"), ("↑ ↓", "выбор"));
+            ("ESC", "продолжить"), ("↑ ↓", "выбор"));
         return screen.gameObject;
     }
 
@@ -373,10 +370,10 @@ internal static class UIBuilder
         TopLeft(Label(screen, "Rules", "У каждого улучшения 3 уровня. Всё, что уже взято, — клавиша U во время игры.", 19, Smoke,
             TextAnchor.MiddleLeft, false), LEFT, -336f, 1100f, 28f);
 
-        // Описание с платой длиннее строки — Text не обрезает его, а уровень остаётся у правого края строки.
+        // Описание с платой длиннее строки — Text не обрезает его; уровень UIController пишет сразу после названия.
         rows = new Row[GameManager.MOLT_CHOICES];
         for (int i = 0; i < rows.Length; i++)
-            rows[i] = MakeRow(screen, i, "УЛУЧШЕНИЕ", "Описание", LEFT, -390f - i * 108f, 700f, 96f, 46, Venom, true);
+            rows[i] = MakeRow(screen, i, "УЛУЧШЕНИЕ", "Описание", LEFT, -390f - i * 108f, 700f, 96f, 46, Venom, false);
 
         HintRow(screen, new Vector2(0f, 0f), new Vector2(LEFT, 64f), new Vector2(0f, 0.5f),
             ("↑ ↓", "выбор"), ("ENTER", "взять"));
@@ -1273,7 +1270,7 @@ internal static class UIBuilder
         rules.lineSpacing = 1.1f;
         MidLeft(rules, rx, ry - 48f, 800f, 130f);
 
-        HintRow(screen, new Vector2(1f, 1f), new Vector2(-LEFT, -60f), new Vector2(1f, 0.5f), ("U", "закрыть"), ("ESC", "закрыть"));
+        HintRow(screen, new Vector2(1f, 1f), new Vector2(-LEFT, -60f), new Vector2(1f, 0.5f), ("U", "/"), ("ESC", "закрыть"));
         return screen.gameObject;
     }
 
@@ -1554,7 +1551,8 @@ internal static class UIBuilder
             element.preferredWidth = key.sizeDelta.x;
             element.preferredHeight = key.sizeDelta.y;
             Text action = Label(row, "Action", hints[i].action, 19, Ash, TextAnchor.MiddleLeft, false);
-            if (i < hints.Length - 1) action.text += "      ";
+            // «/» — не действие, а разделитель двух клавиш одного действия: без отступа.
+            if (i < hints.Length - 1 && hints[i].action != "/") action.text += "      ";
         }
     }
 
