@@ -256,6 +256,9 @@ namespace WildSnake
         /// <summary>Сколько роста набрано к следующей линьке, 0..1.</summary>
         public float MoltProgress01 => Mathf.Clamp01(_moltProgress / _config.MoltGrowth);
 
+        /// <summary>Какую долю шкалы линьки даёт охотничья цель дня (для журнала).</summary>
+        public float GoalMoltShare => _config.GoalMoltReward;
+
         /// <summary>Варианты улучшений текущей линьки.</summary>
         public int MoltChoiceCount { get; private set; }
 
@@ -303,7 +306,8 @@ namespace WildSnake
         private bool _trophyDone;
         private float _trophyRetry;
 
-        private bool RivalActive => _rival != null && _rival.gameObject.activeSelf;
+        /// <summary>Соперница в этой жизни есть (не выключена в настройках).</summary>
+        public bool RivalActive => _rival != null && _rival.gameObject.activeSelf;
 
         private void Awake()
         {

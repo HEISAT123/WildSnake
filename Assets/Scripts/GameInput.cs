@@ -30,6 +30,7 @@ namespace WildSnake
         public static bool Hiss => Input.GetKeyDown(KeyCode.Q) || Input.GetKeyDown(KeyCode.JoystickButton1);
         public static bool PlayDeadHeld => Input.GetKey(KeyCode.X) || Input.GetKey(KeyCode.JoystickButton9);
         public static bool MapHeld => Input.GetKey(KeyCode.Tab) || Input.GetKey(KeyCode.JoystickButton6);
+        public static bool Upgrades => Input.GetKeyDown(KeyCode.U);
         public static bool ToggleHud => Input.GetKeyDown(KeyCode.H);
         private static bool PausePressed => Input.GetKeyDown(KeyCode.Escape) || Input.GetKeyDown(KeyCode.JoystickButton7);
         public static bool Restart => Input.GetKeyDown(KeyCode.R);
@@ -83,6 +84,7 @@ namespace WildSnake
         public static bool Hiss => (K != null && K.qKey.wasPressedThisFrame) || (G != null && G.buttonEast.wasPressedThisFrame);
         public static bool PlayDeadHeld => (K != null && K.xKey.isPressed) || (G != null && G.rightStickButton.isPressed);
         public static bool MapHeld => (K != null && K.tabKey.isPressed) || (G != null && G.selectButton.isPressed);
+        public static bool Upgrades => K != null && K.uKey.wasPressedThisFrame;
         public static bool ToggleHud => K != null && K.hKey.wasPressedThisFrame;
         private static bool PausePressed => (K != null && K.escapeKey.wasPressedThisFrame) || (G != null && G.startButton.wasPressedThisFrame);
         public static bool Restart => K != null && K.rKey.wasPressedThisFrame;
@@ -106,6 +108,7 @@ namespace WildSnake
         public static bool Hiss => false;
         public static bool PlayDeadHeld => false;
         public static bool MapHeld => false;
+        public static bool Upgrades => false;
         public static bool ToggleHud => false;
         private static bool PausePressed => false;
         public static bool Restart => false;

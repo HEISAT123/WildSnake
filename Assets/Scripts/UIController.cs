@@ -15,31 +15,6 @@ namespace WildSnake
     {
         private const int BANNER_QUEUE = 4;
 
-        private static readonly string[] UpgradeNames =
-        {
-            "ТОЛСТАЯ ЧЕШУЯ", "МЕДЛЕННЫЙ ОБМЕН", "ДЛИННЫЙ БРОСОК", "ОСТРЫЙ НЮХ",
-            "БЕСШУМНАЯ ЧЕШУЯ", "КРЕПКОЕ СЕРДЦЕ", "ГИБКОЕ ТЕЛО", "СЫТНАЯ ОХОТА",
-            "ГЛУБОКОЕ ДЫХАНИЕ", "ТЁПЛАЯ КРОВЬ", "СТАЛЬНАЯ ХВАТКА", "ТЕРПЕЛИВЫЙ ОХОТНИК", "ПЛОВЕЦ"
-        };
-
-        // {0} — эффект следующего уровня (с прошлым значением в скобках). Плата сильных улучшений — после точки.
-        private static readonly string[] UpgradeDescriptions =
-        {
-            "Урон от ударов, когтей и зубов меньше на {0}. Плата: скорость −2% за уровень",
-            "Голод растёт на {0} медленнее. Плата: заживление −10% за уровень",
-            "Бросок летит на {0} дальше и стоит меньше сил",
-            "Нюх чует на {0} дальше и перезаряжается быстрее",
-            "Добыча замечает змею на {0} позже",
-            "Максимум здоровья больше на {0}. Плата: голод +4% за уровень",
-            "Змея ползает на {0} быстрее. Плата: голод +4% за уровень",
-            "Добыча насыщает на {0} сильнее",
-            "Выносливость восстанавливается на {0} быстрее",
-            "Тело остывает на {0} медленнее: ночь и дождь не так страшны",
-            "Кролик сдаётся в кольцах на {0} быстрее",
-            "Засада наступает на {0} быстрее",
-            "В воде змея плывёт на {0} быстрее"
-        };
-
         [Header("Источники данных")]
         [SerializeField] private GameManager _game;
         [SerializeField] private SettingsService _settings;
@@ -306,7 +281,7 @@ namespace WildSnake
 
         private void OnMoltCompleted(UpgradeType type)
         {
-            ShowBanner(UpgradeNames[(int)type]);
+            ShowBanner(UpgradeTexts.Name(type));
         }
 
         private void OnConstrictionEnded(bool won)
@@ -477,19 +452,12 @@ namespace WildSnake
                 if (!has) continue;
                 UpgradeType type = _game.GetMoltChoice(i);
                 int level = _game.Upgrades.Level(type);
-                _moltLabels[i].text = UpgradeNames[(int)type];
-                _moltDescriptions[i].text = string.Format(UpgradeDescriptions[(int)type], UpgradeEffect(type, level));
-                _moltLevels[i].text = level == 0 ? "НОВОЕ" : "УР " + (level + 1) + " / " + UpgradeSet.MAX_LEVEL;
+                _moltLabels[i].text = UpgradeTexts.Name(type);
+                _moltDescriptions[i].text = UpgradeTexts.Offer(type, level);
+                int next = level + 1;
+                _moltLevels[i].text = level == 0 ? "НОВОЕ" : next == UpgradeSet.MAX_LEVEL ? "ПОСЛЕДНИЙ, " + next + " ИЗ " + next
+                    : "УРОВЕНЬ " + next + " ИЗ " + UpgradeSet.MAX_LEVEL;
             }
-        }
-
-        /// <summary>Эффект следующего уровня («22% (было 12%)»): видно, что отдача убывает. Строится при открытии линьки.</summary>
-        private static string UpgradeEffect(UpgradeType type, int level)
-        {
-            bool heart = type == UpgradeType.StrongHeart;
-            string next = Mathf.RoundToInt(UpgradeSet.EffectPercent(type, level + 1)) + (heart ? "" : "%");
-            if (level == 0) return next;
-            return next + " (было " + Mathf.RoundToInt(UpgradeSet.EffectPercent(type, level)) + (heart ? "" : "%") + ")";
         }
 
         /// <summary>Итоги: отчего погибла, сколько суток прожила, место в таблице и строка статистики.</summary>

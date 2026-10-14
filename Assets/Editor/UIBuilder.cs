@@ -61,6 +61,8 @@ internal static class UIBuilder
     private static readonly Color MapColony = new Color(0.86f, 0.74f, 0.58f);
     private static readonly Color MapWasp = new Color(1f, 0.82f, 0.15f);
     private static readonly Color MapBramble = new Color(0.52f, 0.36f, 0.42f);
+    /// <summary>Как у MapIcons._trophyColor — золотая метка трофея дня.</summary>
+    private static readonly Color MapTrophy = new Color(1f, 0.78f, 0.15f);
 
     private const float LEFT = 96f;
     /// <summary>Радиус круга мини-карты, пикселей интерфейса.</summary>
@@ -128,9 +130,11 @@ internal static class UIBuilder
         GameObject guide = BuildGuide(root, deepShade, out Button guideBack, out Button guideWatch);
         // Видео-обучение — поверх всего меню: открывается из настроек и из справочника.
         GameObject tutorial = BuildTutorial(root, deepShade, out TutorialParts tp);
+        GameObject upgradesPanel = BuildUpgrades(root, deepShade, out UpgradeParts up);
 
         // Карта по Tab — поверх HUD; во время партии остальные экраны скрыты, так что выше неё ничего нет.
         mapRoot.transform.SetAsLastSibling();
+        upgradesPanel.transform.SetAsLastSibling();
         pause.SetActive(false);
         molt.SetActive(false);
         over.SetActive(false);
@@ -195,6 +199,13 @@ internal static class UIBuilder
         SnakeSceneBuilder.WireArray(journal, "_goalNotes", op2.GoalNotes);
         SnakeSceneBuilder.WireArray(journal, "_goalChecks", op2.GoalChecks);
         SnakeSceneBuilder.WireArray(journal, "_goalIndexes", op2.GoalIndexes);
+
+        var upgradesComp = upgradesPanel.AddComponent<UpgradesPanel>();
+        SnakeSceneBuilder.Wire(upgradesComp, ("_game", r.Game), ("_group", up.Group), ("_summary", up.Summary));
+        SnakeSceneBuilder.WireArray(upgradesComp, "_names", up.Names);
+        SnakeSceneBuilder.WireArray(upgradesComp, "_levels", up.Levels);
+        SnakeSceneBuilder.WireArray(upgradesComp, "_effects", up.Effects);
+        SnakeSceneBuilder.WireArray(upgradesComp, "_pips", up.Pips);
 
         var mapIcons = mapRoot.AddComponent<MapIcons>();
         WireMapIcons(mapIcons, r, op2.MapIcons, op2.MapGroup);
@@ -359,10 +370,13 @@ internal static class UIBuilder
         Heading(screen, "ЛИНЬКА", "НОВАЯ КОЖА", 130);
         TopLeft(Label(screen, "Subtitle", "Раны затянулись. Выберите, какой станет змея.", 24, Ash, TextAnchor.MiddleLeft, false),
             LEFT, -300f, 900f, 34f);
+        TopLeft(Label(screen, "Rules", "У каждого улучшения 3 уровня. Всё, что уже взято, — клавиша U во время игры.", 19, Smoke,
+            TextAnchor.MiddleLeft, false), LEFT, -336f, 1100f, 28f);
 
+        // Описание с платой длиннее строки — Text не обрезает его, а уровень остаётся у правого края строки.
         rows = new Row[GameManager.MOLT_CHOICES];
         for (int i = 0; i < rows.Length; i++)
-            rows[i] = MakeRow(screen, i, "УЛУЧШЕНИЕ", "Описание", LEFT, -380f - i * 108f, 700f, 96f, 46, Venom, true);
+            rows[i] = MakeRow(screen, i, "УЛУЧШЕНИЕ", "Описание", LEFT, -390f - i * 108f, 700f, 96f, 46, Venom, true);
 
         HintRow(screen, new Vector2(0f, 0f), new Vector2(LEFT, 64f), new Vector2(0f, 0.5f),
             ("↑ ↓", "выбор"), ("ENTER", "взять"));
@@ -599,7 +613,7 @@ internal static class UIBuilder
             "WASD — ползти, мышь — камера. CTRL — красться, SHIFT — быстрее.\n\nЖука хватит коснуться. Мышь, лягушку, птицу и рыбу ловят броском: ЛКМ — укус, ПКМ — замах.\n\nКролика бросок только хватает — держите F, чтобы задушить.\n\nВ птичьих гнёздах — яйца. Птица будет клевать; бросок её отгонит.",
             "Замрите на пару секунд — змея сольётся с местностью, а в траве и камыше её почти не видно. Затаившаяся змея подманивает добычу кончиком хвоста.\n\nВ мышиных городках мыши ныряют в норки — ждите в засаде.\n\nЁж свернулся — толкните шар носом в воду или ждите, пока выглянет.\n\nХолодно — солнечный камень, ночью — тёплый ключ.",
             "Днём — орёл: спасают трава, кроны, полое бревно или бросок в последний миг.\n\nНочью — лиса: идёт по следу, в воду и ежевику не лезет. Бросок в морду отпугнёт её.\n\nЕжевика колет на бегу. Осы гонят шумную змею до воды, норы или бревна — и жалят лису.\n\nQ — шипение: лиса отпрянет. X (держать) — притвориться мёртвой: орёл и лиса теряют интерес, но силы тают.",
-            "Повзрослейте, затем ночью, сытой, отложите яйца в гнезде (E) и охраняйте кладку — лиса придёт за яйцами. Вылупятся змеёныши — играете следующим поколением.\n\nСоперница — враг: днём идёт счёт охоты, трофей дня (золотая метка) ищете оба, а душимую добычу она попробует отбить — шипите (Q).\n\nE у норы — сохраниться. TAB — карта и цели. H — скрыть интерфейс."
+            "Повзрослейте, затем ночью, сытой, отложите яйца в гнезде (E) и охраняйте кладку — лиса придёт за яйцами. Вылупятся змеёныши — играете следующим поколением.\n\nСоперница — враг: днём идёт счёт охоты, трофей дня (золотая метка) ищете оба, а душимую добычу она попробует отбить — шипите (Q).\n\nE у норы — сохраниться. TAB — карта и цели. U — улучшения. H — скрыть интерфейс."
         };
         for (int i = 0; i < titles.Length; i++)
         {
@@ -1150,22 +1164,25 @@ internal static class UIBuilder
         MidLeft(p.MapDay, x - 6f, -158f, 900f, 120f);
         MidLeft(Line(map, Venom), x, -290f, 72f, 5f);
         MidLeft(Label(map, "QuestCaption", Spaced("ГЛАВНАЯ ЦЕЛЬ · ПРОДОЛЖИТЬ РОД"), 17, Venom, TextAnchor.MiddleLeft, true), x, -318f, 700f, 24f);
-        p.QuestText = Label(map, "Quest", "1 из 2  ·  Повзрослеть", 30, Bone, TextAnchor.MiddleLeft, true);
+        p.QuestText = Label(map, "Quest", "Этап 1 из 3  ·  Повзрослеть", 30, Bone, TextAnchor.MiddleLeft, true);
         MidLeft(p.QuestText, x, -346f, 800f, 40f);
         p.QuestNote = Label(map, "QuestNote", "", 19, Ash, TextAnchor.UpperLeft, false);
         p.QuestNote.horizontalOverflow = HorizontalWrapMode.Wrap;
-        MidLeft(p.QuestNote, x, -392f, 760f, 54f);
-        MidLeft(Label(map, "GoalsCaption", Spaced("ЦЕЛИ ДНЯ"), 17, Venom, TextAnchor.MiddleLeft, true), x, -470f, 400f, 24f);
+        MidLeft(p.QuestNote, x, -392f, 780f, 72f);
+        MidLeft(Label(map, "GoalsCaption", Spaced("ЦЕЛИ ДНЯ · НОВЫЕ С РАССВЕТОМ"), 17, Venom, TextAnchor.MiddleLeft, true), x, -470f, 700f, 24f);
         for (int i = 0; i < DailyGoals.MAX_GOALS; i++)
         {
-            float y = -506f - i * 96f;
+            // Под целью две строки: как выполнить и награда.
+            float y = -506f - i * 112f;
             Text index = Label(map, "Index", (i + 1).ToString("00"), 21, Smoke, TextAnchor.MiddleLeft, true);
             MidLeft(index, x, y - 4f, 60f, 30f);
             p.GoalIndexes[i] = index;
             Text label = Label(map, "Goal_" + i, "Цель", 34, Bone, TextAnchor.MiddleLeft, true);
             MidLeft(label, x + 60f, y - 4f, 760f, 44f);
-            Text note = Label(map, "Note_" + i, "награда", 19, Ash, TextAnchor.MiddleLeft, false);
-            MidLeft(note, x + 62f, y - 52f, 760f, 26f);
+            Text note = Label(map, "Note_" + i, "награда", 18, Ash, TextAnchor.UpperLeft, false);
+            note.horizontalOverflow = HorizontalWrapMode.Wrap;
+            note.lineSpacing = 1.1f;
+            MidLeft(note, x + 62f, y - 50f, 760f, 48f);
             RectTransform check = Line(map, Venom);
             MidLeft(check, x - 22f, y - 6f, 4f, 72f);
             check.gameObject.SetActive(false);
@@ -1173,13 +1190,91 @@ internal static class UIBuilder
             p.GoalNotes[i] = note;
             p.GoalChecks[i] = check.gameObject;
         }
-        MidLeft(Line(map, Hair), x, -712f, 820f, 1f);
-        p.Summary = Label(map, "Summary", "", 20, Ash, TextAnchor.MiddleLeft, false);
-        MidLeft(p.Summary, x, -730f, 760f, 28f);
-        Legend(map, x, -786f);
+        MidLeft(Line(map, Hair), x, -730f, 820f, 1f);
+        // Сводка жизни и счёт состязания — до трёх строк.
+        p.Summary = Label(map, "Summary", "", 18, Ash, TextAnchor.UpperLeft, false);
+        p.Summary.horizontalOverflow = HorizontalWrapMode.Wrap;
+        p.Summary.lineSpacing = 1.1f;
+        MidLeft(p.Summary, x, -744f, 800f, 66f);
+        Legend(map, x, -830f);
         // Подсказка — в правом верхнем углу: внизу она спорила с легендой.
-        HintRow(map, new Vector2(1f, 1f), new Vector2(-LEFT, -60f), new Vector2(1f, 0.5f), ("TAB", "держать — карта и журнал"));
+        HintRow(map, new Vector2(1f, 1f), new Vector2(-LEFT, -60f), new Vector2(1f, 0.5f), ("TAB", "держать — карта и журнал"), ("U", "улучшения"));
         return layer.gameObject;
+    }
+
+    private sealed class UpgradeParts
+    {
+        public CanvasGroup Group;
+        public Text Summary;
+        public Object[] Names = new Object[UpgradeSet.TYPE_COUNT];
+        public Object[] Levels = new Object[UpgradeSet.TYPE_COUNT];
+        public Object[] Effects = new Object[UpgradeSet.TYPE_COUNT];
+        public Object[] Pips = new Object[UpgradeSet.TYPE_COUNT * UpgradeSet.MAX_LEVEL];
+    }
+
+    /// <summary>
+    /// Окно «Улучшения» (U) поверх игры: две колонки по улучшению в строке — название, три деления уровня, подпись уровня,
+    /// ниже что даёт и чем платит; в конце — как растут улучшения. Привязано к середине экрана по высоте, как карта.
+    /// </summary>
+    private static GameObject BuildUpgrades(Transform root, Texture2D shade, out UpgradeParts p)
+    {
+        p = new UpgradeParts();
+        RectTransform screen = Rect("UpgradesPanel", root);
+        Stretch(screen);
+        Raw(screen, shade).color = new Color(1f, 1f, 1f, 0.96f);
+        RectTransform dim = Rect("Dim", screen);
+        Stretch(dim);
+        Img(dim, new Color(Ink.r, Ink.g, Ink.b, 0.55f), null);
+        p.Group = Group(screen);
+        p.Group.alpha = 0f;
+
+        MidLeft(Label(screen, "Kicker", Spaced("ЗМЕЯ"), 20, Venom, TextAnchor.MiddleLeft, true), LEFT, -88f, 600f, 30f);
+        MidLeft(Label(screen, "Title", "УЛУЧШЕНИЯ", 72, Bone, TextAnchor.MiddleLeft, true), LEFT - 4f, -116f, 900f, 86f);
+        MidLeft(Line(screen, Venom), LEFT, -210f, 72f, 5f);
+        p.Summary = Label(screen, "Summary", "", 22, Ash, TextAnchor.MiddleLeft, false);
+        MidLeft(p.Summary, LEFT, -232f, 1500f, 30f);
+
+        const int perColumn = 7;
+        const float columnStep = 880f, rowStep = 98f, top = -290f;
+        for (int i = 0; i < UpgradeSet.TYPE_COUNT; i++)
+        {
+            float x = LEFT + (i / perColumn) * columnStep;
+            float y = top - (i % perColumn) * rowStep;
+            Text name = Label(screen, "Name_" + i, "УЛУЧШЕНИЕ", 26, Bone, TextAnchor.MiddleLeft, true);
+            MidLeft(name, x, y, 430f, 34f);
+            for (int k = 0; k < UpgradeSet.MAX_LEVEL; k++)
+            {
+                RectTransform pip = Rect("Pip", screen);
+                MidLeft(pip, x + 440f + k * 30f, y - 14f, 24f, 6f);
+                p.Pips[i * UpgradeSet.MAX_LEVEL + k] = Img(pip, Hair, null);
+            }
+            Text level = Label(screen, "Level_" + i, "", 18, Smoke, TextAnchor.MiddleLeft, false);
+            MidLeft(level, x + 544f, y, 240f, 34f);
+            Text effect = Label(screen, "Effect_" + i, "", 18, Ash, TextAnchor.UpperLeft, false);
+            effect.horizontalOverflow = HorizontalWrapMode.Wrap;
+            effect.lineSpacing = 1.1f;
+            MidLeft(effect, x, y - 38f, 800f, 52f);
+            p.Names[i] = name;
+            p.Levels[i] = level;
+            p.Effects[i] = effect;
+        }
+
+        // Правила — под второй колонкой (в ней на строку меньше).
+        float rx = LEFT + columnStep;
+        float ry = top - (UpgradeSet.TYPE_COUNT - perColumn) * rowStep - 8f;
+        MidLeft(Line(screen, Hair), rx, ry, 800f, 1f);
+        MidLeft(Label(screen, "RulesCaption", Spaced("КАК РАСТУТ УЛУЧШЕНИЯ"), 17, Venom, TextAnchor.MiddleLeft, true), rx, ry - 16f, 600f, 24f);
+        Text rules = Label(screen, "Rules",
+            "Шкала «до линьки» (слева вверху) наполняется от добычи, целей дня, трофея и побед над соперницей. "
+            + "Каждая линька лечит раны и предлагает три улучшения на выбор. Уровни дают 40%, 73% и 100% полной силы. "
+            + "Улучшение на 3 из 3 больше не выпадает; когда на максимуме все, линька только лечит. "
+            + "Улучшения переходят к следующему поколению.", 18, Ash, TextAnchor.UpperLeft, false);
+        rules.horizontalOverflow = HorizontalWrapMode.Wrap;
+        rules.lineSpacing = 1.1f;
+        MidLeft(rules, rx, ry - 48f, 800f, 130f);
+
+        HintRow(screen, new Vector2(1f, 1f), new Vector2(-LEFT, -60f), new Vector2(1f, 0.5f), ("U", "закрыть"), ("ESC", "закрыть"));
+        return screen.gameObject;
     }
 
     /// <summary>Подложка и значки одной карты (журнала или мини-карты).</summary>
@@ -1263,7 +1358,8 @@ internal static class UIBuilder
         {
             (UISpriteFactory.MapArrow, Venom, "вы"), (UISpriteFactory.MapArrow, MapRival, "соперница"),
             (UISpriteFactory.MapEagle, Ember, "орёл"), (UISpriteFactory.MapFox, MapFox, "лиса"),
-            (UISpriteFactory.MapPaw, MapPrey, "добыча рядом"), (UISpriteFactory.MapFish, MapFish, "рыба"),
+            (UISpriteFactory.MapPaw, MapPrey, "добыча в обзоре"), (UISpriteFactory.MapRing, new Color(Bone.r, Bone.g, Bone.b, 0.6f), "круг обзора"),
+            (UISpriteFactory.MapPaw, MapTrophy, "трофей дня"), (UISpriteFactory.MapFish, MapFish, "рыба"),
             (UISpriteFactory.MapBeetle, MapPrey, "жуки"), (UISpriteFactory.MapBirdNest, Sky, "птичье гнездо"),
             (UISpriteFactory.MapBurrow, Venom, "нора"), (UISpriteFactory.MapNest, Bone, "гнездо для кладки"),
             (UISpriteFactory.MapSun, MapSun, "солнечный камень"), (UISpriteFactory.MapSpring, MapSpring, "тёплый ключ"),
