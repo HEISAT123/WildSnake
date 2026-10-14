@@ -22,6 +22,7 @@ namespace WildSnake
         [SerializeField] private Toggle _hudToggle;
         [SerializeField] private Toggle _rivalToggle;
         [SerializeField] private Toggle _minimapToggle;
+        [SerializeField] private Toggle _hintsToggle;
         [SerializeField] private Button _qualityButton;
         [SerializeField] private Text _qualityLabel;
         [SerializeField] private Button _backButton;
@@ -38,6 +39,7 @@ namespace WildSnake
             _hudToggle.onValueChanged.AddListener(OnHudChanged);
             _rivalToggle.onValueChanged.AddListener(OnRivalChanged);
             _minimapToggle.onValueChanged.AddListener(OnMinimapChanged);
+            _hintsToggle.onValueChanged.AddListener(OnHintsChanged);
             _qualityButton.onClick.AddListener(OnQualityClicked);
             _backButton.onClick.AddListener(OnBackClicked);
         }
@@ -53,6 +55,7 @@ namespace WildSnake
             _hudToggle.onValueChanged.RemoveListener(OnHudChanged);
             _rivalToggle.onValueChanged.RemoveListener(OnRivalChanged);
             _minimapToggle.onValueChanged.RemoveListener(OnMinimapChanged);
+            _hintsToggle.onValueChanged.RemoveListener(OnHintsChanged);
             _qualityButton.onClick.RemoveListener(OnQualityClicked);
             _backButton.onClick.RemoveListener(OnBackClicked);
         }
@@ -76,6 +79,7 @@ namespace WildSnake
             _hudToggle.SetIsOnWithoutNotify(_settings.ShowHud);
             _rivalToggle.SetIsOnWithoutNotify(_settings.RivalEnabled);
             _minimapToggle.SetIsOnWithoutNotify(_settings.ShowMinimap);
+            _hintsToggle.SetIsOnWithoutNotify(_settings.ShowHints);
             _qualityLabel.text = QualityText();
         }
 
@@ -90,6 +94,7 @@ namespace WildSnake
         private void OnHudChanged(bool v) => _settings.SetShowHud(v);
         private void OnRivalChanged(bool v) => _settings.SetRivalEnabled(v);
         private void OnMinimapChanged(bool v) => _settings.SetShowMinimap(v);
+        private void OnHintsChanged(bool v) => _settings.SetShowHints(v);
 
         private void OnQualityClicked()
         {

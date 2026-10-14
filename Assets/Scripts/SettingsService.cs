@@ -16,6 +16,7 @@ namespace WildSnake
         private const string KEY_HUD = "WildSnake.Settings.Hud";
         private const string KEY_RIVAL = "WildSnake.Settings.Rival";
         private const string KEY_MINIMAP = "WildSnake.Settings.Minimap";
+        private const string KEY_HINTS = "WildSnake.Settings.Hints";
 
         public event Action Changed;
 
@@ -31,6 +32,8 @@ namespace WildSnake
         public bool RivalEnabled { get; private set; }
         /// <summary>Мини-карта в углу экрана во время партии.</summary>
         public bool ShowMinimap { get; private set; }
+        /// <summary>Подсказки с клавишей внизу экрана во время партии.</summary>
+        public bool ShowHints { get; private set; }
 
         public string QualityName
         {
@@ -53,6 +56,7 @@ namespace WildSnake
             ShowHud = PlayerPrefs.GetInt(KEY_HUD, 1) == 1;
             RivalEnabled = PlayerPrefs.GetInt(KEY_RIVAL, 1) == 1;
             ShowMinimap = PlayerPrefs.GetInt(KEY_MINIMAP, 1) == 1;
+            ShowHints = PlayerPrefs.GetInt(KEY_HINTS, 1) == 1;
             Apply();
         }
 
@@ -70,6 +74,7 @@ namespace WildSnake
         public void SetShowHud(bool value) { ShowHud = value; PlayerPrefs.SetInt(KEY_HUD, value ? 1 : 0); Commit(); }
         public void SetRivalEnabled(bool value) { RivalEnabled = value; PlayerPrefs.SetInt(KEY_RIVAL, value ? 1 : 0); Commit(); }
         public void SetShowMinimap(bool value) { ShowMinimap = value; PlayerPrefs.SetInt(KEY_MINIMAP, value ? 1 : 0); Commit(); }
+        public void SetShowHints(bool value) { ShowHints = value; PlayerPrefs.SetInt(KEY_HINTS, value ? 1 : 0); Commit(); }
 
         public void CycleQuality()
         {

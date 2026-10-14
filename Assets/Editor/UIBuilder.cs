@@ -170,7 +170,7 @@ internal static class UIBuilder
 
         var hints = canvasGo.AddComponent<ContextHints>();
         SnakeSceneBuilder.Wire(hints, ("_game", r.Game), ("_config", r.Config), ("_snake", r.Player), ("_wildlife", r.Wildlife),
-            ("_grid", r.Grid), ("_eagle", r.Eagle), ("_fox", r.Fox), ("_scent", r.Scent), ("_birdNests", r.BirdNests), ("_wasps", r.Wasps),
+            ("_grid", r.Grid), ("_eagle", r.Eagle), ("_fox", r.Fox), ("_scent", r.Scent), ("_birdNests", r.BirdNests), ("_wasps", r.Wasps), ("_settings", r.Settings),
             ("_group", hp.HintGroup), ("_keycap", hp.HintKeycap), ("_keyText", hp.HintKey), ("_label", hp.HintLabel));
 
         var threat = hud.AddComponent<ThreatIndicator>();
@@ -212,7 +212,7 @@ internal static class UIBuilder
         var settingsComp = settings.AddComponent<SettingsPanel>();
         SnakeSceneBuilder.Wire(settingsComp, ("_settings", r.Settings), ("_audio", r.Audio),
             ("_masterSlider", sp.Master), ("_musicSlider", sp.Music), ("_sfxSlider", sp.Sfx), ("_mouseSlider", sp.Mouse), ("_invertYToggle", sp.InvertY),
-            ("_fullscreenToggle", sp.Fullscreen), ("_hudToggle", sp.Hud), ("_rivalToggle", sp.Rival), ("_minimapToggle", sp.Minimap),
+            ("_fullscreenToggle", sp.Fullscreen), ("_hudToggle", sp.Hud), ("_rivalToggle", sp.Rival), ("_minimapToggle", sp.Minimap), ("_hintsToggle", sp.Hints),
             ("_qualityButton", sp.Quality), ("_qualityLabel", sp.QualityLabel), ("_backButton", sp.Back));
 
         var boardComp = board.AddComponent<LeaderboardPanel>();
@@ -421,7 +421,7 @@ internal static class UIBuilder
     private sealed class SettingsParts
     {
         public Slider Master, Music, Sfx, Mouse;
-        public Toggle Fullscreen, Hud, Rival, InvertY, Minimap;
+        public Toggle Fullscreen, Hud, Rival, InvertY, Minimap, Hints;
         public Button Quality, Back;
         public Text QualityLabel;
     }
@@ -446,15 +446,16 @@ internal static class UIBuilder
         p.Fullscreen = SwitchAt(screen, SettingRow(screen, "Полный экран   <size=18><color=#757A7A>F11</color></size>", -672f), right);
         p.Hud = SwitchAt(screen, SettingRow(screen, "Интерфейс в игре   <size=18><color=#757A7A>H</color></size>", -724f), right);
         p.Minimap = SwitchAt(screen, SettingRow(screen, "Мини-карта", -776f), right);
-        p.Rival = SwitchAt(screen, SettingRow(screen, "Змея-соперница   <size=18><color=#757A7A>со следующей жизни</color></size>", -828f), right);
+        p.Hints = SwitchAt(screen, SettingRow(screen, "Подсказки с клавишами", -828f), right);
+        p.Rival = SwitchAt(screen, SettingRow(screen, "Змея-соперница   <size=18><color=#757A7A>со следующей жизни</color></size>", -880f), right);
 
-        float qualityY = SettingRow(screen, "Качество графики", -880f);
+        float qualityY = SettingRow(screen, "Качество графики", -932f);
         p.Quality = LinkButton(screen, "Quality", "ULTRA   ›", 24, out p.QualityLabel);
         Anchor((RectTransform)p.Quality.transform, new Vector2(0f, 1f), new Vector2(1f, 0.5f), new Vector2(right, qualityY), new Vector2(300f, 44f));
         p.QualityLabel.alignment = TextAnchor.MiddleRight;
 
         p.Back = PrimaryButton(screen, "Done", "ГОТОВО");
-        TopLeft(p.Back, LEFT, -970f, 220f, 60f);
+        TopLeft(p.Back, LEFT, -998f, 220f, 60f);
         return screen.gameObject;
     }
 

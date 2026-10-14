@@ -109,6 +109,8 @@ namespace WildSnake
         [SerializeField] private ScentTracker _scent;
         [SerializeField] private BirdNests _birdNests;
         [SerializeField] private WaspNests _wasps;
+        [Tooltip("Настройки: подсказки можно выключить")]
+        [SerializeField] private SettingsService _settings;
 
         [Header("Элементы")]
         [SerializeField] private CanvasGroup _group;
@@ -155,7 +157,8 @@ namespace WildSnake
         {
             float dt = Time.unscaledDeltaTime;
             _currentTime += dt;
-            bool playing = _game.State == GameState.Playing;
+            // Выключенные в настройках подсказки не показываются и не расходуют свои «первые разы».
+            bool playing = _game.State == GameState.Playing && _settings.ShowHints;
             _group.alpha = Mathf.MoveTowards(_group.alpha, playing && _current != Hint.None ? 1f : 0f, dt * 5f);
             // Интерфейс скрыт (H) — подсказки не показываются и не расходуют свои «первые разы».
             if (!playing || !_group.gameObject.activeInHierarchy) return;
