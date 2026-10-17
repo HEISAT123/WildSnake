@@ -71,6 +71,8 @@ public static class SnakeSceneBuilder
 
         EnsureFolder("Assets", "Scenes");
         EnsureFolder("Assets", "Materials");
+        CreatureModels.Reset();
+        NatureModels.Reset();
         EnsureFolder("Assets", "Settings");
         // Конвейер — URP: ассеты создаются и назначаются до материалов, чтобы те получили шейдеры URP.
         RenderPipelineSetup.EnsureUrp();
@@ -148,14 +150,22 @@ public static class SnakeSceneBuilder
             ("_mushroomCapMaterial", arena.MushroomCap), ("_mushroomStemMaterial", arena.MushroomStem),
             ("_lilyPadMaterial", arena.LilyPad), ("_birdEggMaterial", arena.BirdEgg));
         SetInt(board, "_canopyLayer", canopyLayer);
-        Material hotSpringWater = CreateLitMaterial("HotSpringWater", new Color(0.35f, 0.78f, 0.78f, 0.82f), 0.92f);
-        MakeTransparent(hotSpringWater);
+        // Тёплый ключ — лужица на корке: мелко везде, поэтому без мягкого края и пены; рябь — пузыри (WaterRipples).
+        Material hotSpringWater = EnvironmentBuilder.WaterMaterial("HotSpringWater", new Color(0.42f, 0.86f, 0.82f, 0.75f),
+            new Color(0.2f, 0.62f, 0.66f, 0.9f), 0.05f, 0.0001f, new Color(1f, 1f, 1f, 0f), arena.PondWater.GetTexture("_BumpMap") as Texture2D,
+            0.35f, 3f, new Vector4(0.03f, 0.02f, -0.025f, 0.02f), 0.004f, 1f, 0.6f, 0.0001f);
+        if (hotSpringWater == null)
+        {
+            hotSpringWater = CreateLitMaterial("HotSpringWater", new Color(0.35f, 0.78f, 0.78f, 0.82f), 0.92f);
+            MakeTransparent(hotSpringWater);
+        }
         Wire(board, ("_brambleMaterial", CreateLitMaterial("Bramble", new Color(0.16f, 0.25f, 0.13f), 0.25f)),
             ("_berryMaterial", CreateLitMaterial("BrambleBerry", new Color(0.22f, 0.05f, 0.12f), 0.75f)),
             ("_hotSpringMaterial", hotSpringWater),
             ("_mineralMaterial", CreateLitMaterial("SpringMineral", new Color(0.86f, 0.82f, 0.7f), 0.2f)),
             ("_waspNestMaterial", CreateLitMaterial("WaspNestPaper", new Color(0.62f, 0.58f, 0.52f), 0.1f)),
             ("_waspStripeMaterial", CreateLitMaterial("WaspNestStripe", new Color(0.42f, 0.38f, 0.33f), 0.1f)));
+        WireNatureModels(board);
         board.Build();
         BuildSpringSteam(grid, particles);
         EnvironmentBuilder.Build(grid, particles, out ParticleSystem pollen, out Renderer stars, out Transform clouds);
@@ -271,6 +281,23 @@ public static class SnakeSceneBuilder
         rain.transform.SetParent(weather.transform, false);
         Wire(weather, ("_config", config), ("_dayNight", dayNight), ("_rain", rain), ("_camera", camGo.transform));
 
+        // Рябь и брызги на воде: след змей и плывущей добычи, пузыри ключей, круги от дождя (шейдер WildSnake/Water).
+        var ripples = new GameObject("WaterRipples").AddComponent<WaterRipples>();
+        ParticleSystem splash = CreateParticles("WaterSplash", particles, new Color(0.92f, 0.97f, 1f, 0.9f), new Color(0.65f, 0.85f, 0.95f, 0.7f),
+            1.3f, 2.8f, 0.9f, 0.04f, 0.1f, 0.35f, 0.7f, 0.12f);
+        splash.transform.SetParent(ripples.transform, false);
+        // Конус вверх: брызги летят фонтанчиком.
+        splash.transform.rotation = Quaternion.Euler(-90f, 0f, 0f);
+        ParticleSystem.ShapeModule splashShape = splash.shape;
+        splashShape.shapeType = ParticleSystemShapeType.Cone;
+        splashShape.angle = 28f;
+        Wire(ripples, ("_grid", grid), ("_wildlife", wildlife), ("_weather", weather), ("_camera", camGo.transform), ("_splash", splash));
+        WireArray(ripples, "_snakes", new Object[] { player.Controller, rival.Controller });
+
+        // Змеи и лиса раздвигают траву (шейдер WildSnake/Grass).
+        var bender = ripples.gameObject.AddComponent<GrassBender>();
+        WireArray(bender, "_targets", new Object[] { player.Controller.Head, rival.Controller.Head, fox.transform.Find("FoxModel") });
+
         var ambienceGo = new GameObject("Ambience");
         var ambienceSources = new Object[4];
         for (int i = 0; i < ambienceSources.Length; i++) ambienceSources[i] = ambienceGo.AddComponent<AudioSource>();
@@ -306,6 +333,42 @@ public static class SnakeSceneBuilder
         AddSceneToBuildSettings(SCENE_PATH);
 
         Debug.Log("WildSnake: сцена собрана и сохранена в " + SCENE_PATH + (_urp ? " (URP)" : " (Built-in)"));
+    }
+
+    /// <summary>Меши природы из кода (NatureModels) — варианты деревьев, пни, брёвна по длине и мелочи.</summary>
+    private static void WireNatureModels(BoardView board)
+    {
+        int tv = NatureModels.TREE_VARIANTS;
+        WireArray(board, "_treeTrunks", Many(tv, NatureModels.TreeTrunk));
+        WireArray(board, "_treeCrowns", Many(tv, NatureModels.TreeCrown));
+        WireArray(board, "_pineTrunks", Many(2, NatureModels.PineTrunk));
+        WireArray(board, "_pineCrowns", Many(2, NatureModels.PineCrown));
+        WireArray(board, "_birchTrunks", Many(tv, NatureModels.BirchTrunk));
+        WireArray(board, "_birchCrowns", Many(tv, NatureModels.BirchCrown));
+        WireArray(board, "_deadTrees", Many(2, NatureModels.DeadTree));
+        WireArray(board, "_stumps", Many(tv, NatureModels.Stump));
+        WireArray(board, "_logs", Many(NatureModels.MAX_LOG, n => NatureModels.Log(n + 1)));
+        WireArray(board, "_logEnds", Many(NatureModels.MAX_LOG, n => NatureModels.LogEnds(n + 1)));
+        WireArray(board, "_hollowOuter", Many(6, n => NatureModels.HollowOuter(n + 1)));
+        WireArray(board, "_hollowInner", Many(6, n => NatureModels.HollowInner(n + 1)));
+        WireArray(board, "_hollowRims", Many(6, n => NatureModels.HollowRims(n + 1)));
+        WireArray(board, "_brambleBushes", Many(tv, NatureModels.BrambleBush));
+        Wire(board, ("_stumpTopMesh", NatureModels.StumpTop()), ("_berryMesh", NatureModels.BerryCluster()),
+            ("_mushroomCapMesh", NatureModels.MushroomCap()), ("_mushroomStemMesh", NatureModels.MushroomStem()),
+            ("_cattailMesh", NatureModels.CattailHead()), ("_stalkMesh", NatureModels.ReedStalk()), ("_lilyPadMesh", NatureModels.LilyPad()),
+            ("_nestRingMesh", NatureModels.NestRing()), ("_eggMesh", NatureModels.Egg()), ("_waspNestMesh", NatureModels.WaspNest()),
+            ("_pebbleMesh", NatureModels.Pebble()), ("_moundMesh", NatureModels.Mound()),
+            ("_crustMesh", NatureModels.Puddle(0)), ("_poolMesh", NatureModels.Puddle(1)),
+            ("_burrowMound", NatureModels.BurrowMound()), ("_burrowPit", NatureModels.BurrowPit()));
+        WireArray(board, "_boulders", Many(4, NatureModels.Boulder));
+        WireArray(board, "_standingStones", Many(3, NatureModels.StandingStone));
+    }
+
+    private static Object[] Many(int count, System.Func<int, Mesh> make)
+    {
+        var a = new Object[count];
+        for (int i = 0; i < count; i++) a[i] = make(i);
+        return a;
     }
 
     // ===================== Живность =====================
@@ -398,58 +461,22 @@ public static class SnakeSceneBuilder
     /// <summary>Рыба: обтекаемое серебристое тело, хвост и спинной плавник цвета ржавчины, глаза по бокам.</summary>
     private static void BuildFish(Transform body, Material scales, Material fin, Material dark)
     {
-        Part(PrimitiveType.Sphere, "Torso", body, scales, Vector3.zero, new Vector3(0.18f, 0.2f, 0.5f));
-        GameObject tail = Part(PrimitiveType.Cube, "Tail", body, fin, new Vector3(0f, 0f, -0.29f), new Vector3(0.02f, 0.2f, 0.14f));
-        tail.transform.localRotation = Quaternion.Euler(0f, 0f, 0f);
-        GameObject dorsal = Part(PrimitiveType.Cube, "Dorsal", body, fin, new Vector3(0f, 0.1f, -0.02f), new Vector3(0.015f, 0.08f, 0.16f));
-        dorsal.transform.localRotation = Quaternion.Euler(-15f, 0f, 0f);
-        for (int side = -1; side <= 1; side += 2)
-        {
-            Part(PrimitiveType.Sphere, "Eye", body, dark, new Vector3(0.07f * side, 0.035f, 0.17f), Vector3.one * 0.035f);
-            GameObject pectoral = Part(PrimitiveType.Cube, "Fin", body, fin, new Vector3(0.09f * side, -0.04f, 0.06f), new Vector3(0.08f, 0.012f, 0.06f));
-            pectoral.transform.localRotation = Quaternion.Euler(0f, 30f * side, -20f * side);
-        }
+        MeshKit.Part("Model", body, CreatureModels.Fish(), scales, fin, dark);
     }
 
     private static void BuildBeetle(Transform body, Material shell, Material dark)
     {
-        Part(PrimitiveType.Sphere, "Shell", body, shell, new Vector3(0f, 0.13f, 0f), new Vector3(0.3f, 0.17f, 0.4f));
-        Part(PrimitiveType.Sphere, "Head", body, dark, new Vector3(0f, 0.1f, 0.21f), new Vector3(0.15f, 0.12f, 0.12f));
-        for (int side = -1; side <= 1; side += 2)
-        {
-            for (int l = 0; l < 3; l++)
-            {
-                GameObject leg = Part(PrimitiveType.Cube, "Leg", body, dark, new Vector3(0.16f * side, 0.05f, -0.1f + l * 0.1f), new Vector3(0.14f, 0.02f, 0.02f));
-                leg.transform.localRotation = Quaternion.Euler(0f, (l - 1) * 25f * side, -20f * side);
-            }
-        }
+        MeshKit.Part("Model", body, CreatureModels.Beetle(), shell, dark);
     }
 
     private static void BuildMouse(Transform body, Material fur, Material pink, Material dark)
     {
-        Part(PrimitiveType.Sphere, "Torso", body, fur, new Vector3(0f, 0.17f, 0f), new Vector3(0.32f, 0.28f, 0.52f));
-        Part(PrimitiveType.Sphere, "Head", body, fur, new Vector3(0f, 0.2f, 0.3f), new Vector3(0.22f, 0.2f, 0.28f));
-        Part(PrimitiveType.Sphere, "Nose", body, pink, new Vector3(0f, 0.19f, 0.45f), Vector3.one * 0.05f);
-        for (int side = -1; side <= 1; side += 2)
-        {
-            Part(PrimitiveType.Sphere, "Ear", body, pink, new Vector3(0.09f * side, 0.32f, 0.24f), new Vector3(0.12f, 0.12f, 0.03f));
-            Part(PrimitiveType.Sphere, "Eye", body, dark, new Vector3(0.075f * side, 0.24f, 0.38f), Vector3.one * 0.045f);
-        }
-        GameObject tail = Part(PrimitiveType.Cylinder, "Tail", body, pink, new Vector3(0f, 0.09f, -0.45f), new Vector3(0.025f, 0.2f, 0.025f));
-        tail.transform.localRotation = Quaternion.Euler(80f, 0f, 0f);
+        MeshKit.Part("Model", body, CreatureModels.Mouse(), fur, pink, dark);
     }
 
     private static void BuildFrog(Transform body, Material skin, Material belly, Material dark)
     {
-        Part(PrimitiveType.Sphere, "Torso", body, skin, new Vector3(0f, 0.15f, 0f), new Vector3(0.46f, 0.28f, 0.44f));
-        Part(PrimitiveType.Sphere, "Belly", body, belly, new Vector3(0f, 0.1f, 0.04f), new Vector3(0.38f, 0.16f, 0.36f));
-        for (int side = -1; side <= 1; side += 2)
-        {
-            Part(PrimitiveType.Sphere, "Eye", body, skin, new Vector3(0.12f * side, 0.29f, 0.12f), Vector3.one * 0.13f);
-            Part(PrimitiveType.Sphere, "Pupil", body, dark, new Vector3(0.13f * side, 0.31f, 0.17f), Vector3.one * 0.06f);
-            GameObject leg = Part(PrimitiveType.Sphere, "Leg", body, skin, new Vector3(0.22f * side, 0.08f, -0.12f), new Vector3(0.16f, 0.12f, 0.32f));
-            leg.transform.localRotation = Quaternion.Euler(0f, 20f * side, 0f);
-        }
+        MeshKit.Part("Model", body, CreatureModels.Frog(), skin, belly, dark);
     }
 
     /// <summary>
@@ -458,68 +485,20 @@ public static class SnakeSceneBuilder
     /// </summary>
     private static GameObject BuildHedgehog(Transform body, Material fur, Material spikes, Material face, Material dark)
     {
-        Part(PrimitiveType.Sphere, "Torso", body, fur, new Vector3(0f, 0.2f, 0f), new Vector3(0.5f, 0.36f, 0.6f));
-        // Иголки торчат из спины во все стороны, сильнее — назад.
-        for (int i = 0; i < 26; i++)
-        {
-            float a = i * 2.39996f; // золотой угол — равномерно по полусфере
-            float h = 0.2f + 0.75f * ((i + 0.5f) / 26f);
-            float ring = Mathf.Sqrt(1f - h * h);
-            var dir = new Vector3(Mathf.Cos(a) * ring, h, Mathf.Sin(a) * ring);
-            dir.z -= 0.35f;
-            dir.Normalize();
-            Vector3 pos = new Vector3(dir.x * 0.22f, 0.22f + dir.y * 0.15f, dir.z * 0.27f - 0.02f);
-            GameObject spike = Part(PrimitiveType.Cube, "Spike", body, spikes, pos, new Vector3(0.035f, 0.035f, 0.2f));
-            spike.transform.localRotation = Quaternion.LookRotation(dir);
-        }
-
-        var faceRoot = new GameObject("Face");
-        faceRoot.transform.SetParent(body, false);
-        Part(PrimitiveType.Sphere, "Snout", faceRoot.transform, face, new Vector3(0f, 0.16f, 0.3f), new Vector3(0.22f, 0.17f, 0.26f));
-        Part(PrimitiveType.Sphere, "Nose", faceRoot.transform, dark, new Vector3(0f, 0.17f, 0.44f), Vector3.one * 0.055f);
-        for (int side = -1; side <= 1; side += 2)
-        {
-            Part(PrimitiveType.Sphere, "Eye", faceRoot.transform, dark, new Vector3(0.07f * side, 0.22f, 0.36f), Vector3.one * 0.04f);
-            Part(PrimitiveType.Sphere, "FrontLeg", faceRoot.transform, face, new Vector3(0.13f * side, 0.04f, 0.16f), new Vector3(0.08f, 0.07f, 0.1f));
-            Part(PrimitiveType.Sphere, "BackLeg", faceRoot.transform, face, new Vector3(0.14f * side, 0.04f, -0.18f), new Vector3(0.08f, 0.07f, 0.1f));
-        }
-        return faceRoot;
+        MeshKit.Part("Model", body, CreatureModels.HedgehogBody(), fur, spikes);
+        return MeshKit.Part("Face", body, CreatureModels.HedgehogFace(), face, dark);
     }
 
     /// <summary>Кролик: крупное тело, длинные уши с розовой изнанкой, белый хвостик-помпон.</summary>
     private static void BuildRabbit(Transform body, Material fur, Material white, Material pink, Material dark)
     {
-        Part(PrimitiveType.Sphere, "Torso", body, fur, new Vector3(0f, 0.3f, -0.05f), new Vector3(0.5f, 0.46f, 0.68f));
-        Part(PrimitiveType.Sphere, "Chest", body, white, new Vector3(0f, 0.27f, 0.18f), new Vector3(0.36f, 0.32f, 0.3f));
-        Part(PrimitiveType.Sphere, "Head", body, fur, new Vector3(0f, 0.5f, 0.32f), new Vector3(0.32f, 0.3f, 0.36f));
-        Part(PrimitiveType.Sphere, "Nose", body, pink, new Vector3(0f, 0.5f, 0.5f), Vector3.one * 0.06f);
-        Part(PrimitiveType.Sphere, "Tail", body, white, new Vector3(0f, 0.36f, -0.42f), Vector3.one * 0.17f);
-        for (int side = -1; side <= 1; side += 2)
-        {
-            GameObject ear = Part(PrimitiveType.Sphere, "Ear", body, fur, new Vector3(0.07f * side, 0.8f, 0.24f), new Vector3(0.1f, 0.38f, 0.06f));
-            ear.transform.localRotation = Quaternion.Euler(-12f, 0f, -10f * side);
-            GameObject inner = Part(PrimitiveType.Sphere, "EarInner", body, pink, new Vector3(0.07f * side, 0.8f, 0.265f), new Vector3(0.06f, 0.3f, 0.02f));
-            inner.transform.localRotation = Quaternion.Euler(-12f, 0f, -10f * side);
-            Part(PrimitiveType.Sphere, "Eye", body, dark, new Vector3(0.12f * side, 0.56f, 0.42f), Vector3.one * 0.055f);
-            GameObject foot = Part(PrimitiveType.Sphere, "Foot", body, fur, new Vector3(0.16f * side, 0.07f, -0.12f), new Vector3(0.13f, 0.1f, 0.34f));
-            foot.transform.localRotation = Quaternion.Euler(0f, 8f * side, 0f);
-        }
+        MeshKit.Part("Model", body, CreatureModels.Rabbit(), fur, white, pink, dark);
     }
 
     private static void BuildBird(Transform body, Material feather, Material chest, Material beak, Material dark,
         out Transform leftWing, out Transform rightWing)
     {
-        Part(PrimitiveType.Sphere, "Torso", body, feather, new Vector3(0f, 0.3f, 0f), new Vector3(0.3f, 0.3f, 0.48f));
-        Part(PrimitiveType.Sphere, "Chest", body, chest, new Vector3(0f, 0.27f, 0.1f), new Vector3(0.25f, 0.24f, 0.3f));
-        Part(PrimitiveType.Sphere, "Head", body, feather, new Vector3(0f, 0.47f, 0.2f), Vector3.one * 0.22f);
-        Part(PrimitiveType.Cube, "Beak", body, beak, new Vector3(0f, 0.45f, 0.34f), new Vector3(0.05f, 0.05f, 0.12f));
-        GameObject tail = Part(PrimitiveType.Cube, "Tail", body, feather, new Vector3(0f, 0.34f, -0.32f), new Vector3(0.16f, 0.025f, 0.24f));
-        tail.transform.localRotation = Quaternion.Euler(-20f, 0f, 0f);
-        for (int side = -1; side <= 1; side += 2)
-        {
-            Part(PrimitiveType.Sphere, "Eye", body, dark, new Vector3(0.08f * side, 0.5f, 0.27f), Vector3.one * 0.04f);
-            Part(PrimitiveType.Cylinder, "Leg", body, beak, new Vector3(0.06f * side, 0.08f, 0.02f), new Vector3(0.025f, 0.08f, 0.025f));
-        }
+        MeshKit.Part("Model", body, CreatureModels.Bird(), feather, chest, beak, dark);
         leftWing = WingPivot(body, "LeftWing", -1, feather);
         rightWing = WingPivot(body, "RightWing", 1, feather);
     }
@@ -528,8 +507,8 @@ public static class SnakeSceneBuilder
     {
         var pivot = new GameObject(name).transform;
         pivot.SetParent(body, false);
-        pivot.localPosition = new Vector3(0.13f * side, 0.36f, 0f);
-        Part(PrimitiveType.Sphere, "Feathers", pivot, mat, new Vector3(0.17f * side, 0f, -0.04f), new Vector3(0.36f, 0.05f, 0.26f));
+        pivot.localPosition = new Vector3(0.11f * side, 0.37f, 0.02f);
+        MeshKit.Part("Feathers", pivot, CreatureModels.BirdWing(side), mat);
         return pivot;
     }
 
@@ -591,14 +570,7 @@ public static class SnakeSceneBuilder
             var w = new GameObject(i < swarmSize ? "SwarmWasp" : "GuardWasp");
             w.transform.SetParent(root.transform, false);
             w.transform.localScale = Vector3.one * 1.5f;
-            Part(PrimitiveType.Sphere, "Abdomen", w.transform, yellow, new Vector3(0f, 0f, -0.05f), new Vector3(0.06f, 0.06f, 0.1f));
-            Part(PrimitiveType.Sphere, "Band", w.transform, black, new Vector3(0f, 0f, -0.06f), new Vector3(0.062f, 0.062f, 0.025f));
-            Part(PrimitiveType.Sphere, "Head", w.transform, black, new Vector3(0f, 0f, 0.03f), Vector3.one * 0.045f);
-            for (int side = -1; side <= 1; side += 2)
-            {
-                GameObject wingGo = Part(PrimitiveType.Sphere, "Wing", w.transform, wing, new Vector3(0.04f * side, 0.03f, -0.01f), new Vector3(0.07f, 0.008f, 0.04f));
-                wingGo.transform.localRotation = Quaternion.Euler(0f, 0f, 20f * side);
-            }
+            MeshKit.Part("Mesh", w.transform, CreatureModels.Wasp(), yellow, black, wing);
             foreach (Renderer r in w.GetComponentsInChildren<Renderer>()) r.shadowCastingMode = ShadowCastingMode.Off;
             if (i < swarmSize)
             {
@@ -659,16 +631,11 @@ public static class SnakeSceneBuilder
             for (int k = 0; k < segments; k++)
             {
                 float size = k == 0 ? 0.13f : Mathf.Lerp(0.11f, 0.05f, (float)k / (segments - 1));
-                GameObject seg = CreatePrimitive(PrimitiveType.Sphere, k == 0 ? "Head" : "Segment", h.transform, body);
+                GameObject seg = k == 0
+                    ? MeshKit.Part("Head", h.transform, CreatureModels.HatchlingHead(), body, eye)
+                    : MeshKit.Part("Segment", h.transform, CreatureModels.LowSphere(), body);
                 seg.transform.localScale = Vector3.one * size;
                 seg.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
-                if (k != 0) continue;
-                for (int side = -1; side <= 1; side += 2)
-                {
-                    GameObject e = CreatePrimitive(PrimitiveType.Sphere, "Eye", seg.transform, eye);
-                    e.transform.localPosition = new Vector3(0.32f * side, 0.25f, 0.3f);
-                    e.transform.localScale = Vector3.one * 0.3f;
-                }
             }
             roots[i] = h.transform;
         }
@@ -690,12 +657,7 @@ public static class SnakeSceneBuilder
         var root = new GameObject("Eagle");
         var model = new GameObject("EagleModel").transform;
         model.SetParent(root.transform, false);
-        Part(PrimitiveType.Sphere, "Body", model, feather, Vector3.zero, new Vector3(0.6f, 0.55f, 1.4f));
-        Part(PrimitiveType.Sphere, "Head", model, white, new Vector3(0f, 0.16f, 0.78f), Vector3.one * 0.44f);
-        Part(PrimitiveType.Sphere, "Beak", model, beak, new Vector3(0f, 0.08f, 1.04f), new Vector3(0.14f, 0.14f, 0.28f));
-        for (int side = -1; side <= 1; side += 2)
-            Part(PrimitiveType.Sphere, "Eye", model, eye, new Vector3(0.15f * side, 0.24f, 0.92f), Vector3.one * 0.07f);
-        Part(PrimitiveType.Cube, "Tail", model, white, new Vector3(0f, 0f, -0.92f), new Vector3(0.7f, 0.05f, 0.62f));
+        MeshKit.Part("Body", model, CreatureModels.EagleBody(), feather, tip, white, beak, eye);
 
         Transform[] wings = new Transform[2];
         for (int w = 0; w < 2; w++)
@@ -703,10 +665,8 @@ public static class SnakeSceneBuilder
             int side = w == 0 ? -1 : 1;
             var pivot = new GameObject(side < 0 ? "LeftWing" : "RightWing").transform;
             pivot.SetParent(model, false);
-            pivot.localPosition = new Vector3(0.24f * side, 0.1f, 0.1f);
-            Part(PrimitiveType.Cube, "Wing", pivot, feather, new Vector3(1.05f * side, 0f, -0.05f), new Vector3(2.1f, 0.07f, 0.8f));
-            GameObject end = Part(PrimitiveType.Cube, "WingTip", pivot, tip, new Vector3(2.35f * side, 0f, -0.18f), new Vector3(0.7f, 0.05f, 0.55f));
-            end.transform.localRotation = Quaternion.Euler(0f, -12f * side, 0f);
+            pivot.localPosition = new Vector3(0.2f * side, 0.12f, 0.1f);
+            MeshKit.Part("Wing", pivot, CreatureModels.EagleWing(side), feather, tip);
             wings[w] = pivot;
         }
         foreach (Renderer r in model.GetComponentsInChildren<Renderer>(true)) r.shadowCastingMode = ShadowCastingMode.Off;
@@ -740,18 +700,7 @@ public static class SnakeSceneBuilder
         var body = new GameObject("Body").transform;
         body.SetParent(model, false);
 
-        Part(PrimitiveType.Sphere, "Torso", body, fur, new Vector3(0f, 0.5f, 0f), new Vector3(0.48f, 0.46f, 1.05f));
-        Part(PrimitiveType.Sphere, "Chest", body, white, new Vector3(0f, 0.45f, 0.36f), new Vector3(0.36f, 0.38f, 0.36f));
-        Part(PrimitiveType.Sphere, "Head", body, fur, new Vector3(0f, 0.74f, 0.62f), new Vector3(0.4f, 0.36f, 0.42f));
-        GameObject snout = Part(PrimitiveType.Sphere, "Snout", body, white, new Vector3(0f, 0.68f, 0.88f), new Vector3(0.2f, 0.17f, 0.36f));
-        snout.transform.localRotation = Quaternion.Euler(8f, 0f, 0f);
-        Part(PrimitiveType.Sphere, "Nose", body, dark, new Vector3(0f, 0.7f, 1.05f), Vector3.one * 0.07f);
-        for (int side = -1; side <= 1; side += 2)
-        {
-            GameObject ear = Part(PrimitiveType.Cube, "Ear", body, dark, new Vector3(0.12f * side, 0.97f, 0.56f), new Vector3(0.12f, 0.2f, 0.05f));
-            ear.transform.localRotation = Quaternion.Euler(-10f, 0f, -14f * side);
-            Part(PrimitiveType.Sphere, "Eye", body, eye, new Vector3(0.11f * side, 0.8f, 0.8f), Vector3.one * 0.055f);
-        }
+        MeshKit.Part("Mesh", body, CreatureModels.FoxBody(), fur, white, dark, eye);
 
         var legs = new Object[4];
         Vector3[] legPos = { new Vector3(-0.14f, 0.36f, 0.32f), new Vector3(0.14f, 0.36f, 0.32f), new Vector3(-0.14f, 0.36f, -0.32f), new Vector3(0.14f, 0.36f, -0.32f) };
@@ -760,15 +709,14 @@ public static class SnakeSceneBuilder
             var pivot = new GameObject("Leg" + i).transform;
             pivot.SetParent(model, false);
             pivot.localPosition = legPos[i];
-            Part(PrimitiveType.Cylinder, "Shin", pivot, dark, new Vector3(0f, -0.18f, 0f), new Vector3(0.09f, 0.18f, 0.09f));
+            MeshKit.Part("Leg", pivot, CreatureModels.FoxLeg(i >= 2), fur, dark);
             legs[i] = pivot;
         }
 
         var tail = new GameObject("Tail").transform;
         tail.SetParent(body, false);
         tail.localPosition = new Vector3(0f, 0.56f, -0.5f);
-        Part(PrimitiveType.Sphere, "Brush", tail, fur, new Vector3(0f, 0f, -0.36f), new Vector3(0.26f, 0.26f, 0.8f));
-        Part(PrimitiveType.Sphere, "Tip", tail, white, new Vector3(0f, 0f, -0.74f), new Vector3(0.18f, 0.18f, 0.26f));
+        MeshKit.Part("Brush", tail, CreatureModels.FoxTail(), fur, white);
 
         model.gameObject.SetActive(false);
 
@@ -798,14 +746,6 @@ public static class SnakeSceneBuilder
         return tex;
     }
 
-    private static GameObject Part(PrimitiveType type, string name, Transform parent, Material mat, Vector3 localPosition, Vector3 localScale)
-    {
-        GameObject go = CreatePrimitive(type, name, parent, mat);
-        go.transform.localPosition = localPosition;
-        go.transform.localScale = localScale;
-        return go;
-    }
-
     // ===================== Змея =====================
 
     private static SnakeParts BuildSnake(string name, SnakeLook look, bool isPlayer, float speedScale, GameConfig config,
@@ -821,12 +761,7 @@ public static class SnakeSceneBuilder
         headVisual.SetParent(head, false);
 
         // Голова — череп и морда из двух эллипсоидов, плавно переходящих друг в друга.
-        GameObject skull = CreatePrimitive(PrimitiveType.Sphere, "Skull", headVisual, look.Head);
-        skull.transform.localPosition = new Vector3(0f, 0.03f, 0.02f);
-        skull.transform.localScale = new Vector3(0.8f, 0.52f, 1.0f);
-        GameObject snout = CreatePrimitive(PrimitiveType.Sphere, "Snout", headVisual, look.Head);
-        snout.transform.localPosition = new Vector3(0f, -0.01f, 0.38f);
-        snout.transform.localScale = new Vector3(0.56f, 0.36f, 0.6f);
+        MeshKit.Part("Skull", headVisual, CreatureModels.SnakeHead(), look.Head);
 
         Transform leftEye = CreateEye(headVisual, new Vector3(-0.27f, 0.15f, 0.28f), -30f, look.Eye, look.Pupil);
         Transform rightEye = CreateEye(headVisual, new Vector3(0.27f, 0.15f, 0.28f), 30f, look.Eye, look.Pupil);
@@ -879,13 +814,13 @@ public static class SnakeSceneBuilder
     /// <summary>Жёлтый глаз с вертикальным зрачком-щелью, как у настоящей змеи.</summary>
     private static Transform CreateEye(Transform parent, Vector3 localPos, float yaw, Material eyeMat, Material pupilMat)
     {
-        GameObject eye = CreatePrimitive(PrimitiveType.Sphere, "Eye", parent, eyeMat);
+        GameObject eye = MeshKit.Part("Eye", parent, CreatureModels.LowSphere(), eyeMat);
         eye.transform.localPosition = localPos;
         eye.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
         eye.transform.localScale = Vector3.one * 0.2f;
         eye.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
 
-        GameObject pupil = CreatePrimitive(PrimitiveType.Sphere, "Pupil", eye.transform, pupilMat);
+        GameObject pupil = MeshKit.Part("Pupil", eye.transform, CreatureModels.LowSphere(), pupilMat);
         pupil.transform.localPosition = new Vector3(0f, 0f, 0.4f);
         pupil.transform.localScale = new Vector3(0.22f, 0.85f, 0.35f);
         pupil.GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
@@ -1268,6 +1203,13 @@ public static class SnakeSceneBuilder
         // Шахматная текстура пола заменена травой из EnvironmentBuilder.
         const string checkerPath = MATERIALS_FOLDER + "/FloorChecker.asset";
         if (AssetDatabase.LoadAssetAtPath<Texture2D>(checkerPath) != null) AssetDatabase.DeleteAsset(checkerPath);
+
+        // Кроны-«капли», ярусы-конусы и цветы-многогранники фона заменены моделями из NatureModels.
+        foreach (string name in new[] { "CrownA", "CrownB", "PineTier", "FlowerHead", "Boulder0", "Boulder1", "Boulder2", "Boulder3" })
+        {
+            string path = "Assets/Meshes/" + name + ".asset";
+            if (AssetDatabase.LoadAssetAtPath<Mesh>(path) != null) AssetDatabase.DeleteAsset(path);
+        }
     }
 
     // ===================== Утилиты =====================

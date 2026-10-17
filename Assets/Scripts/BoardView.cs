@@ -15,6 +15,8 @@ namespace WildSnake
     /// </summary>
     public class BoardView : MonoBehaviour
     {
+        private static readonly int FlowId = Shader.PropertyToID("_Flow");
+
         [Header("Ссылки")]
         [Tooltip("Сетка, по которой строится поле")]
         [SerializeField] private GridManager _grid;
@@ -135,6 +137,96 @@ namespace WildSnake
 
 
 
+        [Header("Модели (меши из кода, вариантами; пусто — простые фигуры)")]
+        [Tooltip("Стволы лиственных деревьев с ветвями")]
+        [SerializeField] private Mesh[] _treeTrunks = new Mesh[0];
+
+        [Tooltip("Кроны лиственных деревьев — по варианту на ствол")]
+        [SerializeField] private Mesh[] _treeCrowns = new Mesh[0];
+
+        [Tooltip("Стволы елей")]
+        [SerializeField] private Mesh[] _pineTrunks = new Mesh[0];
+
+        [Tooltip("Хвоя елей — по варианту на ствол")]
+        [SerializeField] private Mesh[] _pineCrowns = new Mesh[0];
+
+        [Tooltip("Стволы берёз")]
+        [SerializeField] private Mesh[] _birchTrunks = new Mesh[0];
+
+        [Tooltip("Кроны берёз — по варианту на ствол")]
+        [SerializeField] private Mesh[] _birchCrowns = new Mesh[0];
+
+        [Tooltip("Сухие деревья болота")]
+        [SerializeField] private Mesh[] _deadTrees = new Mesh[0];
+
+        [Tooltip("Пни (диаметр 1, высота спила 1)")]
+        [SerializeField] private Mesh[] _stumps = new Mesh[0];
+
+        [Tooltip("Спил пня")]
+        [SerializeField] private Mesh _stumpTopMesh;
+
+        [Tooltip("Брёвна по длине: элемент i — длиной i+1 м, вдоль X, диаметр 1")]
+        [SerializeField] private Mesh[] _logs = new Mesh[0];
+
+        [Tooltip("Торцы брёвен по длине")]
+        [SerializeField] private Mesh[] _logEnds = new Mesh[0];
+
+        [Tooltip("Полые брёвна по длине: кора, внутренность, кольца торцов")]
+        [SerializeField] private Mesh[] _hollowOuter = new Mesh[0];
+
+        [SerializeField] private Mesh[] _hollowInner = new Mesh[0];
+
+        [SerializeField] private Mesh[] _hollowRims = new Mesh[0];
+
+        [Tooltip("Кусты ежевики")]
+        [SerializeField] private Mesh[] _brambleBushes = new Mesh[0];
+
+        [Tooltip("Гроздь ягод")]
+        [SerializeField] private Mesh _berryMesh;
+
+        [Tooltip("Шляпка и ножка гриба")]
+        [SerializeField] private Mesh _mushroomCapMesh;
+
+        [SerializeField] private Mesh _mushroomStemMesh;
+
+        [Tooltip("Початок рогоза и его стебель")]
+        [SerializeField] private Mesh _cattailMesh;
+
+        [SerializeField] private Mesh _stalkMesh;
+
+        [Tooltip("Лист кувшинки")]
+        [SerializeField] private Mesh _lilyPadMesh;
+
+        [Tooltip("Кольцо гнезда из прутьев (радиус 1)")]
+        [SerializeField] private Mesh _nestRingMesh;
+
+        [Tooltip("Яйцо (диаметр 1)")]
+        [SerializeField] private Mesh _eggMesh;
+
+        [Tooltip("Бумажное осиное гнездо")]
+        [SerializeField] private Mesh _waspNestMesh;
+
+        [Tooltip("Камешек (радиус 0.5)")]
+        [SerializeField] private Mesh _pebbleMesh;
+
+        [Tooltip("Холмик земли с кратером (мышиные норки)")]
+        [SerializeField] private Mesh _moundMesh;
+
+        [Tooltip("Неровные плоские диски радиуса 0.5: минеральная корка и вода тёплого ключа")]
+        [SerializeField] private Mesh _crustMesh;
+
+        [SerializeField] private Mesh _poolMesh;
+
+        [Tooltip("Нора: земляной вал подковой и тёмный лаз (вход — по +Z)")]
+        [SerializeField] private Mesh _burrowMound;
+
+        [SerializeField] private Mesh _burrowPit;
+
+        [Tooltip("Валуны (радиус 0.5) и менгиры (высота 1) вариантами")]
+        [SerializeField] private Mesh[] _boulders = new Mesh[0];
+
+        [SerializeField] private Mesh[] _standingStones = new Mesh[0];
+
         [Header("Размеры")]
         [Tooltip("Высота пня, клеток")]
         [SerializeField, Min(0.5f)] private float _stumpHeight = 1.5f;
@@ -254,6 +346,12 @@ namespace WildSnake
             float h = StumpHeight(cell, cs);
             float yaw = Hash(cell.x, cell.y) * 360f;
             Quaternion turn = Quaternion.Euler(0f, yaw, 0f);
+            if (_stumps.Length > 0)
+            {
+                Occlude(CreateMesh("Stump", Pick(_stumps, cell.x, cell.y), _barkMaterial, basePos, new Vector3(d, h, d), yaw));
+                if (_stumpTopMesh != null) Occlude(CreateMesh("StumpTop", _stumpTopMesh, _stumpTopMaterial, basePos, new Vector3(d, h, d), yaw));
+                return;
+            }
 
             Occlude(CreateShape(PrimitiveType.Cylinder, "Stump", basePos + Vector3.up * (h * 0.5f), new Vector3(d * 0.95f, h * 0.5f, d * 0.95f), _barkMaterial));
             Occlude(CreateShape(PrimitiveType.Cylinder, "StumpTop", basePos + Vector3.up * h, new Vector3(d * 0.86f, 0.012f * cs, d * 0.86f), _stumpTopMaterial));
@@ -302,6 +400,17 @@ namespace WildSnake
                 return;
             }
             bool pine = Hash(cell.x + 7, cell.y + 3) < 0.4f && _pineMesh != null;
+            if (_treeTrunks.Length > 0 && _treeCrowns.Length == _treeTrunks.Length && _pineTrunks.Length > 0 && _pineCrowns.Length == _pineTrunks.Length)
+            {
+                // Ствол по толщине совпадает с препятствием, крона — по общему масштабу дерева.
+                Mesh[] trunks = pine ? _pineTrunks : _treeTrunks;
+                int v = PickIndex(trunks.Length, cell.x, cell.y);
+                float k = Mathf.Clamp(d / (pine ? 0.5f : 0.66f), 0.75f, 1.5f) * cs;
+                Occlude(CreateMesh(pine ? "PineTrunk" : "Trunk", trunks[v], _barkMaterial, basePos, new Vector3(k, s * cs, k), yaw));
+                AddCrown(CreateMesh(pine ? "PineCrown" : "Crown", (pine ? _pineCrowns : _treeCrowns)[v], pine ? _pineMaterial : _leavesMaterial,
+                    basePos, new Vector3(k, s * cs, k), yaw));
+                return;
+            }
 
             float trunk = (pine ? 3.2f : 3.6f) * cs * s;
             // Ствол чуть уходит в землю — на склоне не висит в воздухе.
@@ -395,7 +504,9 @@ namespace WildSnake
 
             if (_dirtMaterial != null)
                 Parent(CreateShape(PrimitiveType.Sphere, "NestBowl", pos + Vector3.down * (0.02f * cs), new Vector3(1.5f * cs, 0.16f * cs, 1.5f * cs), _dirtMaterial), root);
-            for (int i = 0; i < 16; i++)
+            if (_nestRingMesh != null)
+                Parent(CreateMesh("NestRing", _nestRingMesh, _barkMaterial, pos - Vector3.up * (0.04f * cs), new Vector3(0.72f, 0.8f, 0.72f) * cs, 0f), root);
+            for (int i = 0; _nestRingMesh == null && i < 16; i++)
             {
                 float a = i * Mathf.PI * 2f / 16f;
                 var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
@@ -414,7 +525,9 @@ namespace WildSnake
                 {
                     float a = i * 1.3f;
                     Vector3 p = pos + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * (0.22f * cs) + Vector3.up * (0.12f * cs);
-                    Renderer egg = CreateShape(PrimitiveType.Sphere, "Egg", p, new Vector3(0.22f, 0.3f, 0.22f) * cs, _eggMaterial);
+                    Renderer egg = _eggMesh != null
+                        ? CreateMesh("Egg", _eggMesh, _eggMaterial, p, new Vector3(0.22f, 0.3f, 0.22f) * cs, 0f)
+                        : CreateShape(PrimitiveType.Sphere, "Egg", p, new Vector3(0.22f, 0.3f, 0.22f) * cs, _eggMaterial);
                     egg.transform.rotation = Quaternion.Euler(70f, a * Mathf.Rad2Deg, 0f);
                     egg.transform.SetParent(_nestEggs.transform, true);
                 }
@@ -449,6 +562,12 @@ namespace WildSnake
                 Occlude(CreateShape(PrimitiveType.Cube, "Stone", basePos + Vector3.up * (h * 0.5f), new Vector3(d, h, d), _blockMaterial));
                 return;
             }
+            if (_standingStones.Length > 0)
+            {
+                // Менгир стоит основанием на земле и чуть утоплен — на склоне не висит.
+                Occlude(CreateMesh("StandingStone", Pick(_standingStones, cell.x, cell.y), _blockMaterial, basePos - Vector3.up * (0.12f * cs), new Vector3(d * 1.6f, h * 1.15f, d * 1.4f), yaw));
+                return;
+            }
             Occlude(CreateMesh("StandingStone", _rockMesh, _blockMaterial, basePos + Vector3.up * (h * 0.45f), new Vector3(d * 1.35f, h, d * 1.15f), yaw));
         }
 
@@ -463,7 +582,8 @@ namespace WildSnake
                 return;
             }
             // Чуть шире квадрата 2x2, чтобы углы столкновения не торчали из камня.
-            Occlude(CreateMesh("Boulder", _rockMesh, _blockMaterial, center + Vector3.up * (h * 0.42f), new Vector3(2.5f * cs, h * 1.25f, 2.5f * cs), yaw));
+            Mesh boulder = _boulders.Length > 0 ? Pick(_boulders, cell.x, cell.y) : _rockMesh;
+            Occlude(CreateMesh("Boulder", boulder, _blockMaterial, center + Vector3.up * (h * 0.42f), new Vector3(2.5f * cs, h * 1.25f, 2.5f * cs), yaw));
         }
 
         /// <summary>Бревно на всю длину стенки: строим только от её начала (слева или снизу).</summary>
@@ -482,6 +602,11 @@ namespace WildSnake
             // Цилиндр Unity вытянут по Y: кладём его вдоль бревна — с наклоном по склону — и чуть поворачиваем вокруг оси.
             Vector3 along = _grid.CellToWorld(last) - _grid.CellToWorld(first);
             if (along.sqrMagnitude < 1e-4f) along = alongX ? Vector3.right : Vector3.forward;
+            if (_logs.Length > 0)
+            {
+                LayLog("Log", center + Vector3.up * (diameter * 0.45f), along.normalized, along.magnitude + cs, diameter, Hash(x, y) * 360f, _logs, _logEnds);
+                return;
+            }
             Quaternion lay = Quaternion.FromToRotation(Vector3.up, along.normalized);
             Renderer log = Occlude(CreateShape(PrimitiveType.Cylinder, "Log", center + Vector3.up * (diameter * 0.45f),
                 new Vector3(diameter, (along.magnitude + cs) * 0.5f, diameter), _barkMaterial));
@@ -502,27 +627,58 @@ namespace WildSnake
             }
         }
 
+        /// <summary>
+        /// Гладь водоёма по форме берега: полярная сетка из колец (а не один веер), чтобы волны шейдера воды
+        /// гнули поверхность и в середине пруда.
+        /// </summary>
         private void CreateFan(string objectName, int pond, Vector3 localCenter, float pad, float scale, Material mat)
         {
             const int segments = 64;
-            var vertices = new Vector3[segments + 1];
-            var uvs = new Vector2[segments + 1];
-            var triangles = new int[segments * 3];
+            const int rings = 8;
+            var vertices = new Vector3[1 + segments * rings];
+            var uvs = new Vector2[vertices.Length];
+            var depth = new Vector2[vertices.Length];
+            var triangles = new int[segments * 3 + segments * (rings - 1) * 6];
             vertices[0] = localCenter;
             uvs[0] = new Vector2(0.5f, 0.5f);
             for (int i = 0; i < segments; i++)
             {
                 float a = i * Mathf.PI * 2f / segments;
-                float r = _grid.PondEdgeWorld(pond, a) * scale + pad;
+                float edge = _grid.PondEdgeWorld(pond, a) * scale + pad;
                 var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
-                vertices[i + 1] = localCenter + dir * r;
-                uvs[i + 1] = new Vector2(0.5f + dir.x * r * 0.25f, 0.5f + dir.z * r * 0.25f);
+                for (int k = 0; k < rings; k++)
+                {
+                    float r = edge * (k + 1) / rings;
+                    int v = 1 + k * segments + i;
+                    vertices[v] = localCenter + dir * r;
+                    uvs[v] = new Vector2(0.5f + dir.x * r * 0.25f, 0.5f + dir.z * r * 0.25f);
+                }
+            }
+            int t = 0;
+            for (int i = 0; i < segments; i++)
+            {
+                int n = (i + 1) % segments;
                 // Обход по часовой стрелке, если смотреть сверху, — лицом вверх.
-                triangles[i * 3] = 0;
-                triangles[i * 3 + 1] = (i + 1) % segments + 1;
-                triangles[i * 3 + 2] = i + 1;
+                triangles[t++] = 0;
+                triangles[t++] = 1 + n;
+                triangles[t++] = 1 + i;
+                for (int k = 0; k < rings - 1; k++)
+                {
+                    int a0 = 1 + k * segments + i, a1 = 1 + k * segments + n;
+                    int b0 = a0 + segments, b1 = a1 + segments;
+                    triangles[t++] = a0; triangles[t++] = a1; triangles[t++] = b1;
+                    triangles[t++] = a0; triangles[t++] = b1; triangles[t++] = b0;
+                }
+            }
+            Vector3 origin = transform.position;
+            for (int v = 0; v < vertices.Length; v++)
+            {
+                Vector3 w = vertices[v] + origin;
+                depth[v] = new Vector2(w.y - _grid.GroundHeight(w), 0f);
             }
             var mesh = new Mesh { name = objectName, vertices = vertices, uv = uvs, triangles = triangles };
+            // Глубина до дна для шейдера воды (UV2.x).
+            mesh.uv2 = depth;
             mesh.RecalculateNormals();
             mesh.RecalculateTangents();
             mesh.RecalculateBounds();
@@ -563,20 +719,30 @@ namespace WildSnake
                 toCenter.y = 0f;
                 Quaternion face = Quaternion.LookRotation(toCenter.sqrMagnitude > 0.01f ? toCenter.normalized : Vector3.forward);
                 Vector3 back = face * Vector3.back;
-
-                Renderer mound = CreateShape(PrimitiveType.Sphere, "BurrowMound", pos + back * (0.35f * cs), new Vector3(1.9f * cs, 0.55f * cs, 1.7f * cs), _dirtMaterial);
-                mound.transform.rotation = face;
-                Renderer lip = CreateShape(PrimitiveType.Sphere, "BurrowLip", pos + face * Vector3.forward * (0.2f * cs), new Vector3(1.1f * cs, 0.3f * cs, 0.7f * cs), _dirtMaterial);
-                lip.transform.rotation = face;
-                Renderer hole = CreateShape(PrimitiveType.Sphere, "BurrowHole", pos + face * new Vector3(0f, 0.12f * cs, 0.42f * cs), new Vector3(0.62f * cs, 0.36f * cs, 0.3f * cs), _holeMaterial);
-                hole.transform.rotation = face * Quaternion.Euler(-20f, 0f, 0f);
-                hole.shadowCastingMode = ShadowCastingMode.Off;
+                if (_burrowMound != null && _burrowPit != null)
+                {
+                    Vector3 at = pos + back * (0.1f * cs);
+                    CreateMesh("BurrowMound", _burrowMound, _dirtMaterial, at, face, Vector3.one * (1.15f * cs));
+                    CreateMesh("BurrowHole", _burrowPit, _holeMaterial, at, face, Vector3.one * (1.15f * cs)).shadowCastingMode = ShadowCastingMode.Off;
+                }
+                else
+                {
+                    Renderer mound = CreateShape(PrimitiveType.Sphere, "BurrowMound", pos + back * (0.35f * cs), new Vector3(1.9f * cs, 0.55f * cs, 1.7f * cs), _dirtMaterial);
+                    mound.transform.rotation = face;
+                    Renderer lip = CreateShape(PrimitiveType.Sphere, "BurrowLip", pos + face * Vector3.forward * (0.2f * cs), new Vector3(1.1f * cs, 0.3f * cs, 0.7f * cs), _dirtMaterial);
+                    lip.transform.rotation = face;
+                    Renderer hole = CreateShape(PrimitiveType.Sphere, "BurrowHole", pos + face * new Vector3(0f, 0.12f * cs, 0.42f * cs), new Vector3(0.62f * cs, 0.36f * cs, 0.3f * cs), _holeMaterial);
+                    hole.transform.rotation = face * Quaternion.Euler(-20f, 0f, 0f);
+                    hole.shadowCastingMode = ShadowCastingMode.Off;
+                }
                 // Насыпанная вокруг земля.
                 for (int k = 0; k < 5; k++)
                 {
                     Quaternion around = face * Quaternion.Euler(0f, 120f + k * 30f + Hash(i, k) * 12f, 0f);
-                    CreateShape(PrimitiveType.Sphere, "Clod", pos + around * Vector3.forward * (0.95f * cs),
-                        new Vector3(0.35f * cs, 0.16f * cs, 0.3f * cs) * (0.8f + 0.4f * Hash(k, i)), _dirtMaterial);
+                    Vector3 clodPos = pos + around * Vector3.forward * (0.95f * cs);
+                    Vector3 clodSize = new Vector3(0.35f * cs, 0.16f * cs, 0.3f * cs) * (0.8f + 0.4f * Hash(k, i));
+                    if (_pebbleMesh != null) CreateMesh("Clod", _pebbleMesh, _dirtMaterial, clodPos, clodSize, Hash(i, k) * 360f);
+                    else CreateShape(PrimitiveType.Sphere, "Clod", clodPos, clodSize, _dirtMaterial);
                 }
             }
         }
@@ -638,6 +804,14 @@ namespace WildSnake
         private void BuildBirch(Vector3 basePos, float s, float yaw, float d, float cs)
         {
             Quaternion turn = Quaternion.Euler(0f, yaw, 0f);
+            if (_birchTrunks.Length > 0 && _birchCrowns.Length == _birchTrunks.Length)
+            {
+                int v = PickIndex(_birchTrunks.Length, Mathf.RoundToInt(basePos.x * 3f), Mathf.RoundToInt(basePos.z * 3f));
+                float k = Mathf.Clamp(d * 0.75f / 0.36f, 0.75f, 1.5f) * cs;
+                Occlude(CreateMesh("BirchTrunk", _birchTrunks[v], _birchBarkMaterial, basePos, new Vector3(k, s * cs, k), yaw));
+                AddCrown(CreateMesh("BirchCrown", _birchCrowns[v], _birchLeavesMaterial, basePos, new Vector3(k, s * cs, k), yaw));
+                return;
+            }
             float trunk = 4.6f * cs * s;
             Occlude(CreateShape(PrimitiveType.Cylinder, "BirchTrunk", basePos + Vector3.up * (trunk * 0.5f - 0.3f * cs),
                 new Vector3(d * 0.75f, trunk * 0.5f + 0.3f * cs, d * 0.75f), _birchBarkMaterial));
@@ -656,6 +830,12 @@ namespace WildSnake
             float d = _grid.GetObstacleHalfSize(cell) * 1.6f;
             float h = 2.8f * cs * s;
             float yaw = Hash(cell.x, cell.y) * 360f;
+            if (_deadTrees.Length > 0)
+            {
+                float k = Mathf.Clamp(d / 0.48f, 0.75f, 1.5f) * cs;
+                Occlude(CreateMesh("DeadTree", Pick(_deadTrees, cell.x, cell.y), bark, basePos, new Vector3(k, s * cs, k), yaw));
+                return;
+            }
             Occlude(CreateShape(PrimitiveType.Cylinder, "DeadTrunk", basePos + Vector3.up * (h * 0.5f - 0.2f * cs),
                 new Vector3(d, h * 0.5f + 0.2f * cs, d), bark));
             for (int k = 0; k < 3; k++)
@@ -682,6 +862,16 @@ namespace WildSnake
                 Vector3 dir = (pb - pa).normalized;
                 float length = (pb - pa).magnitude + cs;
                 Vector3 center = (pa + pb) * 0.5f;
+                if (_hollowOuter.Length > 0 && _hollowInner.Length == _hollowOuter.Length && _hollowRims.Length == _hollowOuter.Length)
+                {
+                    int n = Mathf.Clamp(Mathf.RoundToInt(length / cs), 1, _hollowOuter.Length);
+                    Quaternion rot = Quaternion.FromToRotation(Vector3.right, dir) * Quaternion.Euler(Hash(i, 7) * 40f - 20f, 0f, 0f);
+                    var scale = new Vector3(length / n, r * 2f, r * 2f);
+                    Occlude(CreateMesh("HollowLog", _hollowOuter[n - 1], _barkMaterial, center, rot, scale));
+                    if (_holeMaterial != null) CreateMesh("HollowInside", _hollowInner[n - 1], _holeMaterial, center, rot, scale).shadowCastingMode = ShadowCastingMode.Off;
+                    Occlude(CreateMesh("HollowRims", _hollowRims[n - 1], _stumpTopMaterial, center, rot, scale));
+                    continue;
+                }
                 Quaternion lay = Quaternion.FromToRotation(Vector3.up, dir);
                 Renderer log = Occlude(CreateShape(PrimitiveType.Cylinder, "HollowLog", center, new Vector3(r * 2f, length * 0.5f, r * 2f), _barkMaterial));
                 log.transform.rotation = lay * Quaternion.Euler(0f, Hash(i, 7) * 360f, 0f);
@@ -706,6 +896,11 @@ namespace WildSnake
                 Vector3 pa = a + Vector3.down * r;
                 Vector3 pb = b + Vector3.down * r;
                 Vector3 dir = (pb - pa).normalized;
+                if (_logs.Length > 0)
+                {
+                    LayLog("BridgeLog", (pa + pb) * 0.5f, dir, (pb - pa).magnitude + 0.6f * cs, r * 2f, Hash(i, 3) * 360f, _logs, _logEnds);
+                    continue;
+                }
                 Renderer log = Occlude(CreateShape(PrimitiveType.Cylinder, "BridgeLog", (pa + pb) * 0.5f,
                     new Vector3(r * 2f, ((pb - pa).magnitude + 0.6f * cs) * 0.5f, r * 2f), _barkMaterial));
                 log.transform.rotation = Quaternion.FromToRotation(Vector3.up, dir);
@@ -798,6 +993,7 @@ namespace WildSnake
             for (int i = 0; i < index.Length; i++) index[i] = -1;
             var vertices = new System.Collections.Generic.List<Vector3>();
             var uvs = new System.Collections.Generic.List<Vector2>();
+            var depth = new System.Collections.Generic.List<Vector2>();
             var triangles = new System.Collections.Generic.List<int>();
             Vector3 origin = _grid.CornerOrigin;
             Vector3 local = transform.position;
@@ -822,6 +1018,7 @@ namespace WildSnake
                 var p = new Vector3(origin.x + cx * cs, level[i], origin.z + cy * cs);
                 index[i] = vertices.Count;
                 vertices.Add(p - local);
+                depth.Add(new Vector2(p.y - _grid.GroundHeight(p), 0f));
                 if (river)
                 {
                     float along = _grid.RiverCoordinate(p, out float lateral);
@@ -838,6 +1035,7 @@ namespace WildSnake
             if (vertices.Count > 65000) mesh.indexFormat = IndexFormat.UInt32;
             mesh.SetVertices(vertices);
             mesh.SetUVs(0, uvs);
+            mesh.SetUVs(1, depth);
             mesh.SetTriangles(triangles, 0);
             mesh.RecalculateNormals();
             mesh.RecalculateTangents();
@@ -848,7 +1046,8 @@ namespace WildSnake
             var r = go.AddComponent<MeshRenderer>();
             r.sharedMaterial = mat;
             r.shadowCastingMode = ShadowCastingMode.Off;
-            if (river)
+            // Шейдер воды сам гонит рябь по течению (_Flow); WaterFlow — только для запасного материала Lit.
+            if (river && !mat.HasProperty(FlowId))
             {
                 var flow = go.AddComponent<WaterFlow>();
                 flow.Target = r;
@@ -874,6 +1073,7 @@ namespace WildSnake
             var stems = new System.Collections.Generic.List<CombineInstance>();
             var pads = new System.Collections.Generic.List<CombineInstance>();
             var pebbles = new System.Collections.Generic.List<CombineInstance>();
+            var stalks = new System.Collections.Generic.List<CombineInstance>();
             Vector3 origin = transform.position;
 
             for (int y = 0; y < _grid.Height; y++)
@@ -896,7 +1096,12 @@ namespace WildSnake
                         {
                             float th = (1.15f + 0.35f * Hash(y, x * 2)) * cs;
                             var pos = c + new Vector3((Hash(x, y * 2) - 0.5f) * 0.6f * cs, th, (Hash(x * 2, y) - 0.5f) * 0.6f * cs);
-                            cattails.Add(Instance(cylinder, pos, 0f, new Vector3(0.07f, 0.12f, 0.07f) * cs));
+                            if (_cattailMesh != null && _stalkMesh != null)
+                            {
+                                cattails.Add(Instance(_cattailMesh, pos, Hash(x, y) * 360f, Vector3.one * cs));
+                                stalks.Add(Instance(_stalkMesh, new Vector3(pos.x, c.y, pos.z), 0f, new Vector3(cs, th, cs)));
+                            }
+                            else cattails.Add(Instance(cylinder, pos, 0f, new Vector3(0.07f, 0.12f, 0.07f) * cs));
                         }
                     }
 
@@ -916,6 +1121,13 @@ namespace WildSnake
                             {
                                 float sz = (0.8f + 0.5f * Hash(x + k, y * 5)) * cs;
                                 var pos = c + new Vector3((Hash(x * 7 + k, y) - 0.5f) * 0.7f * cs, 0f, (Hash(x, y * 7 + k) - 0.5f) * 0.7f * cs);
+                                if (_mushroomCapMesh != null && _mushroomStemMesh != null)
+                                {
+                                    float tilt = Hash(x + k, y) * 360f;
+                                    stems.Add(Instance(_mushroomStemMesh, pos, tilt, Vector3.one * sz));
+                                    caps.Add(Instance(_mushroomCapMesh, pos, tilt, Vector3.one * sz));
+                                    continue;
+                                }
                                 stems.Add(Instance(cylinder, pos + Vector3.up * (0.05f * sz), 0f, new Vector3(0.05f, 0.05f, 0.05f) * sz));
                                 caps.Add(Instance(sphere, pos + Vector3.up * (0.11f * sz), 0f, new Vector3(0.17f, 0.08f, 0.17f) * sz));
                             }
@@ -928,14 +1140,16 @@ namespace WildSnake
                         if (_grid.IsPondWater(cell) && !NearLand(cell)) continue;
                         float level = _grid.WaterLevelAt(_grid.CellToWorld(cell));
                         var pos = new Vector3(c.x + (Hash(x, y * 5) - 0.5f) * 0.5f * cs, level - origin.y + 0.015f, c.z + (Hash(x * 5, y) - 0.5f) * 0.5f * cs);
-                        pads.Add(Instance(cylinder, pos, Hash(y, x) * 360f, new Vector3(0.42f, 0.004f, 0.42f) * cs));
+                        if (_lilyPadMesh != null) pads.Add(Instance(_lilyPadMesh, pos - Vector3.up * (0.01f * cs), Hash(y, x) * 360f, Vector3.one * (0.42f * cs * (0.8f + 0.4f * Hash(x * 3, y)))));
+                        else pads.Add(Instance(cylinder, pos, Hash(y, x) * 360f, new Vector3(0.42f, 0.004f, 0.42f) * cs));
                     }
 
                     if (_grid.IsRidge(cell) && free && !_grid.IsSunStone(cell) && _rockMesh != null && Hash(x * 3, y * 11) < 0.45f)
                     {
                         float sz = (0.18f + 0.3f * Hash(x, y * 3)) * cs;
                         var pos = c + new Vector3((Hash(x * 9, y) - 0.5f) * 0.7f * cs, sz * 0.15f, (Hash(x, y * 9) - 0.5f) * 0.7f * cs);
-                        pebbles.Add(Instance(_rockMesh, pos, Hash(y * 3, x) * 360f, new Vector3(sz * 1.3f, sz * 0.7f, sz)));
+                        // Галька — лёгкий камешек: копий сотни, а объединённый меш хранится в сцене.
+                        pebbles.Add(Instance(_pebbleMesh != null ? _pebbleMesh : _rockMesh, pos, Hash(y * 3, x) * 360f, new Vector3(sz * 1.3f, sz * 0.7f, sz)));
                     }
                 }
             }
@@ -946,6 +1160,7 @@ namespace WildSnake
             Combined("MushroomStems", stems, _mushroomStemMaterial, false);
             Combined("MushroomCaps", caps, _mushroomCapMaterial, false);
             Combined("LilyPads", pads, _lilyPadMaterial, false);
+            Combined("CattailStalks", stalks, _lilyPadMaterial, false);
             Combined("Pebbles", pebbles, _blockMaterial, true);
         }
 
@@ -972,7 +1187,9 @@ namespace WildSnake
                 root.transform.position = pos;
                 if (_dirtMaterial != null)
                     Parent(CreateShape(PrimitiveType.Sphere, "BirdNestBowl", pos + Vector3.up * (0.02f * cs), new Vector3(0.75f, 0.12f, 0.75f) * cs, _dirtMaterial), root);
-                for (int k = 0; k < 10; k++)
+                if (_nestRingMesh != null)
+                    Parent(CreateMesh("BirdNestRing", _nestRingMesh, _barkMaterial, pos, new Vector3(0.34f, 0.42f, 0.34f) * cs, Hash(i, 5) * 360f), root);
+                for (int k = 0; _nestRingMesh == null && k < 10; k++)
                 {
                     float a = k * Mathf.PI * 2f / 10f;
                     var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
@@ -986,7 +1203,9 @@ namespace WildSnake
                 {
                     float a = k * 2.1f + i;
                     Vector3 p = pos + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * (0.1f * cs) + Vector3.up * (0.1f * cs);
-                    Renderer egg = CreateShape(PrimitiveType.Sphere, "BirdEgg", p, new Vector3(0.12f, 0.16f, 0.12f) * cs, _birdEggMaterial);
+                    Renderer egg = _eggMesh != null
+                        ? CreateMesh("BirdEgg", _eggMesh, _birdEggMaterial, p, new Vector3(0.12f, 0.16f, 0.12f) * cs, 0f)
+                        : CreateShape(PrimitiveType.Sphere, "BirdEgg", p, new Vector3(0.12f, 0.16f, 0.12f) * cs, _birdEggMaterial);
                     egg.transform.rotation = Quaternion.Euler(65f, a * Mathf.Rad2Deg, 0f);
                     Parent(egg, root);
                     eggs.Add(egg);
@@ -1028,6 +1247,17 @@ namespace WildSnake
                         float w = (0.62f + 0.3f * hs) * cs;
                         float h = (0.42f + 0.22f * hs) * cs;
                         Vector3 p = c + new Vector3(hx * 0.7f * cs, h * 0.32f, hz * 0.7f * cs);
+                        if (_brambleBushes.Length > 0)
+                        {
+                            // Кусты из кода — с плетями и шипами, ягоды — гроздьями.
+                            bushes.Add(Instance(_brambleBushes[PickIndex(_brambleBushes.Length, x * 3 + k, y)], p, hs * 360f + k * 97f, new Vector3(w, h, w * 0.9f)));
+                            if (_berryMaterial != null && _berryMesh != null)
+                            {
+                                float ba = hs * 6.283f + k;
+                                berries.Add(Instance(_berryMesh, p + new Vector3(Mathf.Cos(ba) * w * 0.4f, h * 0.2f, Mathf.Sin(ba) * w * 0.4f), hs * 90f, Vector3.one * (0.05f * cs)));
+                            }
+                            continue;
+                        }
                         bushes.Add(Instance(bush, p, hs * 360f + k * 97f, new Vector3(w, h, w * 0.9f)));
                         // Колючая плеть — тонкая дуга, торчащая из куста.
                         float yaw = hs * 360f + k * 120f;
@@ -1068,11 +1298,15 @@ namespace WildSnake
                 root.transform.SetParent(transform, false);
                 root.transform.position = center;
                 float yaw = Hash(i, 91) * 360f;
-                Renderer crust = CreateShape(PrimitiveType.Cylinder, "Crust", center + Vector3.up * (0.02f * cs), new Vector3(2.9f * cs, 0.02f * cs, 2.5f * cs), _mineralMaterial);
+                Renderer crust = _crustMesh != null
+                    ? CreateMesh("Crust", _crustMesh, _mineralMaterial, center + Vector3.up * (0.04f * cs), new Vector3(2.9f * cs, 1f, 2.5f * cs), 0f)
+                    : CreateShape(PrimitiveType.Cylinder, "Crust", center + Vector3.up * (0.02f * cs), new Vector3(2.9f * cs, 0.02f * cs, 2.5f * cs), _mineralMaterial);
                 crust.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
                 crust.shadowCastingMode = ShadowCastingMode.Off;
                 Parent(crust, root);
-                Renderer pool = CreateShape(PrimitiveType.Cylinder, "Pool", center + Vector3.up * (0.05f * cs), new Vector3(1.8f * cs, 0.015f * cs, 1.5f * cs), _hotSpringMaterial);
+                Renderer pool = _poolMesh != null
+                    ? CreateMesh("Pool", _poolMesh, _hotSpringMaterial, center + Vector3.up * (0.06f * cs), new Vector3(1.8f * cs, 1f, 1.5f * cs), 0f)
+                    : CreateShape(PrimitiveType.Cylinder, "Pool", center + Vector3.up * (0.05f * cs), new Vector3(1.8f * cs, 0.015f * cs, 1.5f * cs), _hotSpringMaterial);
                 pool.transform.rotation = Quaternion.Euler(0f, yaw, 0f);
                 pool.shadowCastingMode = ShadowCastingMode.Off;
                 Parent(pool, root);
@@ -1082,7 +1316,8 @@ namespace WildSnake
                     var dir = new Vector3(Mathf.Cos(a) * 1.0f, 0f, Mathf.Sin(a) * 0.85f);
                     Vector3 p = center + Quaternion.Euler(0f, yaw, 0f) * dir * cs + Vector3.up * (0.05f * cs);
                     float s = (0.18f + 0.14f * Hash(i, k)) * cs;
-                    Parent(CreateShape(PrimitiveType.Sphere, "RimStone", p, new Vector3(s * 1.3f, s * 0.6f, s), _mineralMaterial), root);
+                    if (_pebbleMesh != null) Parent(CreateMesh("RimStone", _pebbleMesh, _mineralMaterial, p, new Vector3(s * 1.3f, s * 0.6f, s), Hash(k, i) * 360f), root);
+                    else Parent(CreateShape(PrimitiveType.Sphere, "RimStone", p, new Vector3(s * 1.3f, s * 0.6f, s), _mineralMaterial), root);
                 }
             }
         }
@@ -1095,6 +1330,18 @@ namespace WildSnake
             {
                 Vector3 pos = _grid.GetColonyHole(i);
                 float s = 0.85f + 0.3f * Hash(i, 57);
+                if (_moundMesh != null)
+                {
+                    CreateMesh("MouseMound", _moundMesh, _dirtMaterial, pos, new Vector3(0.66f, 0.36f, 0.6f) * (cs * s), Hash(57, i) * 360f);
+                    Vector3 holePos = pos + Vector3.up * (0.03f * cs * s);
+                    Vector3 holeSize = new Vector3(0.2f, 0.05f, 0.19f) * (cs * s);
+                    // Встроенная сфера — 768 треугольников на тёмное пятнышко; лёгкий меш яйца выглядит так же.
+                    Renderer lightHole = _eggMesh != null
+                        ? CreateMesh("MouseHole", _eggMesh, _holeMaterial, holePos, holeSize, 0f)
+                        : CreateShape(PrimitiveType.Sphere, "MouseHole", holePos, holeSize, _holeMaterial);
+                    lightHole.shadowCastingMode = ShadowCastingMode.Off;
+                    continue;
+                }
                 Renderer mound = CreateShape(PrimitiveType.Sphere, "MouseMound", pos, new Vector3(0.62f, 0.2f, 0.55f) * (cs * s), _dirtMaterial);
                 mound.transform.rotation = Quaternion.Euler(0f, Hash(57, i) * 360f, 0f);
                 Renderer hole = CreateShape(PrimitiveType.Sphere, "MouseHole", pos + Vector3.up * (0.085f * cs * s), new Vector3(0.28f, 0.06f, 0.26f) * (cs * s), _holeMaterial);
@@ -1122,8 +1369,9 @@ namespace WildSnake
                 var root = new GameObject("WaspNest");
                 root.transform.SetParent(transform, false);
                 root.transform.position = center;
-                Parent(Occlude(CreateShape(PrimitiveType.Sphere, "Nest", center, new Vector3(0.46f, 0.6f, 0.46f) * cs, _waspNestMaterial)), root);
-                if (_waspStripeMaterial != null)
+                if (_waspNestMesh != null) Parent(Occlude(CreateMesh("Nest", _waspNestMesh, _waspNestMaterial, center, Vector3.one * cs, Hash(cell.y, cell.x) * 360f)), root);
+                else Parent(Occlude(CreateShape(PrimitiveType.Sphere, "Nest", center, new Vector3(0.46f, 0.6f, 0.46f) * cs, _waspNestMaterial)), root);
+                if (_waspStripeMaterial != null && _waspNestMesh == null)
                 {
                     for (int k = 0; k < 3; k++)
                     {
@@ -1212,6 +1460,32 @@ namespace WildSnake
                 h ^= h >> 15;
                 return (h & 0xFFFF) / 65535f;
             }
+        }
+
+        /// <summary>
+        /// Бревно из готового меша: ближайший по длине вариант (вдоль X), дотянутый масштабом до точной длины,
+        /// повёрнутый вдоль направления и вокруг своей оси; торцы — отдельным мешем со спилом.
+        /// </summary>
+        private void LayLog(string objectName, Vector3 center, Vector3 dir, float length, float diameter, float roll, Mesh[] logs, Mesh[] ends)
+        {
+            float cs = _grid.CellSize;
+            int n = Mathf.Clamp(Mathf.RoundToInt(length / cs), 1, logs.Length);
+            Quaternion rot = Quaternion.FromToRotation(Vector3.right, dir) * Quaternion.Euler(roll, 0f, 0f);
+            var scale = new Vector3(length / n, diameter, diameter);
+            Occlude(CreateMesh(objectName, logs[n - 1], _barkMaterial, center, rot, scale));
+            if (ends.Length >= n && _stumpTopMaterial != null) Occlude(CreateMesh(objectName + "Ends", ends[n - 1], _stumpTopMaterial, center, rot, scale));
+        }
+
+        /// <summary>Вариант модели для клетки — детерминированно по координатам.</summary>
+        private static Mesh Pick(Mesh[] variants, int x, int y) => variants[PickIndex(variants.Length, x, y)];
+
+        private static int PickIndex(int count, int x, int y) => Mathf.Min(count - 1, (int)(Hash(x * 7 + 13, y * 5 + 29) * count));
+
+        private Renderer CreateMesh(string objectName, Mesh mesh, Material mat, Vector3 worldPos, Quaternion rotation, Vector3 scale)
+        {
+            Renderer r = CreateMesh(objectName, mesh, mat, worldPos, scale, 0f);
+            r.transform.rotation = rotation;
+            return r;
         }
 
         private Renderer CreateMesh(string objectName, Mesh mesh, Material mat, Vector3 worldPos, Vector3 scale, float yaw)

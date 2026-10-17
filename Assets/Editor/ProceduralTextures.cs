@@ -382,6 +382,9 @@ public static class ProceduralTextures
         var rock = new Color(0.36f, 0.34f, 0.31f);
         var snow = new Color(0.93f, 0.95f, 0.98f);
         var sand = new Color(0.76f, 0.7f, 0.52f);
+        var rockLight = new Color(0.55f, 0.52f, 0.47f);
+        var ochre = new Color(0.5f, 0.4f, 0.29f);
+        var moss = new Color(0.3f, 0.38f, 0.2f);
 
         // Высоты считаем один раз в сетку (size+1)², уклон — разностью соседей.
         int side = size + 1;
@@ -406,9 +409,14 @@ public static class ProceduralTextures
                 c = Color.Lerp(c, dirt, Mathf.Clamp01((Fbm(wx * 0.02f, wz * 0.02f, 3, 8.1f) - 0.62f) * 4f));
                 c = Color.Lerp(c, sand, Mathf.Clamp01((-h - 2.2f) * 1.5f)); // дно водоёмов, а не каждая низина
                 if (tint != null) c = tint(wx, wz, c);
-                c = Color.Lerp(c, rock, Mathf.Clamp01((slope - 0.55f) * 3f));
-                // Скала темнеет с высотой, снег — только на вершинах и пологих местах.
-                c = Color.Lerp(c, rock * 0.85f, Mathf.Clamp01((h - 12f) * 0.08f));
+                // Порода слоями: светлые и тёмные пласты по высоте, изогнутые шумом, с охристыми прожилками.
+                float band = Mathf.Sin(h * 0.55f + Fbm(wx * 0.05f, wz * 0.05f, 3, 3.3f) * 7f) * 0.5f + 0.5f;
+                Color layered = Color.Lerp(rock * 0.9f, rockLight, band * band * 0.45f);
+                layered = Color.Lerp(layered, ochre, Mathf.Clamp01((Fbm(wx * 0.03f, wz * 0.03f, 3, 6.6f) - 0.55f) * 2.5f));
+                c = Color.Lerp(c, layered, Mathf.Clamp01((slope - 0.55f) * 3f));
+                // Скала темнеет с высотой; на пологих уступах гор — мох и альпийская трава.
+                c = Color.Lerp(c, layered * 0.88f, Mathf.Clamp01((h - 12f) * 0.08f));
+                c = Color.Lerp(c, moss, Mathf.Clamp01((1.05f - slope) * 2f) * Mathf.Clamp01((h - 6f) * 0.2f) * Mathf.Clamp01((30f - h) * 0.15f) * (0.4f + n * 0.6f));
                 c = Color.Lerp(c, snow, Mathf.Clamp01((h - 33f + n * 8f) * 0.2f) * Mathf.Clamp01(1.6f - slope));
                 c *= 0.88f + 0.24f * Fbm(wx * 0.4f, wz * 0.4f, 2, 5.5f);
                 c.a = 1f;

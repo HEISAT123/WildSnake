@@ -100,15 +100,21 @@ public static class EnvironmentBuilder
         m.Wall.mainTextureScale = new Vector2(24f, 0.6f);
 
         // Пруд на арене: полупрозрачная рябь над тёмным илистым дном.
-        m.PondWater = SnakeSceneBuilder.CreateLitMaterial("PondWater", new Color(0.18f, 0.42f, 0.52f, 0.72f), 0.95f);
         // Своё имя текстуры: окружение пересохраняет Water_N, и ссылка пруда потерялась бы.
         Texture2D pondNormal = ProceduralTextures.WaterNormal(256);
         pondNormal.name = "PondWater_N";
-        SetNormalMap(m.PondWater, Save(pondNormal), 0.5f);
-        m.PondWater.SetTextureScale("_BumpMap", new Vector2(2f, 2f));
-        // В URP все карты Lit берут тайлинг основной текстуры (_BaseMap).
-        m.PondWater.mainTextureScale = new Vector2(2f, 2f);
-        SnakeSceneBuilder.MakeTransparent(m.PondWater);
+        pondNormal = Save(pondNormal);
+        m.PondWater = WaterMaterial("PondWater", new Color(0.3f, 0.58f, 0.56f, 0.5f), new Color(0.05f, 0.2f, 0.28f, 0.96f), 1.1f, 0.25f,
+            new Color(0.92f, 0.96f, 0.95f, 0.9f), pondNormal, 0.5f, 2f, new Vector4(0.02f, 0.015f, -0.017f, 0.01f), 0.035f, 4f, 0.75f);
+        if (m.PondWater == null)
+        {
+            m.PondWater = SnakeSceneBuilder.CreateLitMaterial("PondWater", new Color(0.18f, 0.42f, 0.52f, 0.72f), 0.95f);
+            SetNormalMap(m.PondWater, pondNormal, 0.5f);
+            m.PondWater.SetTextureScale("_BumpMap", new Vector2(2f, 2f));
+            // В URP все карты Lit берут тайлинг основной текстуры (_BaseMap).
+            m.PondWater.mainTextureScale = new Vector2(2f, 2f);
+            SnakeSceneBuilder.MakeTransparent(m.PondWater);
+        }
         m.PondBed = SnakeSceneBuilder.CreateLitMaterial("PondBed", new Color(0.24f, 0.27f, 0.17f), 0.35f);
         m.SunStone = Textured("SunStone", new Color(0.95f, 0.86f, 0.7f), 0.25f, rock, rockN, 0.9f);
         m.Dirt = SnakeSceneBuilder.CreateLitMaterial("BurrowDirt", new Color(0.36f, 0.25f, 0.16f), 0.05f);
@@ -131,15 +137,24 @@ public static class EnvironmentBuilder
         SnakeSceneBuilder.SetEmission(m.Beacon, new Color(0.55f, 0.85f, 0.12f));
         SnakeSceneBuilder.MakeTransparent(m.Beacon);
         // Река — светлее и прозрачнее пруда; рябь бежит вдоль русла (UV по течению, сдвиг — WaterFlow).
-        m.RiverWater = SnakeSceneBuilder.CreateLitMaterial("RiverWater", new Color(0.24f, 0.5f, 0.58f, 0.68f), 0.95f);
         Texture2D riverNormal = ProceduralTextures.WaterNormal(256);
         riverNormal.name = "RiverWater_N";
-        SetNormalMap(m.RiverWater, Save(riverNormal), 0.7f);
-        SnakeSceneBuilder.MakeTransparent(m.RiverWater);
-        // Болотная вода — мутная, зеленовато-бурая, почти непрозрачная.
-        m.SwampWater = SnakeSceneBuilder.CreateLitMaterial("SwampWater", new Color(0.19f, 0.25f, 0.13f, 0.86f), 0.85f);
-        SetNormalMap(m.SwampWater, m.RiverWater.GetTexture("_BumpMap") as Texture2D, 0.25f);
-        SnakeSceneBuilder.MakeTransparent(m.SwampWater);
+        riverNormal = Save(riverNormal);
+        // Река: U вдоль русла — оба слоя ряби бегут вниз по течению с разной скоростью; пена у берегов шире.
+        m.RiverWater = WaterMaterial("RiverWater", new Color(0.26f, 0.56f, 0.56f, 0.62f), new Color(0.07f, 0.26f, 0.33f, 0.93f), 0.7f, 0.16f,
+            new Color(0.94f, 0.97f, 0.97f, 1f), riverNormal, 0.6f, 1.5f, new Vector4(-0.24f, 0f, -0.15f, 0.03f), 0.025f, 2.5f, 0.7f);
+        // Болото — мутное, зеленовато-бурое, почти непрозрачное и почти неподвижное.
+        m.SwampWater = WaterMaterial("SwampWater", new Color(0.24f, 0.3f, 0.15f, 0.7f), new Color(0.12f, 0.16f, 0.08f, 0.96f), 0.6f, 0.25f,
+            new Color(0.5f, 0.52f, 0.36f, 0.55f), riverNormal, 0.25f, 1f, new Vector4(0.004f, 0.003f, -0.003f, 0.002f), 0.008f, 3f, 0.45f);
+        if (m.RiverWater == null)
+        {
+            m.RiverWater = SnakeSceneBuilder.CreateLitMaterial("RiverWater", new Color(0.24f, 0.5f, 0.58f, 0.68f), 0.95f);
+            SetNormalMap(m.RiverWater, riverNormal, 0.7f);
+            SnakeSceneBuilder.MakeTransparent(m.RiverWater);
+            m.SwampWater = SnakeSceneBuilder.CreateLitMaterial("SwampWater", new Color(0.19f, 0.25f, 0.13f, 0.86f), 0.85f);
+            SetNormalMap(m.SwampWater, riverNormal, 0.25f);
+            SnakeSceneBuilder.MakeTransparent(m.SwampWater);
+        }
 
         m.BirchBark = SnakeSceneBuilder.CreateLitMaterial("BirchBark", Color.white, 0.1f);
         m.BirchBark.mainTexture = Save(ProceduralTextures.BirchBark(128));
@@ -217,6 +232,7 @@ public static class EnvironmentBuilder
         BuildTerrain(root);
         BuildForest(root, rng);
         BuildRocks(root, rng);
+        BuildCrags(root, rng);
         BuildBushes(root, rng);
         BuildGrassAndFlowers(root, rng);
         clouds = BuildClouds(root, rng);
@@ -340,10 +356,6 @@ public static class EnvironmentBuilder
 
     private static void BuildForest(Transform root, System.Random rng)
     {
-        Mesh cone = SaveMesh(ProceduralMeshes.Cone("PineTier", 9), "PineTier");
-        Mesh crownA = SaveMesh(ProceduralMeshes.Blob("CrownA", 2, 0.45f, 11), "CrownA");
-        Mesh crownB = SaveMesh(ProceduralMeshes.Blob("CrownB", 2, 0.5f, 23), "CrownB");
-
         // Кора уже создана для поля (CreateArenaMaterials): пересохранение текстуры оборвало бы ссылку прозрачной копии.
         Material bark = AssetDatabase.LoadAssetAtPath<Material>("Assets/Materials/Bark.mat");
         Material pine = FoliageMaterial("PineFoliage", new Color(0.08f, 0.24f, 0.12f), new Color(0.2f, 0.42f, 0.2f));
@@ -366,21 +378,12 @@ public static class EnvironmentBuilder
             tree.SetPositionAndRotation(pos, Quaternion.Euler(0f, yaw, 0f));
             tree.localScale = Vector3.one * scale;
 
-            if (isPine)
-            {
-                AddPart(tree, SnakeSceneBuilder.CreatePrimitive(PrimitiveType.Cylinder, "Trunk", tree, bark), new Vector3(0f, 0.6f, 0f), new Vector3(0.32f, 0.6f, 0.32f));
-                AddMesh(tree, "Tier1", cone, pine, new Vector3(0f, 0.9f, 0f), new Vector3(2.8f, 2.3f, 2.8f), 0f, true);
-                AddMesh(tree, "Tier2", cone, pine, new Vector3(0f, 2.0f, 0f), new Vector3(2.15f, 2.0f, 2.15f), 20f, true);
-                AddMesh(tree, "Tier3", cone, pine, new Vector3(0f, 3.0f, 0f), new Vector3(1.4f, 1.8f, 1.4f), 40f, true);
-            }
-            else
-            {
-                Material crownMat = rng.NextDouble() < 0.14 ? autumn : leaves;
-                AddPart(tree, SnakeSceneBuilder.CreatePrimitive(PrimitiveType.Cylinder, "Trunk", tree, bark), new Vector3(0f, 1.2f, 0f), new Vector3(0.38f, 1.2f, 0.38f));
-                AddMesh(tree, "Crown", crownA, crownMat, new Vector3(0f, 3.0f, 0f), new Vector3(3.2f, 2.6f, 3.2f), 0f, true);
-                AddMesh(tree, "Crown2", crownB, crownMat, new Vector3(0.7f, 3.6f, 0.3f), new Vector3(2.2f, 1.9f, 2.2f), 60f, true);
-                AddMesh(tree, "Crown3", crownA, crownMat, new Vector3(-0.6f, 3.4f, -0.4f), new Vector3(2.0f, 1.7f, 2.0f), 120f, true);
-            }
+            // Те же модели, что в рощах поля, только чуть меньше: силуэт леса за горами — из одних пород.
+            tree.localScale = Vector3.one * (scale * 0.8f);
+            int v = rng.Next(isPine ? 2 : NatureModels.TREE_VARIANTS);
+            Material crownMat = isPine ? pine : rng.NextDouble() < 0.14 ? autumn : leaves;
+            AddMesh(tree, "Trunk", isPine ? NatureModels.PineTrunk(v) : NatureModels.TreeTrunk(v), bark, Vector3.zero, Vector3.one, 0f, true);
+            AddMesh(tree, "Crown", isPine ? NatureModels.PineCrown(v) : NatureModels.TreeCrown(v), crownMat, Vector3.zero, Vector3.one, 0f, true);
 
             MarkStatic(tree.gameObject);
             placed++;
@@ -390,9 +393,9 @@ public static class EnvironmentBuilder
     private static void BuildRocks(Transform root, System.Random rng)
     {
         Material rock = AssetDatabase.LoadAssetAtPath<Material>("Assets/Materials/ObstacleLowWall.mat");
+        // Те же валуны, что на поле (слоистые, с плоским низом).
         var meshes = new Mesh[4];
-        for (int i = 0; i < meshes.Length; i++)
-            meshes[i] = SaveMesh(ProceduralMeshes.Blob("Boulder" + i, 2, 0.6f, 100 + i * 7), "Boulder" + i);
+        for (int i = 0; i < meshes.Length; i++) meshes[i] = NatureModels.Boulder(i);
 
         var parent = new GameObject("Rocks").transform;
         parent.SetParent(root, false);
@@ -405,6 +408,31 @@ public static class EnvironmentBuilder
             var scale = new Vector3(s * Lerp(rng, 0.8f, 1.3f), s * Lerp(rng, 0.55f, 0.9f), s * Lerp(rng, 0.8f, 1.3f));
             pos.y -= scale.y * 0.2f; // немного утапливаем в землю
             AddMesh(parent, "Boulder", meshes[rng.Next(meshes.Length)], rock, pos, scale, Lerp(rng, 0f, 360f));
+            placed++;
+        }
+    }
+
+    /// <summary>
+    /// Скалы на склонах гор: зубчатые слоистые выходы породы ломают гладкий силуэт хребта.
+    /// Только выше, чем может забраться змея, — на игру не влияют.
+    /// </summary>
+    private static void BuildCrags(Transform root, System.Random rng)
+    {
+        Material rock = AssetDatabase.LoadAssetAtPath<Material>("Assets/Materials/ObstacleLowWall.mat");
+        var meshes = new Mesh[4];
+        for (int i = 0; i < meshes.Length; i++) meshes[i] = NatureModels.Crag(i);
+        var parent = new GameObject("Crags").transform;
+        parent.SetParent(root, false);
+        int placed = 0;
+        for (int attempt = 0; attempt < 5000 && placed < 120; attempt++)
+        {
+            if (!TryScatter(rng, false, 0f, 1f, 80f, out Vector3 pos)) continue;
+            float m = TerrainShape.MountainFactor(pos.x, pos.z, _center);
+            if (m < 0.5f) continue;
+            float s = Lerp(rng, 3f, 8f) * (0.6f + m * 0.6f);
+            var scale = new Vector3(s * Lerp(rng, 0.8f, 1.3f), s * Lerp(rng, 0.9f, 1.7f), s * Lerp(rng, 0.8f, 1.3f));
+            pos.y -= scale.y * 0.25f; // корни скалы уходят в склон
+            AddMesh(parent, "Crag", meshes[rng.Next(meshes.Length)], rock, pos, scale, Lerp(rng, 0f, 360f));
             placed++;
         }
     }
@@ -429,7 +457,9 @@ public static class EnvironmentBuilder
             for (int k = 0; k < parts; k++)
             {
                 var offset = new Vector3(Lerp(rng, -0.6f, 0.6f), 0.3f, Lerp(rng, -0.6f, 0.6f)) * s;
-                AddMesh(cluster, "Bush", bush, bushMat, pos + offset, Vector3.one * s * Lerp(rng, 0.8f, 1.2f), Lerp(rng, 0f, 360f));
+                // Мелкие кусты фона — без теней: их сотни, а тень от них издалека не видна.
+                AddMesh(cluster, "Bush", bush, bushMat, pos + offset, Vector3.one * s * Lerp(rng, 0.8f, 1.2f), Lerp(rng, 0f, 360f))
+                    .GetComponent<Renderer>().shadowCastingMode = ShadowCastingMode.Off;
             }
             if (rng.NextDouble() < 0.3)
             {
@@ -463,7 +493,7 @@ public static class EnvironmentBuilder
         MakeCutout(grassMat);
         CreateCombined(root, "Grass", SaveMesh(ProceduralMeshes.Combine("GrassField", tuft, grassTransforms), "GrassField"), grassMat, false);
 
-        Mesh head = SaveMesh(ProceduralMeshes.Blob("FlowerHead", 0, 0.2f, 5), "FlowerHead");
+        Mesh head = NatureModels.Flower();
         Color[] colors = { new Color(1f, 0.92f, 0.25f), new Color(0.95f, 0.35f, 0.5f), new Color(0.6f, 0.45f, 1f), Color.white };
         string[] names = { "FlowerYellow", "FlowerPink", "FlowerViolet", "FlowerWhite" };
         for (int c = 0; c < colors.Length; c++)
@@ -646,6 +676,34 @@ public static class EnvironmentBuilder
         MarkStatic(go);
     }
 
+    /// <summary>
+    /// Материал шейдера WildSnake/Water (только URP; иначе null — вызывающий берёт запасной Lit).
+    /// shallow/deep: цвет и прозрачность у берега и на глубине depthRange; flow — скорости двух слоёв ряби.
+    /// </summary>
+    public static Material WaterMaterial(string name, Color shallow, Color deep, float depthRange, float foamWidth, Color foam,
+        Texture2D normal, float bumpScale, float tiling, Vector4 flow, float waveHeight, float waveLength, float reflectivity, float shoreFade = 0.04f)
+    {
+        Shader shader = Shader.Find("WildSnake/Water");
+        if (shader == null || GraphicsSettings.currentRenderPipeline == null) return null;
+        Material mat = SnakeSceneBuilder.LoadOrCreateMaterial(name, shader);
+        mat.SetColor("_ShallowColor", shallow);
+        mat.SetColor("_DeepColor", deep);
+        mat.SetFloat("_DepthRange", depthRange);
+        mat.SetFloat("_FoamWidth", foamWidth);
+        mat.SetColor("_FoamColor", foam);
+        mat.SetTexture("_BumpMap", normal);
+        mat.SetTextureScale("_BumpMap", new Vector2(tiling, tiling));
+        mat.SetFloat("_BumpScale", bumpScale);
+        mat.SetVector("_Flow", flow);
+        mat.SetFloat("_WaveHeight", waveHeight);
+        mat.SetFloat("_WaveLength", waveLength);
+        mat.SetFloat("_Reflectivity", reflectivity);
+        mat.SetFloat("_ShoreFade", shoreFade);
+        mat.renderQueue = (int)RenderQueue.Transparent;
+        EditorUtility.SetDirty(mat);
+        return mat;
+    }
+
     private static Material FoliageMaterial(string name, Color dark, Color bright)
     {
         Material mat = SnakeSceneBuilder.CreateLitMaterial(name, Color.white, 0.12f);
@@ -683,8 +741,26 @@ public static class EnvironmentBuilder
     }
 
     /// <summary>Режим «вырез по альфе» для травы (Standard Cutout или URP Alpha Clipping).</summary>
+    /// <summary>
+    /// Вырез по альфе для травы, камыша и папоротника. В URP — свой шейдер WildSnake/Grass: ветер, тень у корня,
+    /// раздвигание существами (текстура и цвет переносятся — имена свойств те же).
+    /// </summary>
     private static void MakeCutout(Material mat)
     {
+        Shader grass = GraphicsSettings.currentRenderPipeline != null ? Shader.Find("WildSnake/Grass") : null;
+        if (grass != null)
+        {
+            Texture tex = mat.mainTexture;
+            Color color = mat.HasProperty("_BaseColor") ? mat.GetColor("_BaseColor") : Color.white;
+            mat.shader = grass;
+            mat.SetTexture("_BaseMap", tex);
+            mat.SetColor("_BaseColor", color);
+            mat.SetFloat("_Cutoff", 0.45f);
+            mat.renderQueue = (int)RenderQueue.AlphaTest;
+            mat.enableInstancing = true;
+            EditorUtility.SetDirty(mat);
+            return;
+        }
         if (mat.HasProperty("_Mode")) mat.SetFloat("_Mode", 1f);
         if (mat.HasProperty("_AlphaClip")) mat.SetFloat("_AlphaClip", 1f);
         if (mat.HasProperty("_Cutoff")) mat.SetFloat("_Cutoff", 0.45f);
