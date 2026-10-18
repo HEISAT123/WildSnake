@@ -126,6 +126,7 @@ namespace WildSnake
         private Vector3 _aim;
         private float _angle;
         private float _bank;
+        private float _yaw;
         private float _wingTime;
         private MaterialPropertyBlock _block;
 
@@ -185,6 +186,7 @@ namespace WildSnake
             Vector3 dir = Quaternion.Euler(0f, _angle, 0f) * Vector3.forward;
             _pos = _circleCenter + dir * 60f + Vector3.up * (_circleHeight + 8f);
             _velocity = -dir * _maxSpeed * 0.6f;
+            _yaw = Mathf.Atan2(-dir.x, -dir.z) * Mathf.Rad2Deg;
             _searchLeft = _searchTime;
             SetPhase(Phase.Circling);
             SetVisible(true);
@@ -295,29 +297,57 @@ namespace WildSnake
         {
             Vector3 flat = _velocity;
             flat.y = 0f;
-            float yaw = flat.sqrMagnitude > 0.01f ? Mathf.Atan2(flat.x, flat.z) * Mathf.Rad2Deg : _model.eulerAngles.y;
+            float targetYaw = flat.sqrMagnitude > 0.01f ? Mathf.Atan2(flat.x, flat.z) * Mathf.Rad2Deg : _yaw;
+            // Курс поворачивается плавно, а крен следует за скоростью поворота: орёл ложится на вираж.
+            float before = _yaw;
+            _yaw = Mathf.LerpAngle(_yaw, targetYaw, 1f - Mathf.Exp(-6f * dt));
+            float turn = Mathf.DeltaAngle(before, _yaw) / dt;
             float pitch = Mathf.Clamp(-Mathf.Atan2(_velocity.y, Mathf.Max(0.1f, flat.magnitude)) * Mathf.Rad2Deg, -70f, 70f);
-            float targetBank = _phase == Phase.Circling ? -28f : 0f;
+            float dive = _phase == Phase.Diving ? Mathf.Clamp01(_phaseTime / _diveTime) : 0f;
+            // В конце пике — «тормозит» крыльями и выбрасывает лапы: корпус задирается.
+            float flare = _phase == Phase.Diving ? Mathf.InverseLerp(0.75f, 1f, dive) : 0f;
+            pitch -= flare * 55f;
+            float targetBank = Mathf.Clamp(-turn * 0.6f, -40f, 40f);
             _bank = Mathf.Lerp(_bank, targetBank, 1f - Mathf.Exp(-3f * dt));
-            _model.SetPositionAndRotation(_pos, Quaternion.Euler(pitch, yaw, _bank));
+            _model.SetPositionAndRotation(_pos, Quaternion.Euler(pitch, _yaw, _bank));
 
-            // Парит с редкими взмахами, в пике крылья прижаты, при наборе высоты машет часто.
-            float wing;
+            // Парит, изредка подправляя полёт парой взмахов; в пике крылья сложены назад; при наборе высоты машет мощно.
+            float wing, sweep;
             switch (_phase)
             {
-                case Phase.Diving: wing = 55f; break;
-                case Phase.Climbing: wing = Mathf.Sin(_wingTime * 11f) * 40f; break;
-                default: wing = Mathf.Sin(_wingTime * 2.2f) * 8f; break;
+                case Phase.Diving:
+                {
+                    float tuck = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(dive * 4f)) * (1f - flare);
+                    wing = Mathf.Lerp(-6f, 50f, tuck) + flare * Mathf.Sin(_wingTime * 20f) * 25f;
+                    sweep = tuck * 42f - flare * 10f;
+                    break;
+                }
+                case Phase.Climbing:
+                {
+                    float ph = _wingTime * 10f;
+                    wing = 8f + Mathf.Sin(ph + 0.5f * Mathf.Cos(ph)) * 42f;
+                    sweep = Mathf.Cos(ph) * 8f;
+                    break;
+                }
+                default:
+                {
+                    // Порывы: раз в несколько секунд — короткая серия взмахов, остальное время — парение с подрагиванием кончиков.
+                    float burst = Mathf.Clamp01((Mathf.PerlinNoise(_wingTime * 0.35f, 1.7f) - 0.62f) * 8f);
+                    float ph = _wingTime * 8f;
+                    wing = -6f + Mathf.Sin(_wingTime * 1.7f) * 3f + burst * Mathf.Sin(ph + 0.5f * Mathf.Cos(ph)) * 32f;
+                    sweep = Mathf.Sin(_wingTime * 0.9f) * 4f;
+                    break;
+                }
             }
-            _leftWing.localRotation = Quaternion.Euler(0f, 0f, -wing);
-            _rightWing.localRotation = Quaternion.Euler(0f, 0f, wing);
+            _leftWing.localRotation = Quaternion.Euler(0f, -sweep, -wing);
+            _rightWing.localRotation = Quaternion.Euler(0f, sweep, wing);
 
             float ground = _grid.GroundHeight(_pos);
             float height = Mathf.Max(0f, _pos.y - ground);
             float k = Mathf.Clamp01(height / (_circleHeight + 4f));
             float size = Mathf.Lerp(_shadowLowSize, _shadowHighSize, k);
             Transform shadow = _shadow.transform;
-            shadow.SetPositionAndRotation(new Vector3(_pos.x, ground + 0.03f, _pos.z), Quaternion.Euler(90f, yaw, 0f));
+            shadow.SetPositionAndRotation(new Vector3(_pos.x, ground + 0.03f, _pos.z), Quaternion.Euler(90f, _yaw, 0f));
             shadow.localScale = new Vector3(size, size * 0.55f, 1f);
             var shade = new Color(0f, 0f, 0f, Mathf.Lerp(_shadowAlpha.y, _shadowAlpha.x, k));
             _block.SetColor(ColorId, shade);

@@ -311,6 +311,10 @@ namespace WildSnake
         private readonly BodyTemperature _temperature = new BodyTemperature();
         private bool _inWater;
         private float _sink;
+        // Голова проходит под бревном-мостом (вплыла или вползла снизу), а не ползёт поверху.
+        private bool _underBridge;
+        // Радиус бревна-моста, клеток (как его кладёт BoardView).
+        private const float BRIDGE_LOG_RADIUS = 0.25f;
         private float _exposedTimer;
         private bool _strikeHit;
         private float _strikeTimer;
@@ -411,6 +415,7 @@ namespace WildSnake
             _temperature.Reset(_config.StartTemperature);
             _inWater = false;
             _sink = 0f;
+            _underBridge = false;
             SetInBurrow(false);
             IsAlive = true;
             IsRunning = false;
@@ -444,7 +449,50 @@ namespace WildSnake
         /// <summary>Высота оси тела над землёй (или над водой) в точке.</summary>
         private float BodyY(Vector3 p)
         {
-            return _grid.SurfaceHeight(p) + _bodyHeight * _cellSize;
+            return Surface(p) + _bodyHeight * _cellSize;
+        }
+
+        /// <summary>По чему ползёт змея: под бревном-мостом — по воде или земле под ним, иначе — по верху.</summary>
+        private float Surface(Vector3 p)
+        {
+            // Плывущая змея тоже смотрит «под» мост: иначе перед бревном голова задиралась бы к его верху.
+            return (_underBridge || _inWater) && _grid.TryGetUnderBridge(p, out float below, out _) ? below : _grid.SurfaceHeight(p);
+        }
+
+        /// <summary>
+        /// Насколько пригнуться (опустить ось тела), чтобы спина прошла под бревном с запасом: смотрим под головой
+        /// и чуть впереди — пригибается заранее, а не втыкается в бревно.
+        /// </summary>
+        private float BridgeDuck()
+        {
+            if (!_underBridge && !_inWater) return 0f;
+            float top = _bodyHeight * _cellSize + Mathf.Max(BodyRadiusWorld, HeadRadiusWorld);
+            float duck = 0f;
+            for (int i = 0; i < 2; i++)
+            {
+                Vector3 p = _headPos + Forward * (i * 0.6f * _cellSize);
+                if (!_grid.TryGetUnderBridge(p, out float level, out float deck)) continue;
+                // Низ бревна — верх минус диаметр; ещё 0.1 клетки зазора.
+                float bottom = deck - (2f * BRIDGE_LOG_RADIUS + 0.1f) * _cellSize;
+                duck = Mathf.Max(duck, level + top - bottom);
+            }
+            return Mathf.Clamp(duck, 0f, 0.45f * _cellSize);
+        }
+
+        /// <summary>
+        /// Бревно-мост — два «этажа»: кто подошёл к нему снизу (плывёт по реке или ползёт под высоким бревном),
+        /// проходит под ним; кто заполз с берега или запрыгнул — ползёт поверху.
+        /// </summary>
+        private void UpdateBridgeLayer()
+        {
+            if (!_grid.TryGetUnderBridge(_headPos, out float below, out float deck))
+            {
+                _underBridge = false;
+                return;
+            }
+            if (_underBridge) return;
+            // _headPos.y ещё прошлого кадра: голова заметно ниже верха бревна — значит, она под ним.
+            _underBridge = _headPos.y < deck + (_bodyHeight - 0.3f) * _cellSize;
         }
 
         /// <summary>Сразу задать длину тела (продолжение сохранённой партии).</summary>
@@ -764,8 +812,12 @@ namespace WildSnake
             _headPos += Forward * step;
             _odometer += step;
             // В воде тело чуть погружается — видно, что змея плывёт.
-            _inWater = _grounded && _grid.IsWaterAt(_headPos);
-            _sink = Mathf.MoveTowards(_sink, _inWater ? 0.14f * _cellSize : 0f, dt * 0.8f);
+            UpdateBridgeLayer();
+            _inWater = _grounded && (_underBridge ? UnderBridgeWater() : _grid.IsWaterAt(_headPos));
+            // Под бревном змея пригибается (в воде — подныривает), чтобы спина прошла под ним.
+            float duck = BridgeDuck();
+            float sinkTarget = Mathf.Max(_inWater ? 0.14f * _cellSize : 0f, duck);
+            _sink = Mathf.MoveTowards(_sink, sinkTarget, dt * (duck > 0f || _sink > 0.15f * _cellSize ? 2.5f : 0.8f) * _cellSize);
             _headPos.y = BodyY(_headPos) + _height - _sink;
             UpdateSlope(dt);
             _lengthCells = Mathf.MoveTowards(_lengthCells, _targetLengthCells, _lengthChangeSpeed * dt);
@@ -851,11 +903,17 @@ namespace WildSnake
             _speed = Mathf.MoveTowards(_speed, 0f, _config.Deceleration * 2f * dt);
         }
 
+        /// <summary>Под мостом голова в воде, если уровень под ним выше дна.</summary>
+        private bool UnderBridgeWater()
+        {
+            return _grid.TryGetUnderBridge(_headPos, out float below, out _) && below > _grid.GroundHeight(_headPos) + 0.01f;
+        }
+
         /// <summary>Наклон головы по склону: голова смотрит вверх на подъёме и вниз на спуске.</summary>
         private void UpdateSlope(float dt)
         {
-            float ahead = _grid.SurfaceHeight(_headPos + Forward * (0.4f * _cellSize));
-            float behind = _grid.SurfaceHeight(_headPos - Forward * (0.4f * _cellSize));
+            float ahead = Surface(_headPos + Forward * (0.4f * _cellSize));
+            float behind = Surface(_headPos - Forward * (0.4f * _cellSize));
             float angle = -Mathf.Atan2(ahead - behind, 0.8f * _cellSize) * Mathf.Rad2Deg;
             _slopePitch = Mathf.Lerp(_slopePitch, angle, 1f - Mathf.Exp(-10f * dt));
         }
@@ -863,7 +921,7 @@ namespace WildSnake
         /// <summary>Подъём замедляет: чем круче склон впереди, тем медленнее змея ползёт вверх.</summary>
         private float SlopeSpeedMultiplier()
         {
-            float rise = _grid.SurfaceHeight(_headPos + Forward * (0.5f * _cellSize)) - _grid.SurfaceHeight(_headPos);
+            float rise = Surface(_headPos + Forward * (0.5f * _cellSize)) - Surface(_headPos);
             return rise <= 0f ? 1f : Mathf.Max(0.55f, 1f - rise / (0.5f * _cellSize) * 0.6f);
         }
 
@@ -936,7 +994,7 @@ namespace WildSnake
                 _verticalSpeed = 0f;
                 _grounded = true;
                 _squashTimer = 0f;
-                Landed?.Invoke(new Vector3(_headPos.x, _grid.SurfaceHeight(_headPos), _headPos.z));
+                Landed?.Invoke(new Vector3(_headPos.x, Surface(_headPos), _headPos.z));
             }
         }
 

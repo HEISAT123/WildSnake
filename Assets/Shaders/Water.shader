@@ -24,6 +24,9 @@ Shader "WildSnake/Water"
         _Reflectivity ("Отражение неба", Range(0, 1)) = 0.75
         _RippleStrength ("Сила ряби от существ", Float) = 1
         _ShoreFade ("Мягкий край у берега, м", Float) = 0.04
+        _StreakFoam ("Полосы пены по течению", Range(0, 1)) = 0
+        _Glitter ("Искры солнца на ряби", Float) = 1.2
+        _Caustics ("Солнечные блики на мелководье", Float) = 0.35
     }
 
     SubShader
@@ -71,6 +74,9 @@ Shader "WildSnake/Water"
                 float _Reflectivity;
                 float _RippleStrength;
                 float _ShoreFade;
+                float _StreakFoam;
+                float _Glitter;
+                float _Caustics;
             CBUFFER_END
 
             // Рябь: xy — точка на воде (мировые X, Z), z — время появления, w — сила.
@@ -96,26 +102,30 @@ Shader "WildSnake/Water"
                 float depth : TEXCOORD4;
             };
 
-            static const float2 WAVE_DIRS[3] = { float2(0.8, 0.6), float2(-0.45, 0.9), float2(0.2, -1.0) };
-            static const float WAVE_SCALES[3] = { 1.0, 0.63, 0.41 };
+            static const float2 WAVE_DIRS[4] = { float2(0.8, 0.6), float2(-0.45, 0.9), float2(0.2, -1.0), float2(-0.95, -0.3) };
+            static const float WAVE_SCALES[4] = { 1.0, 0.63, 0.41, 0.23 };
 
-            // Три пересекающиеся синусоиды по миру: дают «дыхание» глади без повторяющегося рисунка.
+            // Четыре пересекающиеся волны по миру: «дыхание» глади без повторяющегося рисунка. Гребни острее впадин
+            // (волна Герстнера: точки сходятся к гребню) — вода выглядит живой, а не резиновой.
             float3 Waves(float3 p, out float3 normal)
             {
-                float h = 0;
+                float3 offset = 0;
                 float2 grad = 0;
                 [unroll]
-                for (int i = 0; i < 3; i++)
+                for (int i = 0; i < 4; i++)
                 {
                     float len = _WaveLength * WAVE_SCALES[i];
                     float k = 6.2831853 / len;
                     float a = _WaveHeight * WAVE_SCALES[i];
                     float phase = dot(WAVE_DIRS[i], p.xz) * k + _Time.y * _WaveSpeed * k * sqrt(len) * 0.5;
-                    h += a * sin(phase);
-                    grad += a * k * cos(phase) * WAVE_DIRS[i];
+                    float s, c;
+                    sincos(phase, s, c);
+                    offset.y += a * s;
+                    offset.xz += WAVE_DIRS[i] * (a * 0.6 * c);
+                    grad += a * k * c * WAVE_DIRS[i];
                 }
                 normal = normalize(float3(-grad.x, 1, -grad.y));
-                return float3(0, h, 0);
+                return offset;
             }
 
             // Кольца ряби: наклон поверхности (xy) и пена на гребнях (z).
@@ -129,16 +139,18 @@ Shader "WildSnake/Water"
                     if (i >= count) break;
                     float4 r = _WaterRipples[i];
                     float age = _WaterTime - r.z;
-                    if (age < 0 || age > 2.6) continue;
+                    if (age < 0 || age > 3.2) continue;
                     float2 dv = p - r.xy;
                     float d = length(dv) + 1e-4;
-                    float x = d - age * 1.15;
-                    // Дальше 0.8 м от гребня кольцо невидимо — не тратим exp/cos.
-                    if (abs(x) > 0.8) continue;
-                    float fade = saturate(1 - age / 2.6) * r.w;
-                    float env = exp(-x * x * 7.0) * fade;
-                    grad += dv / d * (env * cos(x * 15.0) * 0.22);
-                    foam += env * saturate(1.2 - age * 1.5) * 0.7;
+                    float x = d - age * 1.2;
+                    // Дальше 1 м от гребня кольцо невидимо — не тратим exp/cos.
+                    if (abs(x) > 1.0) continue;
+                    float fade = saturate(1 - age / 3.2);
+                    fade *= fade * r.w;
+                    // Кольцо — пачка из двух-трёх гребней (за первым идут слабее), а не одна линия.
+                    float env = exp(-x * x * 4.5) * fade;
+                    grad += dv / d * (env * cos(x * 13.0) * 0.42);
+                    foam += env * saturate(1.3 - age * 1.3) * saturate(cos(x * 13.0)) * 0.9;
                 }
                 return float3(grad * _RippleStrength, saturate(foam * _RippleStrength));
             }
@@ -165,7 +177,9 @@ Shader "WildSnake/Water"
                 float3 n1 = UnpackNormalScale(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, uv + _Flow.xy * _Time.y), _BumpScale);
                 float3 n2 = UnpackNormalScale(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, uv * 1.7 + float2(0.37, 0.71) + _Flow.zw * _Time.y), _BumpScale);
                 float3 ripple = Ripples(i.positionWS.xz);
-                float3 normal = normalize(i.waveNormal + float3(n1.x + n2.x, 0, n1.y + n2.y) + float3(-ripple.x, 0, -ripple.y));
+                // Мелкая быстрая рябь ветра поверх — на ней вспыхивают искры солнца.
+                float3 n3 = UnpackNormalScale(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, uv * 3.3 + float2(0.13, 0.59) - _Flow.xy * 1.7 * _Time.y), _BumpScale);
+                float3 normal = normalize(i.waveNormal + float3(n1.x + n2.x + n3.x * 0.5, 0, n1.y + n2.y + n3.y * 0.5) + float3(-ripple.x, 0, -ripple.y));
 
                 // Глубина до дна: мелко — светло и прозрачно, глубоко — темно. За кромкой берега она уходит в минус —
                 // там вода плавно исчезает, и линия берега получается мягкой.
@@ -182,17 +196,26 @@ Shader "WildSnake/Water"
                 float3 ambient = SampleSH(normal);
                 float ndl = saturate(dot(normal, light.direction));
                 float3 color = albedo * (ambient + light.color * ndl * atten * 0.55);
+                // Солнечные «каустики»: светлая сетка на мелководье, бегущая вместе с рябью.
+                float web = saturate(1 - abs(n1.x + n2.y) * 2.2) * saturate(1 - abs(n2.x - n1.y) * 2.2);
+                color += light.color * atten * pow(web, 3) * (1 - depth01) * _Caustics;
 
                 float fresnel = pow(1 - saturate(dot(normal, viewDir)), 4);
                 float3 sky = SampleSH(reflect(-viewDir, normal)) * 1.15;
                 color = lerp(color, sky, fresnel * _Reflectivity);
                 float3 h = normalize(light.direction + viewDir);
                 color += light.color * pow(saturate(dot(normal, h)), _Gloss) * _Specular * atten;
+                // Искры: очень острый блик на мелкой ряби — вода мерцает на солнце.
+                float3 sparkN = normalize(float3(n3.x * 2.5, 1, n3.y * 2.5));
+                color += light.color * pow(saturate(dot(sparkN, h)), _Gloss * 6) * _Glitter * atten;
 
                 // Пена: полоса у берега, рваная по ряби, плюс гребни колец от всплесков.
                 float shore = saturate(1 - thickness / max(0.01, _FoamWidth));
                 float broken = saturate(0.55 + (n1.x - n2.y) * 1.6);
-                float foam = saturate(smoothstep(0.35, 0.85, shore * broken) + ripple.z);
+                // Полосы пены вдоль течения (у реки U идёт по руслу): вытянутые пятна плывут вниз по течению.
+                float streakN = UnpackNormalScale(SAMPLE_TEXTURE2D(_BumpMap, sampler_BumpMap, float2(uv.x * 0.3 + _Flow.x * 1.4 * _Time.y, uv.y * 1.6 + 0.21)), 1).x;
+                float streak = smoothstep(0.25, 0.7, streakN) * _StreakFoam * (0.4 + 0.6 * depth01);
+                float foam = saturate(smoothstep(0.35, 0.85, shore * broken) + ripple.z + streak * 0.55);
                 color = lerp(color, _FoamColor.rgb * (ambient + light.color * atten * 0.6), foam * _FoamColor.a);
 
                 alpha = saturate(alpha + fresnel * 0.25 + foam * 0.6);

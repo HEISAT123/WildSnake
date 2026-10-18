@@ -133,6 +133,18 @@ namespace WildSnake
         private float _raidTimer;
         private float _flinchTimer;
 
+        // Анимация: фазы лап (доля шага) для рыси и галопа, порядок лап — ЛП, ПП, ЛЗ, ПЗ.
+        private static readonly float[] TrotOffsets = { 0f, 0.5f, 0.5f, 0f };
+        private static readonly float[] GallopOffsets = { 0f, 0.12f, 0.5f, 0.62f };
+        private float _gaitPhase;
+        private float _gallop;
+        private float _move;
+        private float _crouch;
+        private float _lean;
+        private float _lastYaw;
+        private float _tailYaw;
+        private float _tailVel;
+
         private void Awake()
         {
             SetVisible(false);
@@ -527,16 +539,60 @@ namespace WildSnake
 
         private void ApplyVisual()
         {
+            float dt = Mathf.Max(Time.deltaTime, 1e-4f);
             _model.SetPositionAndRotation(_pos, Quaternion.Euler(0f, _yaw, 0f));
-            float run = Mathf.Clamp01(_speed / Mathf.Max(0.1f, _config.FoxSpeed));
-            float freq = 8f + 8f * run;
-            float phase = _animTime * freq;
-            if (_body != null) _body.localPosition = new Vector3(0f, Mathf.Abs(Mathf.Sin(phase)) * 0.06f * run, 0f);
-            if (_tail != null) _tail.localRotation = Quaternion.Euler(-25f + Mathf.Sin(phase * 0.5f) * 8f, Mathf.Sin(_animTime * 3f) * 18f, 0f);
+            float run = Mathf.Clamp01(Mathf.Abs(_speed) / Mathf.Max(0.1f, _config.FoxSpeed));
+            float turn = Mathf.DeltaAngle(_lastYaw, _yaw) / dt;
+            _lastYaw = _yaw;
+
+            // Походка: шагом и рысью — диагональные пары лап, в галопе — передние и задние почти вместе.
+            _gallop = Mathf.MoveTowards(_gallop, run > 0.7f ? 1f : 0f, dt * 3f);
+            _move = Mathf.MoveTowards(_move, run > 0.05f ? 1f : 0f, dt * 4f);
+            float freq = Mathf.Lerp(1.6f, 2.6f, run);
+            _gaitPhase = Mathf.Repeat(_gaitPhase + dt * freq * _move, 1f);
+            float stride = Mathf.Lerp(16f, 42f, run) * _move;
             for (int i = 0; i < _legs.Length; i++)
             {
-                float s = (i % 2 == 0 ? 1f : -1f) * (i < 2 ? 1f : -1f);
-                _legs[i].localRotation = Quaternion.Euler(Mathf.Sin(phase) * 35f * run * s, 0f, 0f);
+                float offset = Mathf.Lerp(TrotOffsets[i & 3], GallopOffsets[i & 3], _gallop);
+                float a = (_gaitPhase + offset) * Mathf.PI * 2f;
+                // Вперёд лапа выносится быстро и с подъёмом, назад отталкивается медленнее.
+                float swing = Mathf.Sin(a + 0.35f * Mathf.Cos(a));
+                _legs[i].localRotation = Quaternion.Euler(-swing * stride, 0f, 0f);
+            }
+
+            float cycle = _gaitPhase * Mathf.PI * 2f;
+            // Рысь подбрасывает дважды за шаг, галоп — раз, с раскачкой корпуса нос-хвост.
+            float bob = Mathf.Lerp(Mathf.Abs(Mathf.Sin(cycle * 2f)) * 0.03f, (Mathf.Sin(cycle) * 0.5f + 0.5f) * 0.07f, _gallop) * _move;
+            float pitch = Mathf.Sin(cycle + 0.8f) * 6f * _gallop * _move;
+            // Крадётся, выслеживая: ниже к земле и носом вниз; принюхивается на ходу.
+            bool stalk = _phase == Phase.Prowl;
+            _crouch = Mathf.MoveTowards(_crouch, stalk ? 1f : 0f, dt * 2f);
+            float sniff = stalk ? Mathf.Max(0f, Mathf.Sin(_animTime * 1.3f)) * (6f + Mathf.Sin(_animTime * 19f) * 1.5f) : 0f;
+            // Укус — бросок вперёд; испуг — отпрянуть.
+            float bite = _phase == Phase.Chase ? Mathf.Clamp01((_biteTimer - (_biteCooldown - 0.35f)) / 0.35f) : 0f;
+            float lunge = Mathf.Sin(bite * Mathf.PI);
+            float flinch = _flinchTimer > 0f ? Mathf.Min(1f, _flinchTimer * 3f) : 0f;
+            // Крен в поворот и дыхание на месте.
+            _lean = Mathf.Lerp(_lean, Mathf.Clamp(-turn * 0.04f * run, -12f, 12f), 1f - Mathf.Exp(-6f * dt));
+            float breathe = Mathf.Sin(_animTime * 2.2f) * 0.012f * (1f - _move);
+
+            if (_body != null)
+            {
+                Quaternion rot = Quaternion.Euler(pitch + sniff + _crouch * 4f + lunge * 10f - flinch * 12f, 0f, _lean);
+                var center = new Vector3(0f, 0.45f, 0f);
+                Vector3 offset = new Vector3(0f, bob - _crouch * 0.05f + breathe, lunge * 0.18f - flinch * 0.12f);
+                _body.localRotation = rot;
+                _body.localPosition = center - rot * center + offset;
+            }
+            if (_tail != null)
+            {
+                // Хвост — на пружине: отстаёт на поворотах, в беге вытянут, на месте лениво помахивает.
+                float targetYaw = Mathf.Clamp(turn * 0.12f, -40f, 40f) + Mathf.Sin(_animTime * 3f) * Mathf.Lerp(18f, 6f, run);
+                float k = 60f, damp = 9f;
+                _tailVel += (k * (targetYaw - _tailYaw) - damp * _tailVel) * dt;
+                _tailYaw += _tailVel * dt;
+                float tailPitch = Mathf.Lerp(-25f, -8f, run) + Mathf.Sin(cycle * 2f) * 6f * _move - flinch * 20f + _crouch * 6f;
+                _tail.localRotation = Quaternion.Euler(tailPitch, _tailYaw, 0f);
             }
         }
 

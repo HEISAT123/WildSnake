@@ -28,7 +28,7 @@
 
 ## Мир
 - `GridManager` (180x180, клетка 1 м): рельеф `TerrainShape` (холмы, кольцо гор), препятствия по сиду, рощи (`IsForest`/`IsCanopy`/`IsBirch`),
-  укрытия (`IsCover`, `IsReed`), вода (`IsPondWater`, `IsRiver`, мосты `IsBridge`), болото `IsSwamp`, гряда `IsRidge`, полые брёвна `IsHollow` (вход только с торцов для всех: змее — `CollideHollowLogWalls`, A* и добыче — `CrossesHollowWall`; лисе не пролезть),
+  укрытия (`IsCover`, `IsReed`), вода (`IsPondWater`, `IsRiver`, мосты `IsBridge` — два «этажа»: под высоким бревном проплывают/проползают (`TryGetUnderBridge`, змея пригибается в `BridgeDuck`), с берега и прыжком — поверху), болото `IsSwamp`, гряда `IsRidge`, полые брёвна `IsHollow` (вход только с торцов для всех: змее — `CollideHollowLogWalls`, A* и добыче — `CrossesHollowWall`; лисе не пролезть),
   птичьи гнёзда, солнечные камни 2x2, норы, гнездо; ежевика `IsBramble` (укрытие, замедляет, колет на бегу, лиса не кусает),
   тёплые ключи `IsHotSpring` (`TemperatureSpot.HotSpring` — греет и ночью), мышиные городки (норки: `NearestColonyHole`,
   `TryGetColonyCell`), осиные гнёзда на пнях. Генерируется в `Awake` (и из редактора).

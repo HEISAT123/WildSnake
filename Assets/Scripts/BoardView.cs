@@ -950,7 +950,7 @@ namespace WildSnake
                         for (int x = cx - 1; x <= cx; x++)
                         {
                             if (x < 0 || y < 0 || x >= w || y >= h || !IsSheetWater(x, y, river)) continue;
-                            sum += _grid.WaterLevelAt(_grid.CellToWorld(new Vector2Int(x, y)));
+                            sum += SheetLevel(x, y);
                             n++;
                         }
                     }
@@ -1057,8 +1057,17 @@ namespace WildSnake
         private bool IsSheetWater(int x, int y, bool river)
         {
             var cell = new Vector2Int(x, y);
+            // Под бревном-мостом река течёт дальше — там тоже рисуем воду.
+            if (_grid.TryGetRiverUnderBridge(cell, out _)) return river;
             if (!_grid.IsWater(cell) || _grid.IsPondWater(cell)) return false;
             return _grid.IsRiver(cell) == river;
+        }
+
+        /// <summary>Уровень воды клетки для меша: под мостом — уровень реки, а не верх бревна.</summary>
+        private float SheetLevel(int x, int y)
+        {
+            var cell = new Vector2Int(x, y);
+            return _grid.TryGetRiverUnderBridge(cell, out float level) ? level : _grid.WaterLevelAt(_grid.CellToWorld(cell));
         }
 
         /// <summary>Камыш с початками рогоза по берегам и в болоте, папоротники и грибы в рощах, кувшинки, галька на гряде.</summary>

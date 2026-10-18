@@ -157,6 +157,21 @@ namespace WildSnake
 
         private bool IsFish => _kind == PreyKind.Fish;
 
+        // На земле крылья сложены вдоль спины.
+        private static readonly Quaternion WingFoldL = Quaternion.Euler(0f, -78f, -12f);
+        private static readonly Quaternion WingFoldR = Quaternion.Euler(0f, 78f, 12f);
+
+        // Визуал: сглаженные части позы.
+        private Vector3 _bodyScale = Vector3.one;
+        private float _noiseSeed;
+        private float _lastYaw;
+        private float _lean;
+        private float _look;
+        private float _slowPitch;
+        private float _landSquash;
+        private bool _wasAirborne;
+        private float _wingOpen;
+
         /// <summary>Однократная настройка из WildlifeManager.</summary>
         public void Initialize(GridManager grid, GameConfig config)
         {
@@ -169,6 +184,8 @@ namespace WildSnake
             _peekTime = config.HedgehogPeekTime;
             _wetTime = config.HedgehogWetTime;
             _baseScale = transform.localScale;
+            if (_body != null) _bodyScale = _body.localScale;
+            _noiseSeed = Random.value * 100f;
             IsActive = false;
             if (_scentMark != null) _scentMark.SetActive(false);
             gameObject.SetActive(false);
@@ -190,6 +207,13 @@ namespace WildSnake
             _rollVelocity = Vector3.zero;
             _rollAngle = 0f;
             _animTime = Random.value * 10f;
+            _lastYaw = yaw;
+            _lean = 0f;
+            _look = 0f;
+            _slowPitch = 0f;
+            _landSquash = 0f;
+            _wasAirborne = false;
+            _wingOpen = 0f;
             SetMode(Mode.Idle, Random.Range(0.4f, 2f));
             IsTrophy = false;
             SetScent(false);
@@ -693,30 +717,22 @@ namespace WildSnake
             transform.SetPositionAndRotation(_pos + Vector3.up * _height, Quaternion.Euler(0f, _yaw, 0f));
             if (_body == null) return;
 
-            bool moving = _velocity.sqrMagnitude > 0.01f;
-            float pitch = 0f;
-            float bob = 0f;
-            switch (_kind)
-            {
-                case PreyKind.Bird:
-                    if (_mode == Mode.FlyAway) pitch = -20f;
-                    else if (_mode == Mode.Idle) pitch = Mathf.Max(0f, Mathf.Sin(_animTime * 3.1f)) * 35f; // клюёт землю
-                    break;
-                case PreyKind.Mouse:
-                    if (moving) bob = Mathf.Abs(Mathf.Sin(_animTime * 26f)) * 0.04f;
-                    break;
-                case PreyKind.Frog:
-                case PreyKind.Rabbit:
-                    pitch = _height > 0f ? -18f : 0f;
-                    break;
-                case PreyKind.Beetle:
-                    if (moving) bob = Mathf.Abs(Mathf.Sin(_animTime * 30f)) * 0.015f;
-                    break;
-                case PreyKind.Fish:
-                    // В прыжке тело следует дуге: вверх носом, потом вниз.
-                    if (_leap > 0f) pitch = Mathf.Lerp(-40f, 40f, 1f - _leap / _leapTime);
-                    break;
-            }
+            float dt = Mathf.Max(Time.deltaTime, 1e-4f);
+            float cs = _grid.CellSize;
+            float speed = _velocity.magnitude / cs;
+            bool moving = speed > 0.1f;
+            // Крен на вираже: животное ложится в поворот, а не крутится волчком.
+            float turn = Mathf.DeltaAngle(_lastYaw, _yaw) / dt;
+            _lastYaw = _yaw;
+            float lean = moving ? Mathf.Clamp(-turn * 0.035f, -14f, 14f) : 0f;
+            _lean = Mathf.Lerp(_lean, lean, 1f - Mathf.Exp(-8f * dt));
+            // Приземление — короткое сплющивание.
+            bool airborne = _height > 0.02f * cs;
+            if (_wasAirborne && !airborne) _landSquash = 1f;
+            _wasAirborne = airborne;
+            _landSquash = Mathf.MoveTowards(_landSquash, 0f, dt * 5f);
+            UpdateWings(dt);
+
             if (_kind == PreyKind.Hedgehog)
             {
                 bool curled = _mode == Mode.Curled;
@@ -725,21 +741,23 @@ namespace WildSnake
                 else if (_curlHide != null) _curlHide.transform.localScale = Vector3.one;
                 // Выглядывая, ёж ещё наполовину свёрнут — видно, что вот-вот снова спрячется.
                 Vector3 target = curled ? new Vector3(1.12f, 0.82f, 0.82f) : _mode == Mode.Peek ? new Vector3(1.06f, 0.9f, 0.9f) : Vector3.one;
-                _body.localScale = Vector3.Lerp(_body.localScale, target, 0.25f);
+                if (!curled && _mode != Mode.Peek) target.y += Mathf.Sin(_animTime * 3.2f) * 0.02f; // дышит
+                _body.localScale = Vector3.Lerp(_body.localScale, target, 1f - Mathf.Exp(-14f * dt));
                 if (curled)
                 {
                     // Катится вокруг центра шара, а не вокруг точки на земле.
-                    Quaternion roll = Quaternion.Euler(_rollAngle, 0f, 0f);
+                    Quaternion rolled = Quaternion.Euler(_rollAngle, 0f, 0f);
                     var center = new Vector3(0f, 0.17f, 0f);
-                    _body.localRotation = roll;
-                    _body.localPosition = center - roll * center;
+                    _body.localRotation = rolled;
+                    _body.localPosition = center - rolled * center;
                     return;
                 }
                 if (_mode == Mode.Swim || _mode == Mode.Wet)
                 {
-                    // Плывёт — покачивается на воде; на берегу отряхивается мелкой дрожью.
+                    // Плывёт — покачивается на воде и гребёт; на берегу отряхивается мелкой дрожью.
                     float shake = _mode == Mode.Wet ? Mathf.Sin(_animTime * 46f) * 12f : Mathf.Sin(_animTime * 5f) * 6f;
-                    _body.localRotation = Quaternion.Euler(_mode == Mode.Swim ? -12f : 0f, 0f, shake);
+                    float paddle = _mode == Mode.Swim ? Mathf.Sin(_animTime * 9f) * 3f : 0f;
+                    _body.localRotation = Quaternion.Euler((_mode == Mode.Swim ? -12f : 0f) + paddle, 0f, shake);
                     _body.localPosition = Vector3.zero;
                     return;
                 }
@@ -750,26 +768,175 @@ namespace WildSnake
                 // Бьётся в кольцах: частая неровная дрожь.
                 _body.localRotation = Quaternion.Euler(Mathf.Sin(_animTime * 41f) * 14f, Mathf.Sin(_animTime * 23f) * 10f, Mathf.Sin(_animTime * 33f) * 16f);
                 _body.localPosition = new Vector3(0f, Mathf.Abs(Mathf.Sin(_animTime * 29f)) * 0.05f, 0f);
+                if (_kind != PreyKind.Hedgehog) _body.localScale = _bodyScale;
                 return;
             }
-            // Рыба виляет хвостом всем телом.
-            float sway = IsFish ? Mathf.Sin(_animTime * (moving ? 16f : 5f)) * (moving ? 14f : 6f) : 0f;
-            _body.localRotation = Quaternion.Euler(pitch, sway, 0f);
-            _body.localPosition = new Vector3(0f, bob, 0f);
 
+            // Поза = медленная часть (сглаживается: оглядки, стойка) + быстрая (шаг, дыхание — без сглаживания).
+            float t = _animTime;
+            float slowPitch = 0f, look = 0f;
+            float pitch = 0f, yaw = 0f, roll = 0f, bob = 0f;
+            float wide = 0f, tall = 0f, longer = 0f;
+            switch (_kind)
+            {
+                case PreyKind.Mouse:
+                    if (moving)
+                    {
+                        // Семенит: тело тянется и сжимается в такт скачкам, нос клюёт.
+                        float ph = t * 26f;
+                        bob = Mathf.Abs(Mathf.Sin(ph)) * 0.045f;
+                        longer = Mathf.Sin(ph * 2f) * 0.07f;
+                        pitch = Mathf.Sin(ph * 2f) * 5f;
+                    }
+                    else
+                    {
+                        // Принюхивается, вертит головой, иногда встаёт столбиком.
+                        look = Noise(t * 0.6f, 0f) * 70f;
+                        slowPitch = Noise(t * 0.25f, 5f) > 0.3f ? -28f : 0f;
+                        pitch = Mathf.Max(0f, Mathf.Sin(t * 17f)) * 4f * Mathf.Max(0f, Mathf.Sin(t * 0.9f));
+                        tall = Mathf.Sin(t * 7f) * 0.025f;
+                    }
+                    break;
+                case PreyKind.Frog:
+                case PreyKind.Rabbit:
+                {
+                    bool frog = _kind == PreyKind.Frog;
+                    if (airborne)
+                    {
+                        // В прыжке: нос вверх на взлёте, вниз к посадке; тело вытянуто в полёте.
+                        float kk = _leap > 0f ? 1f - _leap / _leapTime : Mathf.Clamp01(_hopPhase / _hopDuration);
+                        pitch = Mathf.Lerp(frog ? -32f : -22f, frog ? 22f : 16f, kk);
+                        longer = Mathf.Sin(kk * Mathf.PI) * (frog ? 0.22f : 0.16f);
+                        tall = -longer * 0.45f;
+                    }
+                    else if (moving)
+                    {
+                        // Пауза между прыжками: к её концу приседает — копит толчок.
+                        float pk = Mathf.Clamp01((_hopPhase - _hopDuration) / Mathf.Max(0.01f, _hopPause));
+                        tall = -pk * 0.12f;
+                        wide = pk * 0.05f;
+                        pitch = pk * 6f;
+                    }
+                    else if (frog)
+                    {
+                        // Сидит: горло раздувается, изредка поворачивается.
+                        tall = Mathf.Abs(Mathf.Sin(t * 5.5f)) * 0.035f;
+                        wide = tall * 0.6f;
+                        look = Noise(t * 0.3f, 3f) * 40f;
+                    }
+                    else
+                    {
+                        // Кролик: дёргает носом, поводит головой, иногда приподнимается осмотреться.
+                        pitch = Mathf.Sin(t * 21f) * 1.5f * Mathf.Max(0f, Mathf.Sin(t * 1.3f));
+                        look = Noise(t * 0.45f, 7f) * 60f;
+                        slowPitch = Noise(t * 0.22f, 2f) > 0.35f ? -18f : 0f;
+                        tall = Mathf.Sin(t * 4.5f) * 0.02f;
+                    }
+                    // Посадка: сплющивается и клюёт носом.
+                    tall -= _landSquash * 0.16f;
+                    wide += _landSquash * 0.09f;
+                    pitch += _landSquash * 8f;
+                    break;
+                }
+                case PreyKind.Beetle:
+                    if (moving)
+                    {
+                        // Переваливается с боку на бок на шести лапах.
+                        roll = Mathf.Sin(t * 30f) * 5f;
+                        bob = Mathf.Abs(Mathf.Sin(t * 30f)) * 0.015f;
+                        yaw = Mathf.Sin(t * 15f) * 4f;
+                    }
+                    else
+                    {
+                        look = Noise(t * 0.5f, 9f) * 30f;
+                        pitch = Mathf.Sin(t * 2f) * 2f;
+                    }
+                    break;
+                case PreyKind.Bird:
+                    if (_mode == Mode.FlyAway)
+                    {
+                        // В полёте тело подбрасывает каждым взмахом.
+                        float ph = t * 26f;
+                        slowPitch = -20f;
+                        pitch = Mathf.Sin(ph) * 4f;
+                        bob = -Mathf.Sin(ph) * 0.03f;
+                    }
+                    else if (moving)
+                    {
+                        // Скачет на двух лапках.
+                        float ph = t * 16f;
+                        bob = Mathf.Abs(Mathf.Sin(ph)) * 0.06f;
+                        pitch = -Mathf.Abs(Mathf.Sin(ph)) * 6f;
+                        tall = -Mathf.Abs(Mathf.Cos(ph)) * 0.05f;
+                    }
+                    else
+                    {
+                        // Резко клюёт и дёргано оглядывается.
+                        float peck = Mathf.Max(0f, Mathf.Sin(t * 3.1f));
+                        pitch = peck * peck * peck * 40f;
+                        look = Mathf.Round(Noise(t * 1.2f, 4f) * 4f) * 14f;
+                        tall = Mathf.Sin(t * 6f) * 0.015f;
+                    }
+                    break;
+                case PreyKind.Fish:
+                    if (_leap > 0f)
+                    {
+                        // В прыжке тело следует дуге и бьёт хвостом.
+                        pitch = Mathf.Lerp(-40f, 40f, 1f - _leap / _leapTime);
+                        yaw = Mathf.Sin(t * 30f) * 18f;
+                    }
+                    else
+                    {
+                        // Виляет всем телом; на ходу — чаще и сильнее, с креном.
+                        float f = moving ? 16f : 5f;
+                        yaw = Mathf.Sin(t * f) * (moving ? 16f : 7f);
+                        roll = Mathf.Sin(t * f - 1.2f) * (moving ? 7f : 3f);
+                        bob = Mathf.Sin(t * 1.7f) * 0.02f;
+                    }
+                    break;
+                case PreyKind.Hedgehog:
+                    if (moving)
+                    {
+                        // Семенит вперевалку.
+                        roll = Mathf.Sin(t * 14f) * 5f;
+                        bob = Mathf.Abs(Mathf.Sin(t * 14f)) * 0.02f;
+                    }
+                    else
+                    {
+                        look = Noise(t * 0.4f, 6f) * 40f;
+                        pitch = Mathf.Max(0f, Mathf.Sin(t * 13f)) * 3f * Mathf.Max(0f, Mathf.Sin(t * 0.8f));
+                    }
+                    break;
+            }
+
+            float ease = 1f - Mathf.Exp(-6f * dt);
+            _slowPitch = Mathf.Lerp(_slowPitch, slowPitch, ease);
+            _look = Mathf.Lerp(_look, look, ease);
+            _body.localRotation = Quaternion.Euler(_slowPitch + pitch, _look + yaw, _lean + roll);
+            _body.localPosition = new Vector3(0f, bob, 0f);
+            if (_kind != PreyKind.Hedgehog)
+                _body.localScale = Vector3.Scale(_bodyScale, new Vector3(1f + wide - longer * 0.3f, 1f + tall, 1f + longer));
+        }
+
+        /// <summary>Крылья: плавно раскрываются при взлёте и складываются на земле; взмах вниз быстрее, чем вверх.</summary>
+        private void UpdateWings(float dt)
+        {
             if (_leftWing == null || _rightWing == null) return;
-            if (_mode == Mode.FlyAway)
-            {
-                float flap = Mathf.Sin(_animTime * 26f) * 55f;
-                _leftWing.localRotation = Quaternion.Euler(0f, 0f, flap);
-                _rightWing.localRotation = Quaternion.Euler(0f, 0f, -flap);
-            }
-            else
-            {
-                // На земле крылья сложены вдоль спины.
-                _leftWing.localRotation = Quaternion.Euler(0f, -78f, -12f);
-                _rightWing.localRotation = Quaternion.Euler(0f, 78f, 12f);
-            }
+            bool flying = _mode == Mode.FlyAway;
+            _wingOpen = Mathf.MoveTowards(_wingOpen, flying ? 1f : 0f, dt * (flying ? 8f : 3f));
+            float ph = _animTime * 26f;
+            float flap = 12f + Mathf.Sin(ph + 0.5f * Mathf.Cos(ph)) * 55f;
+            // На земле изредка вздрагивает крыльями.
+            float flick = !flying && _mode != Mode.Held && Noise(_animTime * 0.7f, 8f) > 0.42f ? Mathf.Abs(Mathf.Sin(_animTime * 30f)) * 0.25f : 0f;
+            float open = Mathf.Max(_wingOpen, flick);
+            _leftWing.localRotation = Quaternion.Slerp(WingFoldL, Quaternion.Euler(0f, 0f, flap), open);
+            _rightWing.localRotation = Quaternion.Slerp(WingFoldR, Quaternion.Euler(0f, 0f, -flap), open);
+        }
+
+        /// <summary>Плавный шум -0.5..0.5 со своим зерном у каждого животного: оглядки не синхронны во всей стае.</summary>
+        private float Noise(float time, float lane)
+        {
+            return Mathf.PerlinNoise(time + _noiseSeed, lane * 3.7f + _noiseSeed * 0.13f) - 0.5f;
         }
     }
 }

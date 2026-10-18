@@ -19,6 +19,10 @@ namespace WildSnake
         private const int MAX_PONDS = 6;
         private const int MAX_RIVER_POINTS = 512;
         private const int MAX_BRIDGES = 6;
+        // Ниже этого просвета (клеток) под бревном не пролезть: у концов моста его переползают поверху.
+        private const float MIN_BRIDGE_GAP = 0.9f;
+        // Полуширина полосы клеток моста от оси бревна, клеток.
+        private const float BRIDGE_HALF_WIDTH = 0.75f;
         private const int MAX_HOLLOW_LOGS = 24;
         private const int MAX_BIRD_NESTS = 16;
         private const int MAX_COLONIES = 6;
@@ -109,6 +113,9 @@ namespace WildSnake
         [Tooltip("Сколько брёвен-мостов лежит через реку")]
         [SerializeField, Range(0, MAX_BRIDGES)] private int _bridgeCount = 3;
 
+        [Tooltip("Верх бревна-моста над водой, клеток: под ним проплывает змея")]
+        [SerializeField, Min(0.6f)] private float _bridgeClearance = 1.3f;
+
         [Header("Болото")]
         [Tooltip("Радиус болота в пойме реки, клеток (0 — без болота)")]
         [SerializeField, Min(0f)] private float _swampRadius = 13f;
@@ -184,6 +191,8 @@ namespace WildSnake
         private bool[] _reed;
         private bool[] _hollow;
         private bool[] _bridge;
+        // Уровень реки под бревном-мостом (-∞ — под бревном берег, там под ним ползут по земле).
+        private float[] _underBridgeLevel;
         private bool[] _birdNestCell;
         private bool[] _bramble;
         private bool[] _hotSpring;
@@ -291,6 +300,7 @@ namespace WildSnake
                     h = h * 31 + _riverHalfWidth.GetHashCode();
                     h = h * 31 + _riverDepth.GetHashCode();
                     h = h * 31 + _bridgeCount;
+                    h = h * 31 + _bridgeClearance.GetHashCode();
                     h = h * 31 + _swampRadius.GetHashCode();
                     h = h * 31 + _swampPoolThreshold.GetHashCode();
                     h = h * 31 + _swampTreeCount;
@@ -342,7 +352,12 @@ namespace WildSnake
             _waterKind = new byte[n];
             _biome = new byte[n];
             _shoreDist = new float[n];
-            for (int i = 0; i < n; i++) _waterLevel[i] = float.NegativeInfinity;
+            _underBridgeLevel = new float[n];
+            for (int i = 0; i < n; i++)
+            {
+                _waterLevel[i] = float.NegativeInfinity;
+                _underBridgeLevel[i] = float.NegativeInfinity;
+            }
 
             // Горы — граница мира: непроходимые клетки по краю.
             PlaceMountains();
@@ -519,6 +534,31 @@ namespace WildSnake
         public bool IsBridge(Vector2Int cell)
         {
             return IsInside(cell) && _bridge[ToIndex(cell)];
+        }
+
+        /// <summary>
+        /// Под бревном-мостом есть проход: level — по чему под ним плывут или ползут (вода реки или земля берега;
+        /// вода — если level выше дна), deck — верх бревна. Где бревно почти лежит на земле (у концов), прохода нет —
+        /// там его переползают поверху, как обычное бревно.
+        /// </summary>
+        public bool TryGetUnderBridge(Vector3 world, out float level, out float deck)
+        {
+            level = float.NegativeInfinity;
+            deck = float.NegativeInfinity;
+            Vector2Int c = WorldToCell(world);
+            if (!IsInside(c)) return false;
+            int i = ToIndex(c);
+            if (!_bridge[i]) return false;
+            deck = _waterLevel[i];
+            level = Mathf.Max(GroundHeight(world), _underBridgeLevel[i]);
+            return deck - level >= MIN_BRIDGE_GAP * _cellSize;
+        }
+
+        /// <summary>Под бревном-мостом течёт река (для меша воды): level — её уровень.</summary>
+        public bool TryGetRiverUnderBridge(Vector2Int cell, out float level)
+        {
+            level = IsInside(cell) ? _underBridgeLevel[ToIndex(cell)] : float.NegativeInfinity;
+            return level > float.NegativeInfinity;
         }
 
         /// <summary>Клетка болота.</summary>
@@ -1053,6 +1093,21 @@ namespace WildSnake
             }
         }
 
+        /// <summary>
+        /// Длина плеча моста от оси реки, клеток: дальше полуширины русла, пока земля не поднимется до низа опоры
+        /// (rest — мировая высота земли, на которую ляжет бревно); не дальше склона долины.
+        /// </summary>
+        private float BridgeReach(Vector2 center, Vector2 dir, float half, float rest)
+        {
+            float max = half * 2.6f + 3f;
+            for (float d = half * 1.15f + 0.6f; d < max; d += 0.25f)
+            {
+                Vector2 q = center + dir * d;
+                if (GroundHeight(CellCenterFlat(q.x, q.y)) >= rest) return d + 0.4f;
+            }
+            return max;
+        }
+
         private Vector3 CellCenterFlat(float x, float y)
         {
             return transform.position + new Vector3((x - (_width - 1) * 0.5f) * _cellSize, 0f, (y - (_height - 1) * 0.5f) * _cellSize);
@@ -1573,27 +1628,40 @@ namespace WildSnake
                 if (SwampBlend(p.x, p.y) > 0.3f || IsMountain(new Vector2Int(Mathf.RoundToInt(p.x), Mathf.RoundToInt(p.y)))) continue;
                 Vector2 dir = (_riverPts[i + 1] - _riverPts[i - 1]).normalized;
                 var n = new Vector2(-dir.y, dir.x);
-                float halfLen = _riverHalf[i] * 1.3f + 1.6f;
-                Vector2 a = p - n * halfLen, e = p + n * halfLen;
+                // Бревно лежит ровно и высоко над водой — под ним проплывает змея. Концы уходят по склону долины,
+                // пока берег не поднимется до бревна: оно опирается на землю, а не висит в воздухе.
                 float logTop = 0.42f * _cellSize;
+                float deck = _riverLevels[i] + _bridgeClearance * _cellSize;
+                float lenA = BridgeReach(p, -n, _riverHalf[i], deck - logTop);
+                float lenE = BridgeReach(p, n, _riverHalf[i], deck - logTop);
+                Vector2 a = p - n * lenA, e = p + n * lenE;
                 Vector3 wa = CellCenterFlat(a.x, a.y);
-                wa.y = GroundHeight(wa) + logTop;
+                wa.y = deck;
                 Vector3 we = CellCenterFlat(e.x, e.y);
-                we.y = GroundHeight(we) + logTop;
+                we.y = deck;
                 _bridgeA[_bridges] = wa;
                 _bridgeB[_bridges] = we;
                 _bridges++;
-                float step = 0.4f / (halfLen * 2f);
-                for (float t = 0f; t <= 1f; t += step)
+                // Клетки моста — сплошная полоса вдоль оси бревна (и на диагонали без щелей между углами клеток):
+                // иначе ползущая поверху змея на миг попадала бы в «воду» и проваливалась под бревно.
+                Vector2 ab = e - a;
+                float abLen2 = Mathf.Max(1e-4f, ab.sqrMagnitude);
+                int minX = Mathf.Max(1, Mathf.FloorToInt(Mathf.Min(a.x, e.x)) - 1), maxX = Mathf.Min(_width - 2, Mathf.CeilToInt(Mathf.Max(a.x, e.x)) + 1);
+                int minY = Mathf.Max(1, Mathf.FloorToInt(Mathf.Min(a.y, e.y)) - 1), maxY = Mathf.Min(_height - 2, Mathf.CeilToInt(Mathf.Max(a.y, e.y)) + 1);
+                for (int cy = minY; cy <= maxY; cy++)
                 {
-                    Vector2 q = Vector2.Lerp(a, e, t);
-                    int cx = Mathf.RoundToInt(q.x), cy = Mathf.RoundToInt(q.y);
-                    if (cx < 1 || cy < 1 || cx >= _width - 1 || cy >= _height - 1) continue;
-                    int k = cy * _width + cx;
-                    _bridge[k] = true;
-                    _water[k] = false;
-                    _waterKind[k] = 0;
-                    _waterLevel[k] = Mathf.Lerp(wa.y, we.y, t);
+                    for (int cx = minX; cx <= maxX; cx++)
+                    {
+                        var c = new Vector2(cx, cy);
+                        float t = Mathf.Clamp01(Vector2.Dot(c - a, ab) / abLen2);
+                        if ((a + ab * t - c).sqrMagnitude > BRIDGE_HALF_WIDTH * BRIDGE_HALF_WIDTH) continue;
+                        int k = cy * _width + cx;
+                        if (_water[k] && _waterKind[k] == WATER_RIVER) _underBridgeLevel[k] = _waterLevel[k];
+                        _bridge[k] = true;
+                        _water[k] = false;
+                        _waterKind[k] = 0;
+                        _waterLevel[k] = deck;
+                    }
                 }
             }
         }

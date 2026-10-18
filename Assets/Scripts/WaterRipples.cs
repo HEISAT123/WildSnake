@@ -41,6 +41,9 @@ namespace WildSnake
         [Tooltip("Кругов от капель в секунду в сильный дождь")]
         [SerializeField, Min(0f)] private float _rainRate = 9f;
 
+        [Tooltip("Кругов в секунду в тихую погоду (рыба клюёт мошку, водомерки) — вода не стоит мёртвым стеклом")]
+        [SerializeField, Min(0f)] private float _calmRate = 1.2f;
+
         [Tooltip("Радиус дождевых кругов вокруг камеры, м")]
         [SerializeField, Min(1f)] private float _rainRadius = 12f;
 
@@ -58,6 +61,7 @@ namespace WildSnake
         private Vector3[] _preyLast;
         private bool[] _preyWet;
         private float _rainDebt;
+        private float _calmDebt;
         private float _springTimer;
 
         private void Awake()
@@ -143,6 +147,15 @@ namespace WildSnake
                     if (_grid.IsWaterAt(p)) AddRipple(p, 0.22f);
                 }
                 _rainDebt = Mathf.Min(_rainDebt, 2f);
+            }
+            else if (_camera != null && _calmRate > 0f)
+            {
+                _calmDebt += _calmRate * dt;
+                if (_calmDebt < 1f) return;
+                _calmDebt = 0f;
+                Vector2 o = Random.insideUnitCircle * _rainRadius;
+                Vector3 p = _camera.position + new Vector3(o.x, 0f, o.y);
+                if (_grid.IsWaterAt(p)) AddRipple(p, Random.Range(0.25f, 0.45f));
             }
         }
 

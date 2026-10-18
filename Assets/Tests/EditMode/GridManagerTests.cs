@@ -69,6 +69,37 @@ namespace WildSnake.Tests
         // ---------------- Раскладка ----------------
 
         [Test]
+        public void Bridges_CanBeSwumUnder_AndClimbedFromBanks()
+        {
+            GridManager grid = CreateGrid();
+            Assert.Greater(grid.BridgeCount, 0, "Нет мостов");
+            for (int b = 0; b < grid.BridgeCount; b++)
+            {
+                grid.GetBridge(b, out Vector3 a, out Vector3 e);
+                Vector3 axis = e - a;
+                axis.y = 0f;
+                float length = axis.magnitude;
+                axis /= length;
+                int underWater = 0;
+                // По всей оси бревна — клетки моста без щелей (иначе ползущая поверху змея провалится).
+                for (float d = 0f; d <= length; d += 0.1f)
+                {
+                    Vector3 p = a + axis * d;
+                    Assert.IsTrue(grid.IsBridge(grid.WorldToCell(p)), $"Мост {b}: щель в полосе моста на {d:F1}");
+                    if (grid.TryGetUnderBridge(p, out float level, out float deck))
+                    {
+                        Assert.Greater(deck - level, 0.89f * grid.CellSize, $"Мост {b}: мал просвет на {d:F1}");
+                        if (level > grid.GroundHeight(p) + 0.01f) underWater++;
+                    }
+                }
+                Assert.Greater(underWater, 0, $"Мост {b}: под ним не проплыть по реке");
+                // Концы опираются на берег — там бревно переползают поверху.
+                Assert.IsFalse(grid.TryGetUnderBridge(a, out _, out _), $"Мост {b}: у начала бревно висит над землёй");
+                Assert.IsFalse(grid.TryGetUnderBridge(e, out _, out _), $"Мост {b}: у конца бревно висит над землёй");
+            }
+        }
+
+        [Test]
         public void River_Bridges_HollowLogs_BirdNests_AreConsistent()
         {
             GridManager grid = CreateGrid();

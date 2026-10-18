@@ -78,6 +78,8 @@ namespace WildSnake
         private int _activeRings = -1;
         private Vector3 _lastForward = Vector3.forward;
         private float _waveAmp;
+        private float _swimBlend;
+        private float _breathBlend;
         private float _lastOdometer;
         private float _coilBlend;
 
@@ -200,6 +202,10 @@ namespace WildSnake
             float target = _snake.IsStriking ? 0f : _waveAmplitude * Mathf.Clamp(_snake.Speed / _snake.WalkSpeed, 0f, 1.3f);
             _waveAmp = Mathf.MoveTowards(_waveAmp, target, _waveResponse * moved);
             _coilBlend = Mathf.MoveTowards(_coilBlend, _snake.IsCoiled || _snake.IsConstricting ? 1f : 0f, Time.deltaTime * 5f);
+            _swimBlend = Mathf.MoveTowards(_swimBlend, _snake.IsInWater ? 1f : 0f, Time.deltaTime * 2f);
+            // Дыхание видно, когда змея лежит: на ходу его съедает волна.
+            float still = 1f - Mathf.Clamp01(_snake.Speed / Mathf.Max(0.01f, _snake.WalkSpeed) * 2f);
+            _breathBlend = Mathf.MoveTowards(_breathBlend, still, Time.deltaTime * 2f);
         }
 
         private void Rebuild()
@@ -218,6 +224,10 @@ namespace WildSnake
             // Затаившаяся змея подрагивает кончиком хвоста — приманка для добычи.
             float lure = _snake.Ambush.Concealment01 * _lureAmplitude * cs;
             float lurePhase = Time.time * 9f;
+            // Дыхание — медленная волна раздувания передней трети тела; в воде тело ещё и покачивается вверх-вниз.
+            float breath = _breathBlend * 0.045f * (0.5f + 0.5f * Mathf.Sin(Time.time * 2.4f));
+            float swimLift = _swimBlend * 0.05f * cs;
+            float swimPhase = Time.time * 3.2f;
 
             // Вершины в мировых координатах, а объект может стоять где угодно — переводим один раз матрицей.
             Matrix4x4 toLocal = transform.worldToLocalMatrix;
@@ -243,8 +253,10 @@ namespace WildSnake
                 if (curl > 0f && neckCells < 2.2f) lateral += curl * Mathf.Sin(neckCells * Mathf.PI / 1.1f) * (1f - neckCells / 2.2f);
                 if (lure > 0f && t > 0.8f) lateral += lure * Mathf.Sin(lurePhase - t * 6f) * ((t - 0.8f) * 5f);
                 center += right * lateral;
+                if (swimLift > 0f) center.y += swimLift * Mathf.Sin(swimPhase - d / cs * 2.2f) * taper;
 
                 float radius = baseRadius * _radiusProfile.Evaluate(t) * (1f + Bulge(d, length, cs));
+                if (breath > 0f) radius *= 1f + breath * Mathf.Exp(-(t - 0.3f) * (t - 0.3f) * 30f);
                 // Сжимая добычу, тело ходит волнами — видно, что змея душит.
                 if (_snake.IsConstricting) radius *= 1f + 0.08f * Mathf.Sin(Time.time * 14f - d * 5f);
                 float radiusV = radius * _verticalScale;

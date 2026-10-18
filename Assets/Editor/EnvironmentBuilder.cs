@@ -105,7 +105,7 @@ public static class EnvironmentBuilder
         pondNormal.name = "PondWater_N";
         pondNormal = Save(pondNormal);
         m.PondWater = WaterMaterial("PondWater", new Color(0.3f, 0.58f, 0.56f, 0.5f), new Color(0.05f, 0.2f, 0.28f, 0.96f), 1.1f, 0.25f,
-            new Color(0.92f, 0.96f, 0.95f, 0.9f), pondNormal, 0.5f, 2f, new Vector4(0.02f, 0.015f, -0.017f, 0.01f), 0.035f, 4f, 0.75f);
+            new Color(0.92f, 0.96f, 0.95f, 0.9f), pondNormal, 0.75f, 2f, new Vector4(0.035f, 0.025f, -0.03f, 0.018f), 0.06f, 4f, 0.75f);
         if (m.PondWater == null)
         {
             m.PondWater = SnakeSceneBuilder.CreateLitMaterial("PondWater", new Color(0.18f, 0.42f, 0.52f, 0.72f), 0.95f);
@@ -142,10 +142,12 @@ public static class EnvironmentBuilder
         riverNormal = Save(riverNormal);
         // Река: U вдоль русла — оба слоя ряби бегут вниз по течению с разной скоростью; пена у берегов шире.
         m.RiverWater = WaterMaterial("RiverWater", new Color(0.26f, 0.56f, 0.56f, 0.62f), new Color(0.07f, 0.26f, 0.33f, 0.93f), 0.7f, 0.16f,
-            new Color(0.94f, 0.97f, 0.97f, 1f), riverNormal, 0.6f, 1.5f, new Vector4(-0.24f, 0f, -0.15f, 0.03f), 0.025f, 2.5f, 0.7f);
+            new Color(0.94f, 0.97f, 0.97f, 1f), riverNormal, 0.85f, 1.5f, new Vector4(-0.38f, 0f, -0.24f, 0.04f), 0.05f, 2.5f, 0.7f,
+            streakFoam: 0.8f);
         // Болото — мутное, зеленовато-бурое, почти непрозрачное и почти неподвижное.
         m.SwampWater = WaterMaterial("SwampWater", new Color(0.24f, 0.3f, 0.15f, 0.7f), new Color(0.12f, 0.16f, 0.08f, 0.96f), 0.6f, 0.25f,
-            new Color(0.5f, 0.52f, 0.36f, 0.55f), riverNormal, 0.25f, 1f, new Vector4(0.004f, 0.003f, -0.003f, 0.002f), 0.008f, 3f, 0.45f);
+            new Color(0.5f, 0.52f, 0.36f, 0.55f), riverNormal, 0.35f, 1f, new Vector4(0.008f, 0.006f, -0.006f, 0.004f), 0.015f, 3f, 0.45f,
+            glitter: 0.3f, caustics: 0f, waveSpeed: 0.6f);
         if (m.RiverWater == null)
         {
             m.RiverWater = SnakeSceneBuilder.CreateLitMaterial("RiverWater", new Color(0.24f, 0.5f, 0.58f, 0.68f), 0.95f);
@@ -681,7 +683,8 @@ public static class EnvironmentBuilder
     /// shallow/deep: цвет и прозрачность у берега и на глубине depthRange; flow — скорости двух слоёв ряби.
     /// </summary>
     public static Material WaterMaterial(string name, Color shallow, Color deep, float depthRange, float foamWidth, Color foam,
-        Texture2D normal, float bumpScale, float tiling, Vector4 flow, float waveHeight, float waveLength, float reflectivity, float shoreFade = 0.04f)
+        Texture2D normal, float bumpScale, float tiling, Vector4 flow, float waveHeight, float waveLength, float reflectivity, float shoreFade = 0.04f,
+        float streakFoam = 0f, float glitter = 1.2f, float caustics = 0.35f, float waveSpeed = 1.1f)
     {
         Shader shader = Shader.Find("WildSnake/Water");
         if (shader == null || GraphicsSettings.currentRenderPipeline == null) return null;
@@ -699,6 +702,10 @@ public static class EnvironmentBuilder
         mat.SetFloat("_WaveLength", waveLength);
         mat.SetFloat("_Reflectivity", reflectivity);
         mat.SetFloat("_ShoreFade", shoreFade);
+        mat.SetFloat("_StreakFoam", streakFoam);
+        mat.SetFloat("_Glitter", glitter);
+        mat.SetFloat("_Caustics", caustics);
+        mat.SetFloat("_WaveSpeed", waveSpeed);
         mat.renderQueue = (int)RenderQueue.Transparent;
         EditorUtility.SetDirty(mat);
         return mat;

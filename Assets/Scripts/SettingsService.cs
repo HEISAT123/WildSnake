@@ -20,6 +20,8 @@ namespace WildSnake
 
         public event Action Changed;
 
+        private float _screenCheck = 1f;
+
         public float MasterVolume { get; private set; }
         public float MusicVolume { get; private set; }
         public float SfxVolume { get; private set; }
@@ -63,6 +65,19 @@ namespace WildSnake
         private void Update()
         {
             if (GameInput.ToggleFullscreen) SetFullscreen(!Fullscreen);
+            // Alt+Enter переключает режим мимо настроек — подхватываем, чтобы полный экран был без полос.
+            // В редакторе экран не переключается, и проверка стёрла бы настройку.
+            if (Application.isEditor) return;
+            _screenCheck -= Time.unscaledDeltaTime;
+            if (_screenCheck > 0f) return;
+            _screenCheck = 1f;
+            if (Screen.fullScreen != Fullscreen)
+            {
+                Fullscreen = Screen.fullScreen;
+                PlayerPrefs.SetInt(KEY_FULLSCREEN, Fullscreen ? 1 : 0);
+                Changed?.Invoke();
+            }
+            ApplyScreen();
         }
 
         public void SetMasterVolume(float value) { MasterVolume = Mathf.Clamp01(value); PlayerPrefs.SetFloat(KEY_MASTER, MasterVolume); Commit(); }
@@ -95,8 +110,31 @@ namespace WildSnake
         {
             AudioListener.volume = MasterVolume;
             if (QualityLevel != QualitySettings.GetQualityLevel()) QualitySettings.SetQualityLevel(QualityLevel, true);
-            // В редакторе Screen.fullScreen ничего не делает — работает в собранной игре.
-            if (Screen.fullScreen != Fullscreen) Screen.fullScreen = Fullscreen;
+            ApplyScreen();
+        }
+
+        /// <summary>
+        /// Полный экран — всегда в родном разрешении монитора: иначе Unity растягивает прежнее окно (например,
+        /// развёрнутое без панели задач) и по краям остаются чёрные полосы. Окно — 80% экрана с теми же пропорциями.
+        /// В редакторе ничего не делает — работает в собранной игре.
+        /// </summary>
+        private void ApplyScreen()
+        {
+            if (Application.isEditor) return;
+            int w = Display.main.systemWidth, h = Display.main.systemHeight;
+            if (w <= 0 || h <= 0) return;
+            if (Fullscreen)
+            {
+                if (Screen.fullScreen && Screen.width == w && Screen.height == h) return;
+                Screen.SetResolution(w, h, FullScreenMode.FullScreenWindow);
+            }
+            else
+            {
+                if (!Screen.fullScreen) return;
+                Screen.SetResolution(Mathf.RoundToInt(w * 0.8f), Mathf.RoundToInt(h * 0.8f), FullScreenMode.Windowed);
+            }
+            // Режим сменится только в следующих кадрах — до тех пор не сверяемся с ним.
+            _screenCheck = 1.5f;
         }
     }
 }

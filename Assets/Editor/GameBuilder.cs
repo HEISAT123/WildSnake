@@ -61,7 +61,7 @@ public static class GameBuilder
     {
         PlayerSettings.companyName = "WildSnake";
         PlayerSettings.productName = "Wild Snake";
-        PlayerSettings.bundleVersion = "1.2";
+        PlayerSettings.bundleVersion = "1.4";
         PlayerSettings.fullScreenMode = FullScreenMode.FullScreenWindow;
         PlayerSettings.defaultScreenWidth = 1600;
         PlayerSettings.defaultScreenHeight = 900;

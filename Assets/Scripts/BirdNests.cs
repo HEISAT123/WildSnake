@@ -104,12 +104,17 @@ namespace WildSnake
         private float[] _peckTimer;
         private float[] _refill;
         private float[] _anim;
+        private float[] _wingOpen;
+        private float[] _look;
         private Vector3[] _pos;
         private Vector3[] _nest;
         private float[] _yaw;
         private float[] _height;
         private float _eatTimer;
         private bool _initialized;
+
+        private static readonly Quaternion WingFoldL = Quaternion.Euler(0f, -78f, -12f);
+        private static readonly Quaternion WingFoldR = Quaternion.Euler(0f, 78f, 12f);
 
         private void OnEnable()
         {
@@ -160,6 +165,8 @@ namespace WildSnake
             _peckTimer = new float[_count];
             _refill = new float[_count];
             _anim = new float[_count];
+            _wingOpen = new float[_count];
+            _look = new float[_count];
             _pos = new Vector3[_count];
             _nest = new Vector3[_count];
             _yaw = new float[_count];
@@ -413,30 +420,52 @@ namespace WildSnake
             float hop = _state[i] == ParentState.Alarm ? Mathf.Abs(Mathf.Sin(t * 9f)) * 0.18f * cs : 0f;
             root.SetPositionAndRotation(p + Vector3.up * hop, Quaternion.Euler(0f, _yaw[i], 0f));
 
+            float dt = Time.deltaTime;
             float pitch = 0f;
             float flap = 0f;
+            float look = 0f;
+            float breathe = 0f;
+            bool open = false;
             switch (_state[i])
             {
                 case ParentState.Sitting:
-                    // Сидит, нахохлившись, изредка оглядывается.
-                    root.rotation = Quaternion.Euler(0f, _yaw[i] + Mathf.Sin(t * 0.7f) * 40f, 0f);
+                    // Сидит, нахохлившись: дышит и дёргано оглядывается (птица крутит головой рывками).
+                    look = Mathf.Round((Mathf.PerlinNoise(t * 0.9f, i * 3.1f) - 0.5f) * 5f) * 22f;
+                    breathe = Mathf.Sin(t * 3f) * 0.03f;
                     break;
                 case ParentState.Alarm:
-                    // Расправляет крылья и тычет клювом.
-                    pitch = _peckTimer[i] > _peckCooldown - 0.25f ? 35f : -10f;
-                    flap = 40f + Mathf.Sin(t * 22f) * 25f;
+                {
+                    // Расправляет крылья, хлопает ими и тычет клювом с выпадом.
+                    float peck = Mathf.Clamp01((_peckTimer[i] - (_peckCooldown - 0.3f)) / 0.3f);
+                    pitch = -12f + Mathf.Sin(peck * Mathf.PI) * 50f;
+                    float ph = t * 22f;
+                    flap = 35f + Mathf.Sin(ph + 0.5f * Mathf.Cos(ph)) * 30f;
+                    open = true;
                     break;
+                }
                 case ParentState.Fled:
-                    pitch = -20f;
-                    flap = Mathf.Sin(t * 26f) * 55f;
+                {
+                    float ph = t * 26f;
+                    pitch = -20f + Mathf.Sin(ph) * 4f;
+                    flap = 12f + Mathf.Sin(ph + 0.5f * Mathf.Cos(ph)) * 55f;
+                    open = true;
                     break;
+                }
             }
-            if (i < _bodies.Length && _bodies[i] != null) _bodies[i].localRotation = Quaternion.Euler(pitch, 0f, 0f);
+            float ease = 1f - Mathf.Exp(-12f * dt);
+            _look[i] = Mathf.Lerp(_look[i], look, ease);
+            if (_state[i] == ParentState.Sitting) root.rotation = Quaternion.Euler(0f, _yaw[i] + _look[i], 0f);
+            if (i < _bodies.Length && _bodies[i] != null)
+            {
+                _bodies[i].localRotation = Quaternion.Euler(pitch, 0f, 0f);
+                _bodies[i].localScale = new Vector3(1f + breathe * 0.6f, 1f + breathe, 1f);
+            }
             if (i < _leftWings.Length && _leftWings[i] != null && i < _rightWings.Length && _rightWings[i] != null)
             {
-                bool folded = _state[i] == ParentState.Sitting;
-                _leftWings[i].localRotation = folded ? Quaternion.Euler(0f, -78f, -12f) : Quaternion.Euler(0f, 0f, flap);
-                _rightWings[i].localRotation = folded ? Quaternion.Euler(0f, 78f, 12f) : Quaternion.Euler(0f, 0f, -flap);
+                // Крылья раскрываются и складываются плавно, а не щелчком.
+                _wingOpen[i] = Mathf.MoveTowards(_wingOpen[i], open ? 1f : 0f, dt * (open ? 8f : 3f));
+                _leftWings[i].localRotation = Quaternion.Slerp(WingFoldL, Quaternion.Euler(0f, 0f, flap), _wingOpen[i]);
+                _rightWings[i].localRotation = Quaternion.Slerp(WingFoldR, Quaternion.Euler(0f, 0f, -flap), _wingOpen[i]);
             }
         }
 
